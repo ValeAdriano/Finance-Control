@@ -36,7 +36,7 @@ export default async function JournalPage() {
                         {date(entry.date)}
                       </time>
                       {asset ? (
-                        <Link href={`/ativos/${asset.symbol.toLowerCase()}`}>
+                        <Link href={`/ativos/${asset.slug}`}>
                           <Badge tone="accent">{asset.symbol}</Badge>
                         </Link>
                       ) : (

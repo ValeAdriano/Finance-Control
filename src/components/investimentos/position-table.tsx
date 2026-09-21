@@ -41,7 +41,7 @@ export function PositionTable({
               <Tr key={position.asset.id}>
                 <Td>
                   <Link
-                    href={`/ativos/${position.asset.symbol.toLowerCase()}`}
+                    href={`/ativos/${position.asset.slug}`}
                     className="hover:text-accent flex flex-col"
                   >
                     <span className="font-medium">{position.asset.symbol}</span>
@@ -85,7 +85,7 @@ export function PositionTable({
         {positions.map((position) => (
           <li key={position.asset.id}>
             <Link
-              href={`/ativos/${position.asset.symbol.toLowerCase()}`}
+              href={`/ativos/${position.asset.slug}`}
               className="border-line bg-base/60 flex flex-col gap-2 rounded-[14px] border p-3"
             >
               <div className="flex items-start justify-between gap-3">

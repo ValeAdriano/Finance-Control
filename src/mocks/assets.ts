@@ -53,7 +53,8 @@ export const institutions: Institution[] = [
   },
 ];
 
-export const assets: Asset[] = [
+/** Sem `slug`: ele e derivado do simbolo pelo repositorio, como no banco. */
+export const assets: Omit<Asset, "slug">[] = [
   // Ações
   {
     id: "taee11",

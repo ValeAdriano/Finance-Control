@@ -7,6 +7,7 @@ const USD_BRL = 5;
 const assets: Asset[] = [
   {
     id: "petr4",
+    slug: "petr4",
     symbol: "PETR4",
     name: "Petrobras PN",
     assetClass: "acao",
@@ -16,6 +17,7 @@ const assets: Asset[] = [
   },
   {
     id: "hglg11",
+    slug: "hglg11",
     symbol: "HGLG11",
     name: "CSHG Logística",
     assetClass: "fii",
@@ -25,6 +27,7 @@ const assets: Asset[] = [
   },
   {
     id: "btc",
+    slug: "btc",
     symbol: "BTC",
     name: "Bitcoin",
     assetClass: "cripto",

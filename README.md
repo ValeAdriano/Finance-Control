@@ -10,16 +10,16 @@ desenvolvimento estão em [`CLAUDE.md`](CLAUDE.md).
 
 ## Estado atual
 
-| Fase | Escopo                                                                      | Situação                                                                                                                         |
-| ---- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                                                               |
-| 1    | Frontend completo com dado mockado                                          | ✅                                                                                                                               |
-| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ◐ projeto criado, migrações aplicadas (13 tabelas com RLS, linter limpo); falta o auth e a implementação Supabase do repositório |
-| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | 🔜 agendamento escrito, falta o conector                                                                                         |
-| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                                                                    |
-| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes                                              |
-| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                                                               |
-| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                                                               |
+| Fase | Escopo                                                                      | Situação                                                                            |
+| ---- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                  |
+| 1    | Frontend completo com dado mockado                                          | ✅                                                                                  |
+| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ✅ auth com 2FA, schema com RLS, repositório Supabase e seed                        |
+| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | 🔜 agendamento escrito, falta o conector                                            |
+| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                       |
+| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes |
+| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                  |
+| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                  |
 
 ## Rodando
 
@@ -31,10 +31,18 @@ npm run dev          # http://localhost:3000
 Não precisa de nenhuma variável de ambiente para rodar hoje: a Fase 1 usa o
 repositório mockado (`NEXT_PUBLIC_DATA_SOURCE=mock`).
 
-O backend já existe: o projeto Supabase está criado e as migrações aplicadas —
-ver [`supabase/README.md`](supabase/README.md). Quem clonar o repositório copia
-o `.env.example` para `.env.local` e pega as chaves em
-Project Settings > API Keys no painel.
+Para rodar contra o Supabase, preencha o `.env.local` (a partir do
+`.env.example`), ponha `NEXT_PUBLIC_DATA_SOURCE=supabase` e popule o banco:
+
+```bash
+npm run seed -- --email voce@exemplo.com --password 'senha forte'
+```
+
+O seed cria a conta e carrega o mesmo conjunto de dados da Fase 1. Detalhes do
+backend em [`supabase/README.md`](supabase/README.md).
+
+**Os dois modos são suportados de propósito.** O mock deixa a interface rodar
+sem credencial nenhuma — é assim que o CI builda e testa.
 
 ```bash
 npm run typecheck && npm run lint && npm test   # o que o CI roda

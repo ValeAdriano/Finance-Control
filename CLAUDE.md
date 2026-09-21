@@ -51,9 +51,14 @@ supabase/
 ### A regra mais importante: `lib/repo`
 
 Nenhuma página ou componente acessa dado diretamente. Tudo passa pela interface
-em `src/lib/repo/types.ts`. Hoje existe a implementação mock (`repo/mock.ts`);
-na Fase 2 entra a implementação Supabase e a troca é **uma linha** em
-`repo/index.ts`. Se um componente importa de `@/mocks` direto, está errado.
+em `src/lib/repo/types.ts`, que tem duas implementações: `repo/mock.ts` e
+`repo/supabase.ts`. `NEXT_PUBLIC_DATA_SOURCE` escolhe qual, a cada chamada.
+
+Manter o mock funcionando **não é legado** — é o que deixa a interface rodar
+sem credencial nenhuma, o que o CI usa para buildar e testar. Método novo na
+interface entra nas duas implementações, ou o modo mock quebra.
+
+Se um componente importa de `@/mocks` direto, está errado.
 
 ### Server vs Client
 
@@ -95,6 +100,17 @@ Ao mexer no motor:
 ## Segurança
 
 - RLS em **todas** as tabelas, filtrando por `user_id`. Nenhuma tabela nova sem policy.
+- **Nenhuma query filtra por `user_id` na aplicação.** Quem filtra é a RLS. Filtrar
+  também no código daria falsa segurança: se a policy estiver errada, o filtro da
+  aplicação esconderia o problema em vez de expô-lo.
+- Autorização usa `supabase.auth.getUser()`, nunca `getSession()` — `getSession`
+  só lê o cookie, que o cliente pode forjar.
+- `SUPABASE_SERVICE_ROLE_KEY` ignora a RLS. Só em trabalho de sistema (seed, sync
+  agendado); nunca para responder requisição de usuário. `createAdminClient()`
+  existe para isso e não deve aparecer em código de tela.
+- Depois de qualquer migração: `npx supabase db advisors --linked`. Ele pega o que
+  passa no `db push` mas é buraco de segurança (função sem `search_path` fixo,
+  extensão no schema `public`).
 - Chave de API de terceiro é criptografada antes de gravar, e a permissão pedida ao
   usuário é sempre a mínima (Binance: somente leitura, nunca trade ou saque).
 - Chamada a API externa sempre pelo servidor, com rate limit e retry com backoff.
@@ -128,6 +144,9 @@ Antes de dar uma tarefa por concluída: `npm run typecheck && npm run lint && np
 ## Convenções
 
 - Arquivo e pasta em `kebab-case`; componente em `PascalCase`; hook em `useCamelCase`.
+- URL de ativo usa `slug`, nunca `symbol`: símbolo de renda fixa e agro tem espaço
+  e sinal ("CDB Inter 112% CDI"). A regra está em `src/lib/slug.ts` **e** no
+  trigger da migração `..._asset_slug.sql` — mudar uma exige mudar a outra.
 - Sem `any`. Se o tipo é desconhecido, `unknown` + validação com `zod` na borda.
 - Toda resposta de API externa é validada com `zod` antes de entrar no domínio.
 - Commit em português, no imperativo ("adiciona simulador de venda").

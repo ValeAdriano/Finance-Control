@@ -1,14 +1,16 @@
 import { RefreshCw } from "lucide-react";
 import { repo } from "@/lib/repo";
+import { getCurrentUser } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
+import { UserMenu } from "./user-menu";
 
 /**
  * Barra superior: identidade no mobile, estado da sincronizacao e tema.
  * E Server Component — o estado de conexao vem do repositorio.
  */
 export async function Topbar() {
-  const institutions = await repo.getInstitutions();
+  const [institutions, user] = await Promise.all([repo.getInstitutions(), getCurrentUser()]);
   const stale = institutions.filter((i) => i.status === "expirada" || i.status === "erro");
   const lastSync = institutions
     .map((i) => i.lastSyncAt)
@@ -49,6 +51,7 @@ export async function Topbar() {
           </Badge>
         ) : null}
         <ThemeToggle />
+        {user ? <UserMenu email={user.email} /> : null}
       </div>
     </header>
   );

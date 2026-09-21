@@ -17,15 +17,15 @@ import { PriceChart } from "@/components/charts/price-chart";
 import { ScoreDetail } from "@/components/analise/score-detail";
 import { TRANSACTION_LABEL } from "@/components/investimentos/transaction-label";
 
-export async function generateMetadata({ params }: { params: Promise<{ symbol: string }> }) {
-  const { symbol } = await params;
-  const asset = await repo.getAsset(symbol);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const asset = await repo.getAsset(slug);
   return { title: asset ? `${asset.symbol} — ${asset.name}` : "Ativo" };
 }
 
-export default async function AtivoPage({ params }: { params: Promise<{ symbol: string }> }) {
-  const { symbol } = await params;
-  const asset = await repo.getAsset(symbol);
+export default async function AtivoPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const asset = await repo.getAsset(slug);
   if (!asset) notFound();
 
   const [portfolio, scores, priceHistory, transactions, journal, market, fixedIncome, agro] =
@@ -75,10 +75,7 @@ export default async function AtivoPage({ params }: { params: Promise<{ symbol: 
                 </p>
                 <Variation value={position.holding.dayChange} size="sm" className="justify-end" />
               </div>
-              <ButtonLink
-                href={`/simulador?ativo=${asset.symbol.toLowerCase()}`}
-                variant="secondary"
-              >
+              <ButtonLink href={`/simulador?ativo=${asset.slug}`} variant="secondary">
                 Simular venda
               </ButtonLink>
             </div>

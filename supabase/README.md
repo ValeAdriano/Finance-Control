@@ -72,3 +72,16 @@ Dois achados dele já viraram migração e valem como regra daqui pra frente:
   tabela a função enxerga.
 - **Extensão nunca no schema `public`.** `pg_net` não aceita `alter extension
 ... set schema`, então foi preciso recriá-la em `extensions`.
+
+## Seed
+
+```bash
+npm run seed -- --email voce@exemplo.com --password 'senha forte'
+```
+
+Cria a conta (com e-mail já confirmado, já que não há SMTP configurado) e
+carrega o conjunto de dados da Fase 1. É idempotente: apaga o dado do usuário
+antes de inserir, então rodar de novo repõe o estado em vez de duplicar.
+
+Usa a service role key e portanto ignora a RLS — é trabalho de sistema, não
+requisição de usuário.

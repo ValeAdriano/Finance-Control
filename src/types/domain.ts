@@ -35,6 +35,11 @@ export interface Asset {
   id: string;
   /** Ticker (PETR4, HGLG11, BTC) ou nome do contrato, para renda fixa e agro. */
   symbol: string;
+  /**
+   * Identificador do ativo na URL. Derivado do simbolo por `assetSlug`, porque
+   * simbolo de renda fixa e agro tem espaco e sinal e nao serve como rota.
+   */
+  slug: string;
   name: string;
   assetClass: AssetClass;
   currency: Currency;

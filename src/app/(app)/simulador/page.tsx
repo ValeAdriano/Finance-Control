@@ -1,5 +1,6 @@
 import { getPortfolio } from "@/lib/queries";
 import { repo } from "@/lib/repo";
+import { assetSlug } from "@/lib/slug";
 import { PageHeader } from "@/components/ui/page-header";
 import { SaleSimulator, type SimulatorAsset } from "@/components/simulador/sale-simulator";
 
@@ -24,6 +25,7 @@ export default async function SimuladorPage({
     const fx = position.asset.currency === "USD" ? market.usdBrl : 1;
     return {
       id: position.asset.id,
+      slug: position.asset.slug,
       symbol: position.asset.symbol,
       name: position.asset.name,
       assetClass: position.asset.assetClass,
@@ -33,9 +35,7 @@ export default async function SimuladorPage({
     };
   });
 
-  const initial = ativo
-    ? assets.find((a) => a.symbol.toLowerCase() === ativo.toLowerCase())
-    : undefined;
+  const initial = ativo ? assets.find((a) => a.slug === assetSlug(ativo)) : undefined;
 
   return (
     <div className="flex flex-col gap-6">

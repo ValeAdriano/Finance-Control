@@ -1,6 +1,7 @@
 import type { FinanceRepository } from "./types";
 import type { PricePoint } from "@/types/domain";
 import { DEFAULT_SCORING_SETTINGS } from "@/lib/scoring";
+import { assetSlug } from "@/lib/slug";
 import {
   agroPositions,
   assets,
@@ -28,6 +29,9 @@ import {
  * so gastaria CPU.
  */
 
+/** O slug e derivado, nao digitado — o mock calcula igual ao trigger do banco. */
+const withSlug = assets.map((asset) => ({ ...asset, slug: assetSlug(asset.symbol) }));
+
 let priceHistoryCache: PricePoint[] | null = null;
 function priceHistory(): PricePoint[] {
   priceHistoryCache ??= buildPriceHistory();
@@ -43,14 +47,12 @@ export const mockRepository: FinanceRepository = {
   },
 
   async getAssets() {
-    return assets;
+    return withSlug;
   },
 
-  async getAsset(idOrSymbol) {
-    const needle = idOrSymbol.toLowerCase();
-    return (
-      assets.find((a) => a.id.toLowerCase() === needle || a.symbol.toLowerCase() === needle) ?? null
-    );
+  async getAsset(idOrSlug) {
+    const needle = assetSlug(idOrSlug);
+    return withSlug.find((a) => a.id === idOrSlug || a.slug === needle) ?? null;
   },
 
   async getHoldings() {

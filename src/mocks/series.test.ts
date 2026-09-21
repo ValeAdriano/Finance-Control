@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPortfolio } from "@/lib/finance";
-import { assets, holdings } from "./assets";
+import { assetSlug } from "@/lib/slug";
+import { assets as bareAssets, holdings } from "./assets";
 import { allocationTargets, marketContext } from "./records";
 import { buildBenchmarks, buildNetWorthHistory, buildPriceHistory } from "./series";
 
@@ -9,6 +10,7 @@ import { buildBenchmarks, buildNetWorthHistory, buildPriceHistory } from "./seri
  * ao lado faz a interface parecer quebrada mesmo quando o cálculo está certo.
  */
 describe("mocks", () => {
+  const assets = bareAssets.map((a) => ({ ...a, slug: assetSlug(a.symbol) }));
   const portfolio = buildPortfolio(assets, holdings, marketContext.usdBrl);
 
   it("a série de patrimônio termina no valor atual da carteira", () => {

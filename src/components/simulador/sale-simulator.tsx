@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 
 export interface SimulatorAsset {
   id: string;
+  slug: string;
   symbol: string;
   name: string;
   assetClass: AssetClass;

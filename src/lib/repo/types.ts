@@ -31,7 +31,8 @@ export interface FinanceRepository {
   getInstitutions(): Promise<Institution[]>;
 
   getAssets(): Promise<Asset[]>;
-  getAsset(idOrSymbol: string): Promise<Asset | null>;
+  /** Resolve por uuid ou pelo slug da URL. */
+  getAsset(idOrSlug: string): Promise<Asset | null>;
   getHoldings(): Promise<Holding[]>;
 
   getTransactions(options?: { assetId?: string; limit?: number }): Promise<Transaction[]>;

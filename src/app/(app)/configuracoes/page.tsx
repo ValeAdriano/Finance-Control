@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { WeightsPanel } from "@/components/configuracoes/weights-panel";
+import { MfaPanel } from "@/components/configuracoes/mfa-panel";
+import { usesSupabase } from "@/lib/supabase/env";
 
 export const metadata = { title: "Configurações" };
 
@@ -35,6 +37,9 @@ export default async function ConfiguracoesPage() {
         title="Configurações"
         description="Contas conectadas, metas de alocação e os pesos do motor de análise."
       />
+
+      {/* O 2FA depende da sessão do Supabase; no modo mock não há o que ativar. */}
+      {usesSupabase() ? <MfaPanel /> : null}
 
       <Card>
         <CardHeader

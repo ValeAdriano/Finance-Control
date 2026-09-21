@@ -82,7 +82,7 @@ export default async function AnalisePage() {
                 <Tr key={asset.id}>
                   <Td>
                     <Link
-                      href={`/ativos/${asset.symbol.toLowerCase()}`}
+                      href={`/ativos/${asset.slug}`}
                       className="hover:text-accent flex flex-col"
                     >
                       <span className="font-medium">{asset.symbol}</span>

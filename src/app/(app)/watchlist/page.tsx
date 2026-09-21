@@ -53,10 +53,7 @@ export default async function WatchlistPage() {
               <Card key={asset.id} as="article">
                 <CardHeader
                   title={
-                    <Link
-                      href={`/ativos/${asset.symbol.toLowerCase()}`}
-                      className="hover:text-accent"
-                    >
+                    <Link href={`/ativos/${asset.slug}`} className="hover:text-accent">
                       {asset.symbol} <span className="text-muted font-normal">— {asset.name}</span>
                     </Link>
                   }

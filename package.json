@@ -14,7 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "seed": "tsx --env-file=.env.local scripts/seed.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -46,6 +47,7 @@
     "prettier-plugin-tailwindcss": "^0.8.1",
     "supabase": "^2.117.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.1"
   },
