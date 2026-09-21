@@ -82,10 +82,17 @@ export function BankConnect({ banks }: { banks: ConnectedBank[] }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/*
+        A versão fica fixada, não em "latest": o widget roda no browser do
+        usuário e uma versão nova quebrada derrubaria a conexão de banco sem
+        aviso. Conferir se a URL responde antes de trocar — a CDN devolve 404
+        para versão inexistente, e o botão fica travado para sempre.
+      */}
       <Script
-        src="https://cdn.pluggy.ai/pluggy-connect/v2.9.3/pluggy-connect.js"
+        src="https://cdn.pluggy.ai/pluggy-connect/v2.7.0/pluggy-connect.js"
         strategy="lazyOnload"
         onReady={() => setScriptReady(true)}
+        onError={() => setError("O widget da Pluggy não carregou. Tente recarregar a página.")}
       />
 
       {banks.length > 0 ? (
