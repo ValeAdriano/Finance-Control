@@ -1,22 +1,29 @@
 # Supabase
 
-Schema, RLS e agendamento do backend. Aplicado com a CLI do Supabase:
+Schema, RLS e agendamento do backend.
+
+A CLI está instalada como dependência de desenvolvimento — use `npx supabase`,
+não precisa instalar nada global.
 
 ```bash
-supabase link --project-ref <ref>
-supabase db push
+npx supabase login                          # interativo: abre o navegador
+./scripts/supabase-setup.sh <project-ref>   # conecta e aplica as migrações
 ```
+
+O `project-ref` é o identificador na URL do painel:
+`https://supabase.com/dashboard/project/<project-ref>`. Sem argumento, o script
+lista os projetos da conta.
 
 ## Migrações
 
-| Arquivo           | O que faz                                                                               |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| `0001_schema.sql` | Tabelas, tipos, índices e RLS em todas as tabelas                                       |
-| `0002_jobs.sql`   | `pg_cron`: sync de cotação, Open Finance, snapshot de patrimônio, retenção e keep-alive |
+| Arquivo                     | O que faz                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `20260921130000_schema.sql` | Tabelas, tipos, índices e RLS em todas as tabelas                                       |
+| `20260921130100_jobs.sql`   | `pg_cron`: sync de cotação, Open Finance, snapshot de patrimônio, retenção e keep-alive |
 
 ## Decisões que o SQL assume
 
-**RLS em tudo, sem exceção.** O bloco no fim de `0001` liga `row level security`
+**RLS em tudo, sem exceção.** O bloco no fim do schema liga `row level security`
 e `force row level security` em cada tabela e cria a policy por `user_id`. Tabela
 nova entra nessa lista — sem policy, ela fica inacessível pela chave anon, que é
 o default correto.
