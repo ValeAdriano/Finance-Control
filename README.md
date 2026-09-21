@@ -10,16 +10,16 @@ desenvolvimento estão em [`CLAUDE.md`](CLAUDE.md).
 
 ## Estado atual
 
-| Fase | Escopo                                                                      | Situação                                                                            |
-| ---- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                  |
-| 1    | Frontend completo com dado mockado                                          | ✅                                                                                  |
-| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ✅ auth com 2FA, schema com RLS, repositório Supabase e seed                        |
-| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | 🔜 agendamento escrito, falta o conector                                            |
-| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                       |
-| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes |
-| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                  |
-| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                  |
+| Fase | Escopo                                                                      | Situação                                                                                                                                     |
+| ---- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                                                                           |
+| 1    | Frontend completo com dado mockado                                          | ✅                                                                                                                                           |
+| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ✅ auth com 2FA, schema com RLS, repositório Supabase e seed                                                                                 |
+| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | ◐ chaves cadastradas na interface, brapi e Binance sincronizando, `pg_cron` apontado para a app; falta o fluxo de conexão de banco da Pluggy |
+| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                                                                                |
+| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes                                                          |
+| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                                                                           |
+| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                                                                           |
 
 ## Rodando
 
@@ -91,9 +91,10 @@ Duas decisões que valem registrar:
 
 ## Testes
 
-83 testes cobrem o que erra calado: motor de score, IR sobre venda, projeção,
-rebalanceamento, consolidação da carteira, formatação pt-BR e a coerência dos
-próprios mocks.
+160 testes cobrem o que erra calado: motor de score, IR sobre venda, projeção,
+rebalanceamento, consolidação da carteira, formatação pt-BR, criptografia das
+credenciais, retry e rate limit das chamadas externas, a assinatura HMAC da
+Binance (contra o vetor oficial) e a idempotência do sync.
 
 ```bash
 npm test

@@ -98,3 +98,27 @@ O `supabase/config.toml` foi puxado do projeto real com `npx supabase config
 pull`, então ele reflete o que está no ar. Antes de um `config push`, rode o
 `pull` primeiro: o arquivo que o `supabase init` gera tem defaults que
 sobrescreveriam configuração de produção.
+
+## Agendamento
+
+Os jobs de sync chamam `/api/cron/sync` da aplicação, e não uma Edge Function:
+a lógica de sync vive em TypeScript e é a mesma que a interface usa —
+duplicá-la em Deno criaria duas versões para divergirem na primeira correção.
+
+Para o agendamento valer, dois segredos precisam existir no Vault:
+
+```sql
+select vault.create_secret('https://SEU-APP.vercel.app', 'app_url');
+select vault.create_secret('<CRON_SECRET>', 'cron_secret');
+```
+
+O `cron_secret` é o mesmo valor da variável `CRON_SECRET` da aplicação. A rota
+é pública na internet e compara o segredo em tempo constante; sem ele qualquer
+um dispararia sync e queimaria a cota das APIs externas.
+
+Em desenvolvimento, dá para testar a rota direto:
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  'http://localhost:3000/api/cron/sync?provider=brapi'
+```

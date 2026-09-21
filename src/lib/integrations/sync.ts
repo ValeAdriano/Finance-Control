@@ -9,6 +9,7 @@ import {
   recordVerification,
   type BinanceSecret,
   type BrapiSecret,
+  type SyncContext,
 } from "./credentials";
 import { planBinanceSync, planQuoteSync, type SyncableAsset } from "./sync-plan";
 
@@ -19,7 +20,23 @@ import { planBinanceSync, planQuoteSync, type SyncableAsset } from "./sync-plan"
  * Toda execução vira uma linha em `sync_runs`, com quantos registros entraram
  * e quantos foram ignorados — o número de ignorados é o que deixa a
  * idempotência visível em produção, não só em teste.
+ *
+ * O `SyncContext` é o que permite a mesma implementação servir à interface
+ * (com a sessão do usuário) e ao agendamento (com o cliente administrativo,
+ * onde não há sessão). Duplicar essa lógica numa Edge Function em Deno faria
+ * as duas versões divergirem na primeira correção.
  */
+
+/** Resolve o contexto: o informado, ou o da sessão atual. */
+async function resolveContext(context?: SyncContext): Promise<SyncContext> {
+  if (context) return context;
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) throw new Error("Sessão expirada.");
+
+  return { supabase, userId: data.user.id };
+}
 
 export interface SyncResult {
   ok: boolean;
@@ -31,14 +48,10 @@ export interface SyncResult {
 
 type Provider = "brapi" | "binance" | "pluggy";
 
-async function startRun(provider: Provider): Promise<string | null> {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
-
-  const { data } = await supabase
+async function startRun(provider: Provider, ctx: SyncContext): Promise<string | null> {
+  const { data } = await ctx.supabase
     .from("sync_runs")
-    .insert({ user_id: auth.user.id, provider, status: "rodando" })
+    .insert({ user_id: ctx.userId, provider, status: "rodando" })
     .select("id")
     .single();
 
@@ -49,11 +62,11 @@ async function finishRun(
   runId: string | null,
   status: "sucesso" | "parcial" | "erro",
   result: Omit<SyncResult, "ok">,
+  ctx: SyncContext,
 ) {
   if (!runId) return;
 
-  const supabase = await createClient();
-  await supabase
+  await ctx.supabase
     .from("sync_runs")
     .update({
       status,
@@ -67,11 +80,12 @@ async function finishRun(
 }
 
 /** Cotação de ações e FIIs pela brapi. */
-export async function syncQuotes(): Promise<SyncResult> {
-  const runId = await startRun("brapi");
+export async function syncQuotes(context?: SyncContext): Promise<SyncResult> {
+  const ctx = await resolveContext(context);
+  const runId = await startRun("brapi", ctx);
 
   try {
-    const credential = await loadCredential<BrapiSecret>("brapi");
+    const credential = await loadCredential<BrapiSecret>("brapi", ctx);
     if (!credential) {
       const result = {
         inserted: 0,
@@ -79,14 +93,15 @@ export async function syncQuotes(): Promise<SyncResult> {
         skipped: 0,
         message: "Nenhum token da brapi cadastrado.",
       };
-      await finishRun(runId, "erro", result);
+      await finishRun(runId, "erro", result, ctx);
       return { ok: false, ...result };
     }
 
-    const supabase = await createClient();
+    const supabase = ctx.supabase;
     const { data: assets, error } = await supabase
       .from("assets")
       .select("id, symbol, asset_class, currency")
+      .eq("user_id", ctx.userId)
       .in("asset_class", ["acao", "fii"]);
 
     if (error) throw new Error(error.message);
@@ -105,7 +120,7 @@ export async function syncQuotes(): Promise<SyncResult> {
         skipped: 0,
         message: "Nenhuma ação ou FII na carteira.",
       };
-      await finishRun(runId, "sucesso", result);
+      await finishRun(runId, "sucesso", result, ctx);
       return { ok: true, ...result };
     }
 
@@ -117,8 +132,7 @@ export async function syncQuotes(): Promise<SyncResult> {
     const today = new Date().toISOString().slice(0, 10);
     const plan = planQuoteSync(syncable, quotes, today);
 
-    const { data: auth } = await supabase.auth.getUser();
-    const userId = auth.user!.id;
+    const userId = ctx.userId;
 
     // `price_history` é append-only e tem chave primária por (user, ativo, dia):
     // rodar duas vezes no mesmo dia atualiza a linha, não cria outra.
@@ -140,10 +154,11 @@ export async function syncQuotes(): Promise<SyncResult> {
       await supabase
         .from("holdings")
         .update({ last_price: update.lastPrice, day_change: update.dayChange })
+        .eq("user_id", userId)
         .eq("asset_id", update.assetId);
     }
 
-    await recordVerification("brapi", "valida", "Sincronização concluída.");
+    await recordVerification("brapi", "valida", "Sincronização concluída.", ctx);
 
     const result = {
       inserted: plan.priceRows.length,
@@ -155,19 +170,20 @@ export async function syncQuotes(): Promise<SyncResult> {
           : `${plan.holdingUpdates.length} cotações atualizadas.`,
     };
 
-    await finishRun(runId, plan.missing.length > 0 ? "parcial" : "sucesso", result);
+    await finishRun(runId, plan.missing.length > 0 ? "parcial" : "sucesso", result, ctx);
     return { ok: true, ...result };
   } catch (error) {
-    return failRun(runId, "brapi", error);
+    return failRun(runId, "brapi", error, ctx);
   }
 }
 
 /** Saldo e cotação da Binance. */
-export async function syncBinance(): Promise<SyncResult> {
-  const runId = await startRun("binance");
+export async function syncBinance(context?: SyncContext): Promise<SyncResult> {
+  const ctx = await resolveContext(context);
+  const runId = await startRun("binance", ctx);
 
   try {
-    const credential = await loadCredential<BinanceSecret>("binance");
+    const credential = await loadCredential<BinanceSecret>("binance", ctx);
     if (!credential) {
       const result = {
         inserted: 0,
@@ -175,17 +191,17 @@ export async function syncBinance(): Promise<SyncResult> {
         skipped: 0,
         message: "Nenhuma chave da Binance cadastrada.",
       };
-      await finishRun(runId, "erro", result);
+      await finishRun(runId, "erro", result, ctx);
       return { ok: false, ...result };
     }
 
-    const supabase = await createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    const userId = auth.user!.id;
+    const supabase = ctx.supabase;
+    const userId = ctx.userId;
 
     const { data: assets, error } = await supabase
       .from("assets")
-      .select("id, symbol, asset_class, currency");
+      .select("id, symbol, asset_class, currency")
+      .eq("user_id", userId);
 
     if (error) throw new Error(error.message);
 
@@ -246,11 +262,16 @@ export async function syncBinance(): Promise<SyncResult> {
           last_price: update.lastPrice,
           day_change: update.dayChange,
         })
+        .eq("user_id", userId)
         .eq("asset_id", update.assetId);
     }
 
     for (const assetId of plan.zeroed) {
-      await supabase.from("holdings").update({ quantity: 0 }).eq("asset_id", assetId);
+      await supabase
+        .from("holdings")
+        .update({ quantity: 0 })
+        .eq("user_id", userId)
+        .eq("asset_id", assetId);
     }
 
     if (plan.priceRows.length > 0) {
@@ -266,7 +287,7 @@ export async function syncBinance(): Promise<SyncResult> {
       );
     }
 
-    await recordVerification("binance", "valida", "Sincronização concluída.");
+    await recordVerification("binance", "valida", "Sincronização concluída.", ctx);
 
     const notes: string[] = [`${plan.holdingUpdates.length} posições atualizadas`];
     if (inserted > 0) notes.push(`${inserted} moedas novas`);
@@ -280,10 +301,10 @@ export async function syncBinance(): Promise<SyncResult> {
       message: `${notes.join(", ")}.`,
     };
 
-    await finishRun(runId, plan.unpriced.length > 0 ? "parcial" : "sucesso", result);
+    await finishRun(runId, plan.unpriced.length > 0 ? "parcial" : "sucesso", result, ctx);
     return { ok: true, ...result };
   } catch (error) {
-    return failRun(runId, "binance", error);
+    return failRun(runId, "binance", error, ctx);
   }
 }
 
@@ -291,13 +312,14 @@ async function failRun(
   runId: string | null,
   provider: Provider,
   error: unknown,
+  ctx: SyncContext,
 ): Promise<SyncResult> {
   // O detalhe fica no log; a tela recebe texto genérico, porque a mensagem
   // original pode carregar trecho da requisição.
   console.error(`[sync ${provider}]`, error);
 
   const message = "A sincronização falhou. Confira a credencial e tente de novo.";
-  await finishRun(runId, "erro", { inserted: 0, updated: 0, skipped: 0, message });
+  await finishRun(runId, "erro", { inserted: 0, updated: 0, skipped: 0, message }, ctx);
 
   return { ok: false, inserted: 0, updated: 0, skipped: 0, message };
 }

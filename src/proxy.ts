@@ -64,9 +64,14 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Tudo menos arquivo estático e imagem — renovar sessão em requisição de
-     * asset só gastaria chamada.
+     * Fora do guarda de sessão:
+     *
+     * - `api/`: rota de API autentica por conta própria. A de cron usa segredo
+     *   compartilhado e não tem sessão nenhuma — redirecioná-la para /entrar
+     *   deixaria o agendamento quebrado em silêncio.
+     * - estático e imagem: renovar sessão em requisição de asset só gastaria
+     *   chamada ao Supabase.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
