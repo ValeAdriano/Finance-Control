@@ -85,3 +85,16 @@ antes de inserir, então rodar de novo repõe o estado em vez de duplicar.
 
 Usa a service role key e portanto ignora a RLS — é trabalho de sistema, não
 requisição de usuário.
+
+## Passo manual no painel
+
+O linter aponta **Leaked Password Protection Disabled**, que é um toggle de
+projeto e não sai em migração. Ative em
+_Authentication > Policies > Password protection_: o Supabase passa a recusar
+senha que apareça em vazamento conhecido (checagem contra o HaveIBeenPwned,
+por prefixo de hash — a senha em si não sai do servidor).
+
+O `supabase/config.toml` foi puxado do projeto real com `npx supabase config
+pull`, então ele reflete o que está no ar. Antes de um `config push`, rode o
+`pull` primeiro: o arquivo que o `supabase init` gera tem defaults que
+sobrescreveriam configuração de produção.

@@ -353,6 +353,45 @@ export type Database = {
           },
         ];
       };
+      provider_credentials: {
+        Row: {
+          created_at: string;
+          encrypted: string;
+          hint: string | null;
+          iv: string;
+          last_verified_at: string | null;
+          provider: Database["public"]["Enums"]["credential_provider"];
+          status: string;
+          status_message: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          encrypted: string;
+          hint?: string | null;
+          iv: string;
+          last_verified_at?: string | null;
+          provider: Database["public"]["Enums"]["credential_provider"];
+          status?: string;
+          status_message?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          encrypted?: string;
+          hint?: string | null;
+          iv?: string;
+          last_verified_at?: string | null;
+          provider?: Database["public"]["Enums"]["credential_provider"];
+          status?: string;
+          status_message?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       scoring_settings: {
         Row: {
           settings: Json;
@@ -367,6 +406,45 @@ export type Database = {
         Update: {
           settings?: Json;
           updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      sync_runs: {
+        Row: {
+          finished_at: string | null;
+          id: string;
+          inserted: number;
+          message: string | null;
+          provider: Database["public"]["Enums"]["credential_provider"];
+          skipped: number;
+          started_at: string;
+          status: string;
+          updated: number;
+          user_id: string;
+        };
+        Insert: {
+          finished_at?: string | null;
+          id?: string;
+          inserted?: number;
+          message?: string | null;
+          provider: Database["public"]["Enums"]["credential_provider"];
+          skipped?: number;
+          started_at?: string;
+          status?: string;
+          updated?: number;
+          user_id: string;
+        };
+        Update: {
+          finished_at?: string | null;
+          id?: string;
+          inserted?: number;
+          message?: string | null;
+          provider?: Database["public"]["Enums"]["credential_provider"];
+          skipped?: number;
+          started_at?: string;
+          status?: string;
+          updated?: number;
           user_id?: string;
         };
         Relationships: [];
@@ -466,6 +544,7 @@ export type Database = {
     };
     Enums: {
       asset_class: "acao" | "fii" | "cripto" | "renda_fixa" | "agro";
+      credential_provider: "binance" | "pluggy" | "brapi";
       currency_code: "BRL" | "USD";
       data_source: "manual" | "pluggy" | "binance" | "brapi" | "nota_corretagem";
       fixed_income_indexer: "prefixado" | "cdi" | "ipca" | "selic";
@@ -593,6 +672,7 @@ export const Constants = {
   public: {
     Enums: {
       asset_class: ["acao", "fii", "cripto", "renda_fixa", "agro"],
+      credential_provider: ["binance", "pluggy", "brapi"],
       currency_code: ["BRL", "USD"],
       data_source: ["manual", "pluggy", "binance", "brapi", "nota_corretagem"],
       fixed_income_indexer: ["prefixado", "cdi", "ipca", "selic"],

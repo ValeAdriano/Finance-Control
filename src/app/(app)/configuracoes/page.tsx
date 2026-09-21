@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleAlert, CircleDashed, KeyRound } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { repo } from "@/lib/repo";
 import { ASSET_CLASS_LABEL } from "@/types/domain";
 import { percent } from "@/lib/format";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { WeightsPanel } from "@/components/configuracoes/weights-panel";
 import { MfaPanel } from "@/components/configuracoes/mfa-panel";
+import { IntegrationsPanel } from "@/components/configuracoes/integrations-panel";
 import { usesSupabase } from "@/lib/supabase/env";
 
 export const metadata = { title: "Configurações" };
@@ -38,8 +39,9 @@ export default async function ConfiguracoesPage() {
         description="Contas conectadas, metas de alocação e os pesos do motor de análise."
       />
 
-      {/* O 2FA depende da sessão do Supabase; no modo mock não há o que ativar. */}
+      {/* Ambos dependem da sessão do Supabase; no modo mock não há o que ligar. */}
       {usesSupabase() ? <MfaPanel /> : null}
+      {usesSupabase() ? <IntegrationsPanel /> : null}
 
       <Card>
         <CardHeader
@@ -101,36 +103,6 @@ export default async function ConfiguracoesPage() {
           O plano gratuito do Meu Pluggy permite até 5 conexões ativas. Tokens são criptografados
           antes de ir para o banco.
         </CardFooter>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Como gerar a chave da Binance"
-          description="A plataforma nunca precisa de permissão de negociação ou saque."
-        />
-        <CardBody>
-          <ol className="text-muted flex flex-col gap-2.5 text-[14px]">
-            {[
-              "Na Binance, abra o menu da sua conta e vá em API Management.",
-              "Crie uma chave nova (System generated) e dê um nome que você reconheça depois.",
-              'Em permissões, deixe marcado apenas "Enable Reading".',
-              'Confirme que "Enable Spot & Margin Trading" e qualquer permissão de saque estão DESMARCADAS.',
-              "Copie a API Key e a Secret Key e cole aqui — a Secret só aparece uma vez.",
-            ].map((step, index) => (
-              <li key={step} className="flex gap-3">
-                <span className="tabular bg-sunken text-content flex size-5 shrink-0 items-center justify-center rounded-full text-[12px] font-medium">
-                  {index + 1}
-                </span>
-                <span className="leading-relaxed">{step}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="bg-warning-soft text-warning mt-4 flex items-start gap-2 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed">
-            <KeyRound aria-hidden className="mt-0.5 size-4 shrink-0" />
-            Se uma chave com permissão de saque vazar, o dinheiro sai da corretora. Com permissão só
-            de leitura, o pior caso é alguém ver o saldo.
-          </p>
-        </CardBody>
       </Card>
 
       <Card>

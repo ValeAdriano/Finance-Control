@@ -97,6 +97,24 @@ Ao mexer no motor:
 - Ativo em dólar (Binance) é convertido para BRL na borda de apresentação, com a
   cotação guardada junto do valor, para o histórico não mudar retroativamente.
 
+## Credenciais de terceiros
+
+As chaves (brapi, Binance, Pluggy) são cadastradas **pelo usuário na interface**,
+não em variável de ambiente: são dele, trocam de tempos em tempos e precisam ser
+revogáveis sem deploy. Só o `TOKEN_ENCRYPTION_KEY` vive no ambiente.
+
+- Segredo é cifrado com AES-256-GCM (`src/lib/crypto/secrets.ts`) antes de ir
+  para `provider_credentials`. GCM autentica além de cifrar: ciphertext
+  adulterado falha em vez de decifrar em lixo — importa, porque o texto
+  decifrado vira chave de API que sai para a internet.
+- `src/lib/integrations/credentials.ts` tem `import "server-only"` no topo.
+  Importar de um client component quebra o build, em vez de vazar a chave.
+- Nenhuma função devolve segredo para a tela. O que a interface recebe é a
+  prévia mascarada (`maskSecret`) e o estado da verificação.
+- Chamada externa só pelo servidor, sempre via `src/lib/integrations/http.ts`,
+  que já traz timeout, retry com backoff e rate limit. Não repetir 4xx: a
+  resposta seria a mesma e, no caso do 401, arriscaria bloquear a chave.
+
 ## Segurança
 
 - RLS em **todas** as tabelas, filtrando por `user_id`. Nenhuma tabela nova sem policy.
@@ -108,7 +126,8 @@ Ao mexer no motor:
 - `SUPABASE_SERVICE_ROLE_KEY` ignora a RLS. Só em trabalho de sistema (seed, sync
   agendado); nunca para responder requisição de usuário. `createAdminClient()`
   existe para isso e não deve aparecer em código de tela.
-- Depois de qualquer migração: `npx supabase db advisors --linked`. Ele pega o que
+- Depois de qualquer migração: `npm run db:types` (senão o TypeScript fica
+  defasado e as queries novas não compilam) e `npm run db:advisors`. Ele pega o que
   passa no `db push` mas é buraco de segurança (função sem `search_path` fixo,
   extensão no schema `public`).
 - Chave de API de terceiro é criptografada antes de gravar, e a permissão pedida ao
@@ -137,6 +156,11 @@ npm run typecheck    # tsc --noEmit
 npm test             # Vitest
 npm run test:watch
 npm run format       # Prettier
+npm run seed         # popula o banco (precisa de --email e --password)
+
+npm run db:push      # aplica migrações no projeto conectado
+npm run db:types     # regenera src/types/database.ts a partir do banco
+npm run db:advisors  # linter de segurança do Supabase
 ```
 
 Antes de dar uma tarefa por concluída: `npm run typecheck && npm run lint && npm test`.
