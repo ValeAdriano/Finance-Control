@@ -60,6 +60,17 @@ interface entra nas duas implementações, ou o modo mock quebra.
 
 Se um componente importa de `@/mocks` direto, está errado.
 
+### Server Actions
+
+Num arquivo `"use server"`, **todo export vira um endpoint chamável pelo
+cliente** — e só função assíncrona pode ser um. Exportar uma constante, um
+objeto ou uma função síncrona quebra o módulo inteiro em tempo de execução,
+com erro em _module evaluation_, não no build. Tipo e interface podem ser
+exportados: somem na compilação.
+
+Estado inicial de `useActionState` fica no componente que o usa, não exportado
+da action.
+
 ### Server vs Client
 
 - Página, layout e busca de dado: **Server Component** (padrão, sem `'use client'`).

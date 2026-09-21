@@ -31,8 +31,6 @@ export interface CredentialActionState {
   warning?: string | null;
 }
 
-const EMPTY: CredentialActionState = { ok: false, message: null };
-
 export async function saveAndVerifyCredential(
   _previous: CredentialActionState,
   formData: FormData,
@@ -169,8 +167,6 @@ export async function revalidateCredential(
 export async function getCredentialStatus() {
   return listCredentialStatus();
 }
-
-export { EMPTY as EMPTY_CREDENTIAL_STATE };
 
 function field(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
