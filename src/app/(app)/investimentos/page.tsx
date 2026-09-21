@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { getPortfolio, getScores } from "@/lib/queries";
 import { ASSET_CLASS_LABEL, ASSET_CLASSES, type AssetClass } from "@/types/domain";
 import { brl, percent, signedBrl } from "@/lib/format";
@@ -8,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Stat } from "@/components/ui/stat";
 import { Variation } from "@/components/ui/variation";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ButtonLink } from "@/components/ui/button";
 import { PositionTable } from "@/components/investimentos/position-table";
 
 export const metadata = { title: "Investimentos" };
@@ -47,6 +49,11 @@ export default async function InvestimentosPage({
       <PageHeader
         title="Investimentos"
         description="Toda a carteira, por classe de ativo. Clique num ativo para ver a análise completa."
+        action={
+          <ButtonLink href="/investimentos/novo" variant="primary">
+            <Plus aria-hidden className="size-4" /> Adicionar ativo
+          </ButtonLink>
+        }
       />
 
       <nav
@@ -108,7 +115,12 @@ export default async function InvestimentosPage({
           ) : (
             <EmptyState
               title="Nenhuma posição nesta classe"
-              description="Quando houver aporte nessa categoria, ele aparece aqui automaticamente."
+              description="Lance manualmente ou configure uma integração para o sync trazer sozinho."
+              action={
+                <ButtonLink href="/investimentos/novo" variant="secondary">
+                  Adicionar ativo
+                </ButtonLink>
+              }
             />
           )}
         </CardBody>

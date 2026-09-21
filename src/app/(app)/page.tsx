@@ -11,7 +11,7 @@ import {
 } from "@/lib/queries";
 import { ASSET_CLASS_LABEL } from "@/types/domain";
 import { brl, monthName, percent, signedBrl } from "@/lib/format";
-import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
 import { Variation } from "@/components/ui/variation";
 import { PageHeader } from "@/components/ui/page-header";
@@ -172,64 +172,77 @@ export default async function DashboardPage() {
 /**
  * Primeira tela de quem ainda não tem posição.
  *
- * Mostrar KPIs zerados e gráfico vazio faria a plataforma parecer quebrada
- * justamente no momento em que ela precisa explicar o que fazer a seguir.
+ * Os dois caminhos aparecem lado a lado de propósito: integração é
+ * conveniência, não pré-requisito. Quem não conseguiu a chave da corretora, ou
+ * não quer entregar credencial a terceiro, usa a plataforma inteira lançando
+ * na mão — inclusive o score, o simulador de IR e o rebalanceamento.
  */
 function EmptyDashboard() {
-  const steps = [
-    {
-      title: "Cadastre as chaves das integrações",
-      body: "Em Configurações: token da brapi para cotação de ações e FIIs, chave somente leitura da Binance para cripto, e Pluggy para o extrato bancário.",
-    },
-    {
-      title: "Conecte seus bancos",
-      body: "Pelo widget da Pluggy. A senha do banco vai direto para ela — não passa por aqui.",
-    },
-    {
-      title: "Sincronize",
-      body: "O botão fica na própria tela de Configurações. Depois disso o agendamento roda sozinho.",
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Visão geral"
-        description="Sua carteira está vazia. Três passos para ela começar a se preencher sozinha."
+        description="Sua carteira está vazia. Há dois caminhos para preenchê-la, e eles se somam."
       />
 
-      <Card>
-        <CardBody className="flex flex-col gap-4 pt-6">
-          <ol className="flex flex-col gap-4">
-            {steps.map((step, index) => (
-              <li key={step.title} className="flex gap-3.5">
-                <span className="tabular bg-accent-soft text-accent flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold">
-                  {index + 1}
-                </span>
-                <span className="min-w-0">
-                  <span className="text-content block text-[15px] font-medium">{step.title}</span>
-                  <span className="text-muted mt-0.5 block text-[14px] leading-relaxed">
-                    {step.body}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ol>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card as="article">
+          <CardHeader title="Lançar na mão" description="Funciona agora, sem depender de nada." />
+          <CardBody className="flex flex-col gap-3">
+            <p className="text-muted text-[14px] leading-relaxed">
+              Cadastre cada ativo com quantidade e preço médio. É o único jeito de ter o custo de
+              aquisição correto — nenhuma corretora informa isso por API, e é justamente o número
+              que o cálculo de imposto usa.
+            </p>
+            <div>
+              <ButtonLink href="/investimentos/novo" variant="primary">
+                Adicionar primeiro ativo
+              </ButtonLink>
+            </div>
+          </CardBody>
+        </Card>
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            <ButtonLink href="/configuracoes" variant="primary">
-              Abrir configurações
-            </ButtonLink>
-            <ButtonLink href="/projecao" variant="secondary">
-              Simular uma projeção
-            </ButtonLink>
-          </div>
+        <Card as="article">
+          <CardHeader
+            title="Conectar integrações"
+            description="Opcional, e dá para ligar uma de cada vez."
+          />
+          <CardBody className="flex flex-col gap-3">
+            <ul className="text-muted flex flex-col gap-2 text-[14px]">
+              <li>
+                <span className="text-content font-medium">brapi</span> — cotação de ações e FIIs
+              </li>
+              <li>
+                <span className="text-content font-medium">Binance</span> — saldo de cripto (a
+                cotação já funciona sem chave)
+              </li>
+              <li>
+                <span className="text-content font-medium">Pluggy</span> — extrato bancário
+              </li>
+            </ul>
+            <div>
+              <ButtonLink href="/configuracoes" variant="secondary">
+                Abrir configurações
+              </ButtonLink>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
+      <Card>
+        <CardBody className="pt-5">
+          <p className="text-muted text-[14px] leading-relaxed">
+            Enquanto a carteira não tem posição, a{" "}
+            <Link href="/projecao" className="text-accent">
+              projeção de patrimônio
+            </Link>{" "}
+            e o{" "}
+            <Link href="/gastos" className="text-accent">
+              controle de gastos
+            </Link>{" "}
+            já funcionam por conta própria.
+          </p>
         </CardBody>
-        <CardFooter>
-          A sincronização traz cotação e saldo, mas não o preço médio de compra — ele vem das
-          movimentações e é o que o cálculo de imposto usa. Para posição antiga, o caminho é a
-          importação de nota de corretagem.
-        </CardFooter>
       </Card>
     </div>
   );

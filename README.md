@@ -90,6 +90,11 @@ tela — o que aparece depois é uma prévia mascarada e o estado da verificaç�
 | Binance   | Saldo e cotação de cripto               | API Key somente leitura, colada em Configurações |
 | Pluggy    | Extrato e saldo bancário (Open Finance) | Client ID/Secret + widget de conexão do banco    |
 
+**Nenhuma delas é obrigatória.** A plataforma funciona inteira com lançamento
+manual, e parte da cotação nem precisa de chave: o endpoint de preço da Binance
+é público, e a brapi responde sem token (só com limite menor). A chave da
+Binance serve para trazer o saldo; o token da brapi, para ampliar a cota.
+
 Duas coisas que o desenho garante:
 
 - **A senha do banco nunca passa por aqui.** O widget da Pluggy recebe um token

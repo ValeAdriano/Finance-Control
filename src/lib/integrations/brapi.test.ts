@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchQuotes, verifyToken } from "./brapi";
+import { fetchQuotes, looksLikeToken, verifyToken } from "./brapi";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -38,6 +38,14 @@ describe("fetchQuotes", () => {
     expect(calls[0]).toContain("PETR4,VALE3,ITSA4");
   });
 
+  it("funciona sem token, e não manda o parâmetro vazio", async () => {
+    const { impl, calls } = fakeFetch(json({ results: [] }));
+    await fetchQuotes(["PETR4"], { fetchImpl: impl });
+
+    expect(impl).toHaveBeenCalledTimes(1);
+    expect(calls[0]).not.toContain("token");
+  });
+
   it("não chama a API quando não há ticker", async () => {
     const { impl } = fakeFetch(json({ results: [] }));
     expect((await fetchQuotes([], { token: "t", fetchImpl: impl })).size).toBe(0);
@@ -66,25 +74,60 @@ describe("fetchQuotes", () => {
   });
 });
 
+describe("looksLikeToken", () => {
+  it("aceita o formato que a brapi usa", () => {
+    expect(looksLikeToken("abc123XYZ")).toBe(true);
+    expect(looksLikeToken("8Xy2mKpQ4nRt")).toBe(true);
+  });
+
+  it("recusa texto colado por engano", () => {
+    // O caso real que motivou a checagem: um trecho de mensagem de erro
+    // colado no lugar do token, que a brapi aceitaria em silêncio.
+    expect(looksLikeToken("Runtime Error (page.tsx:25)")).toBe(false);
+    expect(looksLikeToken("meu token: abc")).toBe(false);
+    expect(looksLikeToken("")).toBe(false);
+    expect(looksLikeToken("curto")).toBe(false);
+  });
+});
+
 describe("verifyToken", () => {
-  it("aprova token que traz cotação", async () => {
+  it("aprova token bem formatado que traz cotação", async () => {
     const { impl } = fakeFetch(json({ results: [{ symbol: "PETR4", regularMarketPrice: 34 }] }));
-    const result = await verifyToken("token-bom", impl);
+    const result = await verifyToken("token1234abcd", impl);
 
     expect(result.valid).toBe(true);
   });
 
+  it("não afirma que o token é válido, porque a brapi não valida token", async () => {
+    const { impl } = fakeFetch(json({ results: [{ symbol: "PETR4", regularMarketPrice: 34 }] }));
+    const result = await verifyToken("token1234abcd", impl);
+
+    expect(result.message).toContain("não recusa token inválido");
+  });
+
+  it("barra texto que não tem cara de token, sem gastar chamada", async () => {
+    const { impl } = fakeFetch(json({ results: [] }));
+    const result = await verifyToken("Runtime Error (page.tsx:25)", impl);
+
+    expect(result.valid).toBe(false);
+    expect(result.message).toContain("não parece um token");
+    expect(impl).not.toHaveBeenCalled();
+  });
+
   it("distingue token recusado de cota esgotada e de API fora do ar", async () => {
-    expect((await verifyToken("x", fakeFetch(json({}, 401)).impl)).message).toContain("recusado");
-    expect((await verifyToken("x", fakeFetch(json({}, 429)).impl)).message).toContain("Cota");
-    expect((await verifyToken("x", fakeFetch(json({}, 500)).impl)).message).toContain(
-      "Não foi possível",
-    );
+    const recusado = await verifyToken("token1234abcd", fakeFetch(json({}, 401)).impl);
+    expect(recusado.message).toContain("recusado");
+
+    const cota = await verifyToken("token1234abcd", fakeFetch(json({}, 429)).impl);
+    expect(cota.message).toContain("Cota");
+
+    const fora = await verifyToken("token1234abcd", fakeFetch(json({}, 500)).impl);
+    expect(fora.message).toContain("Não foi possível");
   });
 
   it("reprova token que responde vazio", async () => {
     const { impl } = fakeFetch(json({ results: [] }));
-    const result = await verifyToken("token-fraco", impl);
+    const result = await verifyToken("token1234abcd", impl);
 
     expect(result.valid).toBe(false);
   });

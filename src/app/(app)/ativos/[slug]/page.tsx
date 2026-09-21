@@ -15,6 +15,7 @@ import { Table, Td, Th, Tr } from "@/components/ui/table";
 import { ButtonLink } from "@/components/ui/button";
 import { PriceChart } from "@/components/charts/price-chart";
 import { ScoreDetail } from "@/components/analise/score-detail";
+import { TransactionForm } from "@/components/carteira/transaction-form";
 import { TRANSACTION_LABEL } from "@/components/investimentos/transaction-label";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -194,6 +195,13 @@ export default async function AtivoPage({ params }: { params: Promise<{ slug: st
           </CardBody>
         </Card>
       ) : null}
+
+      <TransactionForm
+        assetId={asset.id}
+        symbol={asset.symbol}
+        assetClass={asset.assetClass}
+        currentPrice={position?.holding.lastPrice ?? 0}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

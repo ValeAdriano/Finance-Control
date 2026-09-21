@@ -114,6 +114,16 @@ As chaves (brapi, Binance, Pluggy) são cadastradas **pelo usuário na interface
 não em variável de ambiente: são dele, trocam de tempos em tempos e precisam ser
 revogáveis sem deploy. Só o `TOKEN_ENCRYPTION_KEY` vive no ambiente.
 
+**Nenhuma integração é pré-requisito.** A plataforma inteira funciona com
+lançamento manual — inclusive score, simulador de IR e rebalanceamento. Quando
+for mexer em alguma tela, o caminho sem chave precisa continuar de pé:
+
+- cotação de cripto vem de endpoint público da Binance; a chave só traz o saldo
+- a brapi responde cotação sem token, só com limite menor
+- a brapi **não recusa token inválido** — devolve 200 com dado para qualquer
+  valor. Por isso o cadastro confere o formato e a mensagem diz que confirma o
+  acesso, não o token. Nunca carimbar "válido" sobre o que não foi validado.
+
 - Segredo é cifrado com AES-256-GCM (`src/lib/crypto/secrets.ts`) antes de ir
   para `provider_credentials`. GCM autentica além de cifrar: ciphertext
   adulterado falha em vez de decifrar em lixo — importa, porque o texto

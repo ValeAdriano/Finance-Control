@@ -15,15 +15,17 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   {
     provider: "brapi",
     title: "brapi.dev",
-    description: "Cotação e fundamentos de ações e FIIs.",
+    description: "Cotação e fundamentos de ações e FIIs. O token é opcional.",
     href: "https://brapi.dev",
     hrefLabel: "Criar token grátis",
     quota:
-      "15.000 requisições por ciclo mensal no plano gratuito. As cotações ficam em cache no banco para não repetir chamada.",
+      "Opcional: a brapi responde cotação sem token, com limite menor. Com token, são 15.000 requisições por ciclo mensal. As cotações ficam em cache no banco para não repetir chamada.",
+    warning:
+      "A brapi não recusa token inválido — ela devolve cotação com qualquer valor. Por isso o cadastro confere o formato, mas não tem como confirmar que o token está sendo aplicado.",
     fields: [{ name: "token", label: "Token", type: "password", placeholder: "Token da brapi" }],
     steps: [
       "Crie uma conta em brapi.dev.",
-      "No painel, copie o token do plano gratuito.",
+      "No painel, copie o token do plano gratuito — é uma sequência de letras e números.",
       "Cole aqui — ele fica cifrado no banco.",
     ],
   },

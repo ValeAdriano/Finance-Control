@@ -87,17 +87,9 @@ export async function syncQuotes(context?: SyncContext): Promise<SyncResult> {
   const runId = await startRun("brapi", ctx);
 
   try {
+    // Token opcional: a brapi responde cotação sem ele, com limite menor.
+    // Exigir cadastro aqui bloquearia quem só quer ver a carteira funcionando.
     const credential = await loadCredential<BrapiSecret>("brapi", ctx);
-    if (!credential) {
-      const result = {
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
-        message: "Nenhum token da brapi cadastrado.",
-      };
-      await finishRun(runId, "erro", result, ctx);
-      return { ok: false, ...result };
-    }
 
     const supabase = ctx.supabase;
     const { data: assets, error } = await supabase
@@ -128,7 +120,7 @@ export async function syncQuotes(context?: SyncContext): Promise<SyncResult> {
 
     const quotes = await fetchQuotes(
       syncable.map((a) => a.symbol),
-      { token: credential.token },
+      { token: credential?.token },
     );
 
     const today = new Date().toISOString().slice(0, 10);
@@ -160,7 +152,7 @@ export async function syncQuotes(context?: SyncContext): Promise<SyncResult> {
         .eq("asset_id", update.assetId);
     }
 
-    await recordVerification("brapi", "valida", "Sincronização concluída.", ctx);
+    if (credential) await recordVerification("brapi", "valida", "Sincronização concluída.", ctx);
 
     const result = {
       inserted: plan.priceRows.length,
@@ -547,4 +539,88 @@ function isoDaysAgo(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Cotação de cripto **sem nenhuma chave**.
+ *
+ * O endpoint de preço da Binance é público; só o saldo da conta exige API key.
+ * Separar os dois deixa quem ainda não conseguiu a chave — ou não quer criar
+ * uma — com a carteira de cripto avaliada a preço de mercado do mesmo jeito.
+ */
+export async function syncCryptoPrices(context?: SyncContext): Promise<SyncResult> {
+  const ctx = await resolveContext(context);
+  const runId = await startRun("binance", ctx);
+
+  try {
+    const { supabase, userId } = ctx;
+
+    const { data: assets, error } = await supabase
+      .from("assets")
+      .select("id, symbol")
+      .eq("user_id", userId)
+      .eq("asset_class", "cripto");
+
+    if (error) throw new Error(error.message);
+
+    if (assets.length === 0) {
+      const result = {
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        message: "Nenhuma cripto na carteira.",
+      };
+      await finishRun(runId, "sucesso", result, ctx);
+      return { ok: true, ...result };
+    }
+
+    const prices = await fetchPrices(assets.map((a) => a.symbol));
+    const today = new Date().toISOString().slice(0, 10);
+
+    let updated = 0;
+    const unpriced: string[] = [];
+
+    for (const asset of assets) {
+      const quote = prices.get(asset.symbol.toUpperCase());
+
+      if (!quote) {
+        unpriced.push(asset.symbol);
+        continue;
+      }
+
+      await supabase
+        .from("holdings")
+        .update({ last_price: quote.price, day_change: quote.changePercent })
+        .eq("user_id", userId)
+        .eq("asset_id", asset.id);
+
+      await supabase.from("price_history").upsert(
+        {
+          user_id: userId,
+          asset_id: asset.id,
+          date: today,
+          close: quote.price,
+          source: "binance" as const,
+        },
+        { onConflict: "user_id,asset_id,date" },
+      );
+
+      updated++;
+    }
+
+    const result = {
+      inserted: 0,
+      updated,
+      skipped: unpriced.length,
+      message:
+        unpriced.length > 0
+          ? `${updated} cotações atualizadas. Sem par em USDT: ${unpriced.join(", ")}.`
+          : `${updated} cotações atualizadas.`,
+    };
+
+    await finishRun(runId, unpriced.length > 0 ? "parcial" : "sucesso", result, ctx);
+    return { ok: true, ...result };
+  } catch (error) {
+    return failRun(runId, "binance", error, ctx);
+  }
 }

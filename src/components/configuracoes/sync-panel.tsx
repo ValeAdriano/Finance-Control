@@ -36,16 +36,15 @@ export async function SyncPanel() {
       />
       <CardBody className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          <SyncButton
-            provider="brapi"
-            label="Atualizar cotações"
-            disabled={!configured.has("brapi")}
-          />
+          {/* Sem token a brapi responde igual, só com limite menor. */}
+          <SyncButton provider="brapi" label="Atualizar cotações" />
           <SyncButton
             provider="binance"
-            label="Sincronizar Binance"
+            label="Sincronizar saldo da Binance"
             disabled={!configured.has("binance")}
           />
+          {/* Cotação de cripto vem de endpoint público: não depende de chave. */}
+          <SyncButton provider="cripto-precos" label="Atualizar cotação de cripto" />
           <SyncButton
             provider="pluggy"
             label="Importar extrato"

@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/server";
-import { syncBinance, syncOpenFinance, syncQuotes } from "@/lib/integrations/sync";
+import {
+  syncBinance,
+  syncCryptoPrices,
+  syncOpenFinance,
+  syncQuotes,
+} from "@/lib/integrations/sync";
 import type { SyncContext } from "@/lib/integrations/credentials";
 
 /**
@@ -39,35 +44,60 @@ export async function POST(request: NextRequest) {
 
   const provider = new URL(request.url).searchParams.get("provider") ?? "brapi";
 
-  if (provider !== "brapi" && provider !== "binance" && provider !== "pluggy") {
+  const PROVIDERS = ["brapi", "binance", "pluggy", "cripto-precos"] as const;
+  type Provider = (typeof PROVIDERS)[number];
+
+  if (!PROVIDERS.includes(provider as Provider)) {
     return NextResponse.json({ error: "integração desconhecida" }, { status: 400 });
   }
 
+  const job = provider as Provider;
+
   // Sem sessão, o cliente administrativo é o único jeito de descobrir quem
-  // tem credencial cadastrada. A RLS não se aplica a ele — por isso o
-  // `user_id` é passado explicitamente em cada operação do sync.
+  // precisa sincronizar. A RLS não se aplica a ele — por isso o `user_id` vai
+  // explícito em cada operação do sync.
   const admin = createAdminClient();
 
-  const { data: credentials, error } = await admin
-    .from("provider_credentials")
-    .select("user_id")
-    .eq("provider", provider);
+  /*
+   * Cotação de cripto não depende de credencial: o endpoint de preço da
+   * Binance é público. Então o público-alvo desse job é quem tem cripto na
+   * carteira, não quem cadastrou chave.
+   */
+  let userIds: string[] | null;
 
-  if (error) {
-    return NextResponse.json({ error: "falha ao listar credenciais" }, { status: 500 });
+  if (job === "cripto-precos") {
+    const { data, error } = await admin
+      .from("assets")
+      .select("user_id")
+      .eq("asset_class", "cripto");
+
+    userIds = error ? null : [...new Set((data ?? []).map((row) => row.user_id))];
+  } else {
+    const { data, error } = await admin
+      .from("provider_credentials")
+      .select("user_id")
+      .eq("provider", job);
+
+    userIds = error ? null : (data ?? []).map((row) => row.user_id);
+  }
+
+  if (!userIds) {
+    return NextResponse.json({ error: "falha ao listar usuários" }, { status: 500 });
   }
 
   const results: { userId: string; ok: boolean; message: string }[] = [];
 
-  for (const { user_id } of credentials) {
+  for (const user_id of userIds) {
     const context: SyncContext = { supabase: admin, userId: user_id };
 
     const result =
-      provider === "brapi"
+      job === "brapi"
         ? await syncQuotes(context)
-        : provider === "binance"
+        : job === "binance"
           ? await syncBinance(context)
-          : await syncOpenFinance(context);
+          : job === "cripto-precos"
+            ? await syncCryptoPrices(context)
+            : await syncOpenFinance(context);
 
     results.push({
       // Só o prefixo do id vai para a resposta: ela pode acabar em log.
@@ -77,5 +107,5 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ provider, processed: results.length, results });
+  return NextResponse.json({ provider: job, processed: results.length, results });
 }
