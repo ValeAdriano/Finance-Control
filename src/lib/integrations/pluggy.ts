@@ -139,6 +139,33 @@ export async function fetchTransactions(
   return results;
 }
 
+/**
+ * Token de curta duração que o widget Pluggy Connect usa no browser.
+ *
+ * É ele que permite o usuário digitar a senha do banco sem que ela passe pela
+ * nossa aplicação — quem recebe a credencial do banco é a Pluggy, direto. O
+ * client secret nunca sai do servidor.
+ */
+export async function createConnectToken(
+  credentials: PluggyCredentials,
+  /** Informado ao reconectar um item existente, em vez de criar outro. */
+  itemId?: string,
+  fetchImpl?: typeof fetch,
+): Promise<string> {
+  const apiKey = await authenticate(credentials, fetchImpl);
+
+  await limiter.acquire();
+
+  const raw = await requestJson<unknown>(`${BASE_URL}/connect_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-KEY": apiKey },
+    body: JSON.stringify(itemId ? { itemId } : {}),
+    fetchImpl,
+  });
+
+  return z.object({ accessToken: z.string() }).parse(raw).accessToken;
+}
+
 export async function verifyCredentials(
   credentials: PluggyCredentials,
   fetchImpl?: typeof fetch,

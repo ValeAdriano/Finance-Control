@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/server";
-import { syncBinance, syncQuotes } from "@/lib/integrations/sync";
+import { syncBinance, syncOpenFinance, syncQuotes } from "@/lib/integrations/sync";
 import type { SyncContext } from "@/lib/integrations/credentials";
 
 /**
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   const provider = new URL(request.url).searchParams.get("provider") ?? "brapi";
 
-  if (provider !== "brapi" && provider !== "binance") {
+  if (provider !== "brapi" && provider !== "binance" && provider !== "pluggy") {
     return NextResponse.json({ error: "integração desconhecida" }, { status: 400 });
   }
 
@@ -62,7 +62,12 @@ export async function POST(request: NextRequest) {
   for (const { user_id } of credentials) {
     const context: SyncContext = { supabase: admin, userId: user_id };
 
-    const result = provider === "brapi" ? await syncQuotes(context) : await syncBinance(context);
+    const result =
+      provider === "brapi"
+        ? await syncQuotes(context)
+        : provider === "binance"
+          ? await syncBinance(context)
+          : await syncOpenFinance(context);
 
     results.push({
       // Só o prefixo do id vai para a resposta: ela pode acabar em log.

@@ -10,16 +10,16 @@ desenvolvimento estão em [`CLAUDE.md`](CLAUDE.md).
 
 ## Estado atual
 
-| Fase | Escopo                                                                      | Situação                                                                                                                                     |
-| ---- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                                                                           |
-| 1    | Frontend completo com dado mockado                                          | ✅                                                                                                                                           |
-| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ✅ auth com 2FA, schema com RLS, repositório Supabase e seed                                                                                 |
-| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | ◐ chaves cadastradas na interface, brapi e Binance sincronizando, `pg_cron` apontado para a app; falta o fluxo de conexão de banco da Pluggy |
-| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                                                                                |
-| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes                                                          |
-| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                                                                           |
-| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                                                                           |
+| Fase | Escopo                                                                      | Situação                                                                                                    |
+| ---- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 0    | Repositório, Next.js + TypeScript, ESLint/Prettier/Husky, CI, design tokens | ✅                                                                                                          |
+| 1    | Frontend completo com dado mockado                                          | ✅                                                                                                          |
+| 2    | Supabase: auth, schema, RLS, troca dos mocks                                | ✅ auth com 2FA, schema com RLS, repositório Supabase e seed                                                |
+| 3    | Integrações: brapi.dev, Binance, Pluggy, `pg_cron`                          | ✅ chaves cadastradas na interface, brapi/Binance/Pluggy sincronizando, `pg_cron` apontado para a aplicação |
+| 4    | Motor de análise sobre dado real                                            | ✅ motor pronto e testado, rodando sobre mock                                                               |
+| 5    | IR no simulador, projeção, nota de corretagem, IRPF                         | ◐ simulador de IR e projeção prontos; importação de nota e relatório IRPF pendentes                         |
+| 6    | Robustez: criptografia, sync idempotente, testes, alertas, export, PWA      | ◐ testes e idempotência desenhados; resto pendente                                                          |
+| 7    | Deploy: Vercel + Supabase, Sentry, keep-alive                               | 🔜                                                                                                          |
 
 ## Rodando
 
@@ -65,6 +65,32 @@ supabase/migrations/  schema, RLS e pg_cron
 **Nenhuma tela acessa dado direto.** Tudo passa por `src/lib/repo`, o que faz a
 troca de mock por Supabase ser uma linha em `repo/index.ts` em vez de uma
 reescrita de tela.
+
+## Integrações
+
+As chaves ficam na tela de **Configurações**, não em variável de ambiente: são
+do usuário, trocam de tempos em tempos e precisam ser revogáveis sem deploy.
+Cada uma é cifrada em AES-256-GCM antes de ir para o banco e nunca volta para a
+tela — o que aparece depois é uma prévia mascarada e o estado da verificação.
+
+| Fonte     | O que traz                              | Como conectar                                    |
+| --------- | --------------------------------------- | ------------------------------------------------ |
+| brapi.dev | Cotação e fundamentos de ações e FIIs   | Token colado em Configurações                    |
+| Binance   | Saldo e cotação de cripto               | API Key somente leitura, colada em Configurações |
+| Pluggy    | Extrato e saldo bancário (Open Finance) | Client ID/Secret + widget de conexão do banco    |
+
+Duas coisas que o desenho garante:
+
+- **A senha do banco nunca passa por aqui.** O widget da Pluggy recebe um token
+  de curta duração e fala direto com ela; o que volta para a aplicação é só o
+  id da conexão.
+- **O sync é idempotente.** Reimportar o mesmo extrato não duplica lançamento —
+  a deduplicação é por `external_id`, reforçada por índice único no banco, e
+  cada execução registra quantos registros ignorou.
+
+O agendamento roda no `pg_cron` do Supabase e chama `/api/cron/sync` da própria
+aplicação, autenticado por segredo compartilhado — ver
+[`supabase/README.md`](supabase/README.md).
 
 ## Motor de análise
 

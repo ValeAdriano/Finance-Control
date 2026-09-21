@@ -46,6 +46,11 @@ export async function SyncPanel() {
             label="Sincronizar Binance"
             disabled={!configured.has("binance")}
           />
+          <SyncButton
+            provider="pluggy"
+            label="Importar extrato"
+            disabled={!configured.has("pluggy")}
+          />
         </div>
 
         {configured.size === 0 ? (

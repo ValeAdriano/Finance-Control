@@ -190,14 +190,16 @@ export async function runSync(
   const provider = String(formData.get("provider") ?? "");
 
   // Import tardio: `sync.ts` é `server-only` e puxa o cliente de servidor.
-  const { syncQuotes, syncBinance } = await import("./sync");
+  const { syncQuotes, syncBinance, syncOpenFinance } = await import("./sync");
 
   const result =
     provider === "brapi"
       ? await syncQuotes()
       : provider === "binance"
         ? await syncBinance()
-        : { ok: false, message: "Integração desconhecida." };
+        : provider === "pluggy"
+          ? await syncOpenFinance()
+          : { ok: false, message: "Integração desconhecida." };
 
   // A sincronização mexe em cotação e posição: revalidar só /configuracoes
   // deixaria a home mostrando número velho.

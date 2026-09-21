@@ -4,14 +4,16 @@ import { createClient } from "@/lib/supabase/server";
 import { assetSlug } from "@/lib/slug";
 import { fetchQuotes } from "./brapi";
 import { fetchBalances, fetchPrices } from "./binance";
+import { authenticate, fetchAccounts, fetchTransactions } from "./pluggy";
 import {
   loadCredential,
   recordVerification,
   type BinanceSecret,
   type BrapiSecret,
+  type PluggySecret,
   type SyncContext,
 } from "./credentials";
-import { planBinanceSync, planQuoteSync, type SyncableAsset } from "./sync-plan";
+import { planBinanceSync, planExpenseImport, planQuoteSync, type SyncableAsset } from "./sync-plan";
 
 /**
  * Execução do sync. O que decidir *o que* fazer está em `sync-plan.ts`, que é
@@ -356,4 +358,193 @@ export async function listRecentRuns(limit = 5): Promise<SyncRunSummary[]> {
     skipped: row.skipped,
     message: row.message,
   }));
+}
+
+/**
+ * Extrato das contas conectadas por Open Finance.
+ *
+ * A deduplicação é dupla: `planExpenseImport` filtra o que já existe, e o
+ * índice único em `(user_id, source, external_id)` garante a correção mesmo se
+ * duas execuções rodarem ao mesmo tempo.
+ */
+export async function syncOpenFinance(context?: SyncContext): Promise<SyncResult> {
+  const ctx = await resolveContext(context);
+  const runId = await startRun("pluggy", ctx);
+
+  try {
+    const credential = await loadCredential<PluggySecret>("pluggy", ctx);
+    if (!credential) {
+      const result = {
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        message: "Nenhuma credencial da Pluggy cadastrada.",
+      };
+      await finishRun(runId, "erro", result, ctx);
+      return { ok: false, ...result };
+    }
+
+    const { supabase, userId } = ctx;
+
+    const { data: institutions, error } = await supabase
+      .from("institutions")
+      .select("id, name, external_id, sync_from")
+      .eq("user_id", userId)
+      .eq("provider", "pluggy")
+      .not("external_id", "is", null);
+
+    if (error) throw new Error(error.message);
+
+    if (institutions.length === 0) {
+      const result = {
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        message: "Nenhum banco conectado ainda.",
+      };
+      await finishRun(runId, "sucesso", result, ctx);
+      return { ok: true, ...result };
+    }
+
+    const [{ data: categories }, { data: existing }] = await Promise.all([
+      supabase.from("expense_categories").select("id, name").eq("user_id", userId),
+      supabase
+        .from("expense_entries")
+        .select("external_id")
+        .eq("user_id", userId)
+        .eq("source", "pluggy")
+        .not("external_id", "is", null),
+    ]);
+
+    const knownIds = new Set(
+      (existing ?? []).map((row) => row.external_id).filter((id): id is string => id !== null),
+    );
+    const resolveCategory = categoryResolver(categories ?? []);
+
+    const apiKey = await authenticate(credential);
+
+    let inserted = 0;
+    let skipped = 0;
+    const failed: string[] = [];
+
+    for (const institution of institutions) {
+      try {
+        const accounts = await fetchAccounts(apiKey, institution.external_id!);
+        // Sem data guardada, importa os últimos 90 dias: puxar o extrato
+        // inteiro desde sempre seria caro e quase nunca é o que se quer.
+        const from = institution.sync_from ?? isoDaysAgo(90);
+
+        for (const account of accounts) {
+          const transactions = await fetchTransactions(apiKey, account.id, from);
+          const plan = planExpenseImport(knownIds, transactions, resolveCategory);
+
+          skipped += plan.skipped;
+
+          if (plan.toInsert.length > 0) {
+            const { error: insertError } = await supabase.from("expense_entries").insert(
+              plan.toInsert.map((row) => ({
+                user_id: userId,
+                category_id: row.categoryId,
+                date: row.date,
+                description: row.description,
+                amount: row.amount,
+                source: "pluggy" as const,
+                external_id: row.externalId,
+              })),
+            );
+
+            if (insertError) throw new Error(insertError.message);
+
+            inserted += plan.toInsert.length;
+            for (const row of plan.toInsert) knownIds.add(row.externalId);
+          }
+        }
+
+        await supabase
+          .from("institutions")
+          .update({
+            status: "conectada",
+            last_sync_at: new Date().toISOString(),
+            // Da próxima vez, parte de hoje: o que é mais antigo já entrou.
+            sync_from: new Date().toISOString().slice(0, 10),
+          })
+          .eq("id", institution.id);
+      } catch (institutionError) {
+        // Um banco fora do ar não pode impedir os outros de sincronizar.
+        console.error(`[sync pluggy] ${institution.name}:`, institutionError);
+        failed.push(institution.name);
+
+        await supabase.from("institutions").update({ status: "erro" }).eq("id", institution.id);
+      }
+    }
+
+    await recordVerification("pluggy", "valida", "Sincronização concluída.", ctx);
+
+    const result = {
+      inserted,
+      updated: 0,
+      skipped,
+      message:
+        failed.length > 0
+          ? `${inserted} lançamentos importados, ${skipped} já existiam. Falhou em: ${failed.join(", ")}.`
+          : `${inserted} lançamentos importados, ${skipped} já existiam.`,
+    };
+
+    await finishRun(runId, failed.length > 0 ? "parcial" : "sucesso", result, ctx);
+    return { ok: failed.length === 0, ...result };
+  } catch (error) {
+    return failRun(runId, "pluggy", error, ctx);
+  }
+}
+
+/**
+ * Casa a categoria que a Pluggy devolve com a categoria do usuário.
+ *
+ * Sem correspondência, o lançamento entra sem categoria em vez de cair numa
+ * errada — categoria errada some do orçamento certo e aparece no errado, o que
+ * é pior que ficar sem.
+ */
+function categoryResolver(categories: { id: string; name: string }[]) {
+  const byName = new Map(categories.map((c) => [normalize(c.name), c.id]));
+
+  const PLUGGY_TO_LOCAL: Record<string, string> = {
+    food: "alimentacao",
+    "food and drinks": "alimentacao",
+    supermarket: "alimentacao",
+    groceries: "alimentacao",
+    housing: "moradia",
+    rent: "moradia",
+    utilities: "moradia",
+    transport: "transporte",
+    transportation: "transporte",
+    gas: "transporte",
+    health: "saude",
+    healthcare: "saude",
+    leisure: "lazer",
+    entertainment: "lazer",
+    travel: "lazer",
+    education: "educacao",
+    income: "renda",
+    salary: "renda",
+  };
+
+  return (category: string | null): string | null => {
+    if (!category) return null;
+
+    const direct = byName.get(normalize(category));
+    if (direct) return direct;
+
+    const mapped = PLUGGY_TO_LOCAL[category.toLowerCase().trim()];
+    return mapped ? (byName.get(mapped) ?? null) : null;
+  };
+}
+
+function normalize(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+function isoDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
 }
