@@ -175,3 +175,33 @@ export { EMPTY as EMPTY_CREDENTIAL_STATE };
 function field(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
 }
+
+/* ---------------------------- Sincronização ------------------------------ */
+
+export interface SyncActionState {
+  ok: boolean;
+  message: string | null;
+}
+
+export async function runSync(
+  _previous: SyncActionState,
+  formData: FormData,
+): Promise<SyncActionState> {
+  const provider = String(formData.get("provider") ?? "");
+
+  // Import tardio: `sync.ts` é `server-only` e puxa o cliente de servidor.
+  const { syncQuotes, syncBinance } = await import("./sync");
+
+  const result =
+    provider === "brapi"
+      ? await syncQuotes()
+      : provider === "binance"
+        ? await syncBinance()
+        : { ok: false, message: "Integração desconhecida." };
+
+  // A sincronização mexe em cotação e posição: revalidar só /configuracoes
+  // deixaria a home mostrando número velho.
+  revalidatePath("/", "layout");
+
+  return { ok: result.ok, message: result.message };
+}

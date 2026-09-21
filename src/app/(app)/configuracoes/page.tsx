@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { WeightsPanel } from "@/components/configuracoes/weights-panel";
 import { MfaPanel } from "@/components/configuracoes/mfa-panel";
 import { IntegrationsPanel } from "@/components/configuracoes/integrations-panel";
+import { SyncPanel } from "@/components/configuracoes/sync-panel";
 import { usesSupabase } from "@/lib/supabase/env";
 
 export const metadata = { title: "Configurações" };
@@ -42,6 +43,7 @@ export default async function ConfiguracoesPage() {
       {/* Ambos dependem da sessão do Supabase; no modo mock não há o que ligar. */}
       {usesSupabase() ? <MfaPanel /> : null}
       {usesSupabase() ? <IntegrationsPanel /> : null}
+      {usesSupabase() ? <SyncPanel /> : null}
 
       <Card>
         <CardHeader
