@@ -18,7 +18,8 @@
     "seed": "tsx --env-file=.env.local scripts/seed.mts",
     "db:types": "supabase gen types typescript --linked --schema public > src/types/database.ts",
     "db:push": "supabase db push",
-    "db:advisors": "supabase db advisors --linked"
+    "db:advisors": "supabase db advisors --linked",
+    "reset": "tsx --env-file=.env.local scripts/reset-data.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

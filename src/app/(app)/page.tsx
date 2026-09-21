@@ -11,10 +11,11 @@ import {
 } from "@/lib/queries";
 import { ASSET_CLASS_LABEL } from "@/types/domain";
 import { brl, monthName, percent, signedBrl } from "@/lib/format";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/card";
 import { Stat } from "@/components/ui/stat";
 import { Variation } from "@/components/ui/variation";
 import { PageHeader } from "@/components/ui/page-header";
+import { ButtonLink } from "@/components/ui/button";
 import { BarList } from "@/components/charts/bar-list";
 import { NetWorthChart } from "@/components/charts/net-worth-chart";
 import { PositionTable } from "@/components/investimentos/position-table";
@@ -41,6 +42,9 @@ export default async function DashboardPage() {
 
   const alerts = buildAlerts({ rebalanceResult, expenses, institutions });
   const topPositions = portfolio.positions.slice(0, 5);
+  const isEmpty = portfolio.positions.length === 0;
+
+  if (isEmpty) return <EmptyDashboard />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -165,6 +169,72 @@ export default async function DashboardPage() {
   );
 }
 
+/**
+ * Primeira tela de quem ainda não tem posição.
+ *
+ * Mostrar KPIs zerados e gráfico vazio faria a plataforma parecer quebrada
+ * justamente no momento em que ela precisa explicar o que fazer a seguir.
+ */
+function EmptyDashboard() {
+  const steps = [
+    {
+      title: "Cadastre as chaves das integrações",
+      body: "Em Configurações: token da brapi para cotação de ações e FIIs, chave somente leitura da Binance para cripto, e Pluggy para o extrato bancário.",
+    },
+    {
+      title: "Conecte seus bancos",
+      body: "Pelo widget da Pluggy. A senha do banco vai direto para ela — não passa por aqui.",
+    },
+    {
+      title: "Sincronize",
+      body: "O botão fica na própria tela de Configurações. Depois disso o agendamento roda sozinho.",
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Visão geral"
+        description="Sua carteira está vazia. Três passos para ela começar a se preencher sozinha."
+      />
+
+      <Card>
+        <CardBody className="flex flex-col gap-4 pt-6">
+          <ol className="flex flex-col gap-4">
+            {steps.map((step, index) => (
+              <li key={step.title} className="flex gap-3.5">
+                <span className="tabular bg-accent-soft text-accent flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold">
+                  {index + 1}
+                </span>
+                <span className="min-w-0">
+                  <span className="text-content block text-[15px] font-medium">{step.title}</span>
+                  <span className="text-muted mt-0.5 block text-[14px] leading-relaxed">
+                    {step.body}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <ButtonLink href="/configuracoes" variant="primary">
+              Abrir configurações
+            </ButtonLink>
+            <ButtonLink href="/projecao" variant="secondary">
+              Simular uma projeção
+            </ButtonLink>
+          </div>
+        </CardBody>
+        <CardFooter>
+          A sincronização traz cotação e saldo, mas não o preço médio de compra — ele vem das
+          movimentações e é o que o cálculo de imposto usa. Para posição antiga, o caminho é a
+          importação de nota de corretagem.
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
 interface Alert {
   title: string;
   description: string;
@@ -189,7 +259,9 @@ function buildAlerts({
 
   const worst = [...rebalanceResult.rows].sort((a, b) => Math.abs(b.drift) - Math.abs(a.drift))[0];
 
-  if (worst && Math.abs(worst.drift) > 0.03) {
+  // Carteira vazia deixa toda classe "abaixo da meta". É verdade e é inútil:
+  // o que falta ali é começar a investir, não rebalancear.
+  if (rebalanceResult.total > 0 && worst && Math.abs(worst.drift) > 0.03) {
     alerts.push({
       title: `${ASSET_CLASS_LABEL[worst.assetClass]} está ${worst.drift > 0 ? "acima" : "abaixo"} da meta`,
       description: `${percent(Math.abs(worst.drift), 1)} de desvio. O próximo aporte pode corrigir sem precisar vender.`,

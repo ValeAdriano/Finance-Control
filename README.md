@@ -38,7 +38,18 @@ Para rodar contra o Supabase, preencha o `.env.local` (a partir do
 npm run seed -- --email voce@exemplo.com --password 'senha forte'
 ```
 
-O seed cria a conta e carrega o mesmo conjunto de dados da Fase 1. Detalhes do
+O seed cria a conta e carrega o mesmo conjunto de dados da Fase 1 — útil para
+ver a interface preenchida antes de ligar as integrações.
+
+Para limpar os dados de exemplo e começar com os valores reais:
+
+```bash
+npm run reset -- --email voce@exemplo.com          # dry-run: mostra o que sairia
+npm run reset -- --email voce@exemplo.com --yes    # executa
+```
+
+O reset preserva categoria de gasto, meta de alocação, pesos do score, a conta
+e o 2FA — é configuração, não dado. Com `--all`, apaga a configuração também. Detalhes do
 backend em [`supabase/README.md`](supabase/README.md).
 
 **Os dois modos são suportados de propósito.** O mock deixa a interface rodar
