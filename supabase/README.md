@@ -55,3 +55,20 @@ select vault.create_secret('<service-role-key>', 'service_role_key');
 ```
 
 Nenhum desses valores entra em migração, commit ou variável `NEXT_PUBLIC_`.
+
+## Antes de mexer no schema
+
+Rode o linter depois de qualquer migração — ele pega coisa que passa no `db
+push` mas é problema de segurança:
+
+```bash
+npx supabase db advisors --linked
+```
+
+Dois achados dele já viraram migração e valem como regra daqui pra frente:
+
+- **Função sempre com `set search_path = ''`** e nome totalmente qualificado no
+  corpo. Sem isso, quem puder criar um schema na frente do caminho decide qual
+  tabela a função enxerga.
+- **Extensão nunca no schema `public`.** `pg_net` não aceita `alter extension
+... set schema`, então foi preciso recriá-la em `extensions`.
