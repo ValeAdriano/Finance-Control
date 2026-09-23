@@ -208,6 +208,7 @@
   const EVENTOS = {
     registro_diario: ["Registro diário", "azul"],
     precos: ["Cotações atualizadas", "verde"],
+    aporte: ["Aporte", "terra"],
     erro: ["Erro", "vermelho"],
   };
   async function carregaLog(el) {
@@ -217,6 +218,7 @@
         const [nome, cor] = EVENTOS[l.evento] || [l.evento, "cinza"];
         const det = l.detalhe || {};
         const texto = l.evento === "erro" ? `${det.etapa || ""}: ${det.erro || ""}`
+          : l.evento === "aporte" ? `${det.destino || ""} · ${FC.fmt.brlTexto(det.valor)}`
           : [det.patrimonio != null ? "patrimônio " + FC.fmt.brlTexto(det.patrimonio) : "", det.ativos != null ? det.ativos + " ativo(s)" : "",
              det.sem_preco && det.sem_preco.length ? "sem preço: " + det.sem_preco.join(", ") : ""].filter(Boolean).join(" · ");
         return html`<div class="item"><div class="principal"><div class="titulo">${nome} ${FC.pilula(cor, l.origem === "automatico" ? "automático" : "app")}</div>

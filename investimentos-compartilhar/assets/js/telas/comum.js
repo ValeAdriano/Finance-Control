@@ -209,6 +209,12 @@
   };
 
   // ---------------------------------------------------------------- formulário de renda fixa
+  // aportes manuais em um título (os de extrato não somam ao saldo)
+  function aportadoRf(nome) {
+    return FC.soma(FC.estado.base.aportes.filter((a) => a.tipo === "caixa" && a.titulo === nome && !a.historico && !a.origem), (a) => a.valor);
+  }
+  C.aportadoRf = aportadoRf;
+
   C.formRendaFixa = function (item) {
     const novo = !item;
     item = item || { tipo: "cdi", pilar: "caixa" };
@@ -225,11 +231,13 @@
             <span class="dica" id="r-dica"></span></div>
         </div>
         <div class="linha2">
-          <div class="campo"><label for="r-valor">Saldo aplicado (R$)</label><input id="r-valor" name="valor_aplicado" inputmode="decimal" value="${item.valor_aplicado ?? ""}" placeholder="0,00"></div>
+          <div class="campo"><label for="r-valor">Saldo inicial (R$)</label><input id="r-valor" name="valor_aplicado" inputmode="decimal" value="${item.valor_aplicado ? String(item.valor_aplicado).replace(".", ",") : ""}" placeholder="0,00">
+            <span class="dica">o que já estava aplicado antes. Se vai lançar o dinheiro em Aportes, deixe 0 — senão ele conta duas vezes.</span></div>
           <div class="campo"><label for="r-venc">Vencimento</label><input id="r-venc" name="vencimento" type="date" value="${item.vencimento || ""}"></div>
         </div>
         <div class="campo"><label for="r-pilar">Pilar</label><select id="r-pilar" name="pilar">
           ${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}" ${item.pilar === p.chave ? "selected" : ""}>${p.nome}</option>`)}</select></div>
+        ${!novo && aportadoRf(item.nome) ? html`<div class="mensagem info">${icone("info", 16)}<span>Saldo total: <b>${fmt.brl(item.valor_aplicado + aportadoRf(item.nome))}</b> = saldo inicial ${fmt.brl(item.valor_aplicado)} + ${fmt.brl(aportadoRf(item.nome))} em aportes registrados.</span></div>` : ""}
         <div id="r-erro" class="mensagem erro" hidden></div>
       </form>`,
       rodape: html`${novo ? "" : html`<button class="botao perigo" data-acao="apagar" style="margin-right:auto">${icone("lixo", 16)} Remover</button>`}

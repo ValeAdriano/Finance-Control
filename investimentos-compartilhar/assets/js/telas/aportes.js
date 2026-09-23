@@ -4,60 +4,177 @@
   const FC = window.FC;
   const { html, icone, fmt, ok } = FC;
   const C = FC.comum;
-  let tipo = "ativo";
+  let tipo = "compra";          // compra | venda | caixa | provento
   let filtroHist = "todos";
 
-  function formAtivo(d, pre) {
-    const opcoes = [...d.ativos].sort((a, b) => a.ticker.localeCompare(b.ticker));
-    if (!opcoes.length) {
-      return html`<div class="mensagem info">${icone("info", 18)}<span>Cadastre primeiro o ativo em Investimentos — depois é só registrar as compras aqui.
-        <button class="botao texto pequeno" data-novo-ativo>Adicionar ativo</button></span></div>`;
+  const casasQtd = (a) => (a && a.classe === "cripto" ? 8 : 0);
+  const arredonda = (v, casas) => Math.floor(v * 10 ** casas + 1e-9) / 10 ** casas;
+  const numTxt = (v) => (ok(v) ? String(Number(v.toPrecision(10))).replace(".", ",") : "");
+
+  // ---------------------------------------------------------------- recorrentes
+  // Tudo em que você já aportou vira um atalho; ativos da carteira e
+  // títulos ainda sem aporte também aparecem, no fim.
+  function recorrentes() {
+    const b = FC.estado.base;
+    const grupos = new Map();
+    const ord = [...b.aportes].sort((x, y) => y.data.localeCompare(x.data) || String(y.criado_em).localeCompare(String(x.criado_em)));
+    for (const a of ord) {
+      if (a.tipo === "provento" || (a.tipo === "caixa" && (a.historico || a.origem || a.valor < 0))) continue;
+      if (a.tipo === "ativo" && a.quantidade < 0) continue;
+      const k = a.tipo === "ativo" ? "a:" + a.ticker : "c:" + a.titulo;
+      const g = grupos.get(k) || { k, tipo: a.tipo, nome: a.tipo === "ativo" ? a.ticker : a.titulo, n: 0, ultimo: a };
+      g.n++;
+      grupos.set(k, g);
     }
-    return html`<form class="form" id="f-ap-ativo">
-      <div class="linha3">
-        <div class="campo"><label for="ap-ticker">Ativo</label><select id="ap-ticker" name="ticker" required>
-          <option value="">Escolha…</option>
-          ${opcoes.map((a) => html`<option value="${a.ticker}" ${pre === a.ticker ? "selected" : ""}>${a.ticker} — ${a.tipo_rotulo}</option>`)}</select></div>
-        <div class="campo"><span class="rot">Operação</span>
-          <div class="segmentado" role="group" id="ap-op" style="align-self:flex-start">
-            <button type="button" data-op="compra" aria-pressed="true">Compra</button><button type="button" data-op="venda" aria-pressed="false">Venda</button></div></div>
-        <div class="campo"><label for="ap-data">Data</label><input id="ap-data" name="data" type="date" value="${FC.datas.hoje()}" required></div>
-      </div>
-      <div class="linha3">
-        <div class="campo"><label for="ap-qtd">Quantidade</label><input id="ap-qtd" name="quantidade" inputmode="decimal" placeholder="0" required></div>
-        <div class="campo"><label for="ap-preco">Preço por cota (R$)</label><input id="ap-preco" name="preco" inputmode="decimal" placeholder="0,00" required>
-          <span class="dica" id="ap-dica-preco">vem com a cotação de hoje — ajuste para o que você pagou</span></div>
-        <div class="campo"><label for="ap-obs">Observação</label><input id="ap-obs" name="observacao" maxlength="120" placeholder="corretora, motivo…"></div>
-      </div>
-      <div id="ap-previa"></div>
-      <div class="flex entre quebra"><span class="fraco" id="ap-total"></span><button class="botao" type="submit">Registrar</button></div>
-    </form>`;
+    for (const a of b.ativos) if (a.lista === "carteira" && !grupos.has("a:" + a.ticker)) grupos.set("a:" + a.ticker, { k: "a:" + a.ticker, tipo: "ativo", nome: a.ticker, n: 0, ultimo: null });
+    for (const r of b.rendaFixa) if (!grupos.has("c:" + r.nome)) grupos.set("c:" + r.nome, { k: "c:" + r.nome, tipo: "caixa", nome: r.nome, n: 0, ultimo: null });
+    return [...grupos.values()].sort((x, y) => (y.ultimo ? 1 : 0) - (x.ultimo ? 1 : 0) || (y.ultimo && x.ultimo ? y.ultimo.data.localeCompare(x.ultimo.data) : x.nome.localeCompare(y.nome)));
   }
 
-  function formCaixa(d) {
-    const titulos = d.rendaFixa.map((r) => r.nome);
-    if (!titulos.length) {
-      return html`<div class="mensagem info">${icone("info", 18)}<span>Cadastre um título de renda fixa em Investimentos para registrar aportes nele.
-        <button class="botao texto pequeno" data-novo-rf>Adicionar título</button></span></div>`;
-    }
-    return html`<form class="form" id="f-ap-caixa">
-      <div class="linha3">
-        <div class="campo"><label for="cx-titulo">Título</label><select id="cx-titulo" name="titulo">${titulos.map((t) => html`<option>${t}</option>`)}</select></div>
-        <div class="campo"><span class="rot">Movimento</span><div class="segmentado" role="group" id="cx-op" style="align-self:flex-start">
-          <button type="button" data-op="aporte" aria-pressed="true">Aporte</button><button type="button" data-op="resgate" aria-pressed="false">Resgate</button></div></div>
-        <div class="campo"><label for="cx-data">Data</label><input id="cx-data" name="data" type="date" value="${FC.datas.hoje()}"></div>
-      </div>
-      <div class="linha2">
-        <div class="campo"><label for="cx-valor">Valor (R$)</label><input id="cx-valor" name="valor" inputmode="decimal" placeholder="0,00" required></div>
-        <div class="campo"><label for="cx-obs">Observação</label><input id="cx-obs" name="observacao" maxlength="120"></div>
-      </div>
-      <p class="texto-p">O valor soma ao saldo do título. Se você preferir, pode só editar o saldo direto no título, em Investimentos.</p>
-      <div class="flex" style="justify-content:flex-end"><button class="botao" type="submit">Registrar</button></div>
-    </form>`;
+  function cartaoRecorrente(g) {
+    const a = g.tipo === "ativo" ? C.acharAtivo(g.nome) : null;
+    const u = g.ultimo;
+    const icon = g.tipo === "caixa" ? icone("moeda", 22) : a && a.classe === "cripto" ? icone("renda", 22) : icone("ativos", 22);
+    const cor = g.tipo === "caixa" ? "var(--verde)" : a && a.classe === "cripto" ? "var(--s3)" : "var(--acento)";
+    const sub = u
+      ? (g.tipo === "ativo" ? `último: ${fmt.qtd(u.quantidade)} por ${fmt.brlTexto(u.valor)}` : `último: ${fmt.brlTexto(u.valor)}`) + ` · ${FC.datas.br(u.data).slice(0, 5)}`
+      : "sem aportes ainda";
+    return html`<button type="button" class="cartao clicavel" data-repete="${g.k}" style="text-align:left;border:1px solid var(--linha);cursor:pointer;padding:16px 18px;display:flex;flex-direction:column;gap:6px;width:100%;height:100%">
+      <div class="flex" style="gap:10px"><span style="color:${cor}">${icon}</span><b style="font-size:16px">${g.nome}</b>
+        ${g.n > 1 ? html`<span class="pilula cinza sem-ponto" style="margin-left:auto">${g.n}×</span>` : ""}</div>
+      <span class="fraco rs" style="font-size:12.5px">${sub}</span>
+      <span style="color:var(--acento);font-size:14px;font-weight:500">${u ? "Repetir" : "Aportar"} ${icone("chevron", 13)}</span></button>`;
   }
 
-  function formProvento(d) {
-    return html`<form class="form" id="f-ap-prov">
+  // Interface simplificada: valor e quantidade, e pronto.
+  function repetir(g) {
+    const u = g.ultimo;
+    if (g.tipo === "caixa") {
+      const t = FC.estado.base.rendaFixa.find((r) => r.nome === g.nome);
+      const saldo = (t ? t.valor_aplicado : 0) + C.aportadoRf(g.nome);
+      const f = FC.ui.folha({
+        titulo: `Aportar em ${g.nome}`,
+        corpo: html`<form class="form" id="f-rep">
+          <div class="campo"><label for="rp-valor">Valor (R$)</label><input id="rp-valor" name="valor" inputmode="decimal" value="${u ? numTxt(u.valor) : ""}" placeholder="0,00" required></div>
+          <div class="campo"><label for="rp-data">Data</label><input id="rp-data" name="data" type="date" value="${FC.datas.hoje()}"></div>
+          <p class="texto-p">Saldo atual: ${fmt.brl(saldo)}. O valor soma a ele.</p></form>`,
+        rodape: html`<button class="botao sec" data-acao="cancelar">Cancelar</button><button class="botao" data-acao="salvar">Adicionar</button>`,
+      });
+      const form = FC.$("#f-rep", f.el);
+      FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
+      FC.$("[data-acao=salvar]", f.el).addEventListener("click", () => form.requestSubmit());
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const v = FC.lerNum(FC.$("#rp-valor", form).value);
+        if (!(v > 0)) return FC.ui.aviso("Informe o valor.", "erro");
+        await grava(FC.$("[data-acao=salvar]", f.el), { tipo: "caixa", titulo: g.nome, valor: v, data: FC.$("#rp-data", form).value || FC.datas.hoje(), observacao: "" },
+          `${fmt.brlTexto(v)} adicionado a ${g.nome}`, f);
+      });
+      return;
+    }
+    const a = C.acharAtivo(g.nome);
+    const unid = FC.unidade(a || { ticker: g.nome }, 2);
+    const preco = a && ok(a.preco) ? a.preco : null;
+    const f = FC.ui.folha({
+      titulo: `Aportar em ${g.nome}`,
+      corpo: html`<form class="form" id="f-rep">
+        <div class="linha2">
+          <div class="campo"><label for="rp-valor">Valor (R$)</label><input id="rp-valor" name="valor" inputmode="decimal" value="${u ? numTxt(u.valor) : ""}" placeholder="0,00" required></div>
+          <div class="campo"><label for="rp-qtd">Quantidade (${unid})</label><input id="rp-qtd" name="quantidade" inputmode="decimal" placeholder="${a && a.classe === "cripto" ? "0,00045" : "0"}" required>
+            <span class="dica">vem calculada pelo preço de agora — ajuste para o que a corretora executou</span></div>
+        </div>
+        <div class="campo"><label for="rp-data">Data</label><input id="rp-data" name="data" type="date" value="${FC.datas.hoje()}"></div>
+        <div class="cartao" style="background:var(--bg-3);box-shadow:none;padding:14px 18px" id="rp-conta"></div></form>`,
+      rodape: html`<button class="botao sec" data-acao="cancelar">Cancelar</button><button class="botao" data-acao="salvar">Adicionar</button>`,
+    });
+    const form = FC.$("#f-rep", f.el);
+    const vEl = FC.$("#rp-valor", form), qEl = FC.$("#rp-qtd", form);
+    let qtdManual = false;
+    const conta = () => {
+      const v = FC.lerNum(vEl.value), q = FC.lerNum(qEl.value);
+      if (!qtdManual && v > 0 && preco) qEl.value = numTxt(arredonda(v / preco, casasQtd(a))) || "";
+      const q2 = FC.lerNum(qEl.value);
+      const efetivo = v > 0 && q2 > 0 ? v / q2 : null;
+      FC.$("#rp-conta", form).innerHTML = String(html`<dl class="kpis" style="gap:8px 28px">
+        <div class="kpi pequeno"><dt>Preço pago por ${unid}</dt><dd>${efetivo ? fmt.preco(efetivo) : "—"}</dd></div>
+        <div class="kpi pequeno"><dt>Preço de agora</dt><dd>${preco ? fmt.preco(preco) : "—"}${efetivo && preco ? html`<small>${fmt.delta((efetivo / preco - 1) * 100, 2)}% de diferença</small>` : ""}</dd></div>
+        ${a && a.posicao && q2 > 0 ? html`<div class="kpi pequeno"><dt>Posição depois</dt><dd>${fmt.qtd(a.posicao.quantidade + q2)} ${unid}</dd></div>` : ""}</dl>`);
+      return q;
+    };
+    vEl.addEventListener("input", conta);
+    qEl.addEventListener("input", () => { qtdManual = true; conta(); });
+    conta();
+    FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
+    FC.$("[data-acao=salvar]", f.el).addEventListener("click", () => form.requestSubmit());
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const v = FC.lerNum(vEl.value), q = FC.lerNum(qEl.value);
+      if (!(v > 0 && q > 0)) return FC.ui.aviso("Informe o valor e a quantidade.", "erro");
+      await grava(FC.$("[data-acao=salvar]", f.el), { tipo: "ativo", ticker: g.nome, quantidade: q, preco: v / q, valor: v,
+        data: FC.$("#rp-data", form).value || FC.datas.hoje(), observacao: "" }, `${fmt.qtd(q)} ${unid} por ${fmt.brlTexto(v)} adicionado`, f);
+    });
+  }
+
+  // ---------------------------------------------------------------- novo aporte
+  function sugestoesAtivos() {
+    const u = FC.estado.mercado.universo || { acoes: {}, fiis: {} };
+    const meus = FC.estado.base.ativos.map((a) => a.ticker);
+    return [...new Set([...meus, "BTC", "ETH", "SOL", "BNB", "USDT", ...Object.keys(u.acoes), ...Object.keys(u.fiis)])];
+  }
+
+  function formNovo(pre) {
+    if (tipo === "compra" || tipo === "venda") {
+      return html`<form class="form" id="f-novo">
+        <div class="linha3">
+          <div class="campo"><label for="nv-ticker">Ativo</label>
+            <input id="nv-ticker" name="ticker" list="nv-lista" value="${pre || ""}" placeholder="BTC, PETR4, HGLG11…" required autocomplete="off" style="text-transform:uppercase">
+            <datalist id="nv-lista"></datalist></div>
+          <div class="campo"><label for="nv-qtd">Quantidade</label><input id="nv-qtd" name="quantidade" inputmode="decimal" placeholder="0" required></div>
+          <div class="campo"><label for="nv-valor">Valor total (R$)</label><input id="nv-valor" name="valor" inputmode="decimal" placeholder="0,00" required>
+            <span class="dica">o que ${tipo === "venda" ? "você recebeu" : "você pagou"}, como no extrato</span></div>
+        </div>
+        <div id="nv-novo" hidden class="cartao" style="background:var(--bg-3);box-shadow:none;padding:14px 18px">
+          <p class="texto-p mb2"><b id="nv-nome"></b> ainda não está na sua carteira — vai ser adicionado junto com este aporte.</p>
+          <div class="linha2">
+            <div class="campo"><label for="nv-classe">Tipo</label><select id="nv-classe" name="classe">${Object.entries(FC.CLASSES).map(([k, v]) => html`<option value="${k}">${v}</option>`)}</select></div>
+            <div class="campo"><label for="nv-pilar">Pilar</label><select id="nv-pilar" name="pilar">${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}">${p.nome}</option>`)}</select></div>
+          </div></div>
+        <div class="linha2">
+          <div class="campo"><label for="nv-data">Data</label><input id="nv-data" name="data" type="date" value="${FC.datas.hoje()}" required></div>
+          <div class="campo"><label for="nv-obs">Observação</label><input id="nv-obs" name="observacao" maxlength="120" placeholder="corretora, motivo…"></div>
+        </div>
+        <div id="nv-previa"></div>
+        <div class="flex entre quebra"><span class="fraco" id="nv-conta"></span><button class="botao" type="submit">Registrar ${tipo}</button></div>
+      </form>`;
+    }
+    if (tipo === "caixa") {
+      const titulos = FC.estado.base.rendaFixa.map((r) => r.nome);
+      return html`<form class="form" id="f-novo">
+        <div class="linha3">
+          <div class="campo"><label for="cx-titulo">Título</label><input id="cx-titulo" name="titulo" list="cx-lista" value="${titulos.length === 1 ? titulos[0] : ""}" placeholder="CDB Banco X, Tesouro Selic…" required maxlength="80" autocomplete="off">
+            <datalist id="cx-lista">${titulos.map((t) => html`<option value="${t}">`)}</datalist></div>
+          <div class="campo"><span class="rot">Movimento</span><div class="segmentado" role="group" id="cx-op" style="align-self:flex-start">
+            <button type="button" data-op="aporte" aria-pressed="true">Aporte</button><button type="button" data-op="resgate" aria-pressed="false">Resgate</button></div></div>
+          <div class="campo"><label for="cx-valor">Valor (R$)</label><input id="cx-valor" name="valor" inputmode="decimal" placeholder="0,00" required></div>
+        </div>
+        <div id="cx-novo" hidden class="cartao" style="background:var(--bg-3);box-shadow:none;padding:14px 18px">
+          <p class="texto-p mb2"><b id="cx-nome"></b> é um título novo — ele é criado com saldo zero e este aporte vira o saldo.</p>
+          <div class="linha3">
+            <div class="campo"><label for="cx-tipo">Indexador</label><select id="cx-tipo" name="tipo_rf">
+              <option value="cdi">% do CDI</option><option value="ipca">IPCA + taxa</option><option value="prefixado">Prefixado</option></select></div>
+            <div class="campo"><label for="cx-taxa">Taxa</label><input id="cx-taxa" name="taxa" inputmode="decimal" placeholder="100"><span class="dica" id="cx-dica-taxa">100 = 100% do CDI</span></div>
+            <div class="campo"><label for="cx-venc">Vencimento</label><input id="cx-venc" name="vencimento" type="date"></div>
+          </div></div>
+        <div class="linha2">
+          <div class="campo"><label for="cx-data">Data</label><input id="cx-data" name="data" type="date" value="${FC.datas.hoje()}"></div>
+          <div class="campo"><label for="cx-obs">Observação</label><input id="cx-obs" name="observacao" maxlength="120"></div>
+        </div>
+        <p class="texto-p" id="cx-saldo"></p>
+        <div class="flex" style="justify-content:flex-end"><button class="botao" type="submit">Registrar</button></div>
+      </form>`;
+    }
+    const d = FC.estado.dados;
+    return html`<form class="form" id="f-novo">
       <div class="linha3">
         <div class="campo"><label for="pv-ticker">Ativo</label><input id="pv-ticker" name="ticker" list="pv-lista" placeholder="ITSA4" required style="text-transform:uppercase">
           <datalist id="pv-lista">${d.ativos.map((a) => html`<option value="${a.ticker}">`)}</datalist></div>
@@ -76,12 +193,28 @@
       <div class="flex quebra" style="gap:24px">
         ${FC.anel(a.score, a.cor)}
         <dl class="kpis" style="gap:8px 32px">
-          <div class="kpi pequeno"><dt>Cotação de hoje</dt><dd>${fmt.preco(a.preco)}</dd></div>
+          <div class="kpi pequeno"><dt>Preço de agora</dt><dd>${fmt.preco(a.preco)}</dd></div>
+          ${a.posicao ? html`<div class="kpi pequeno"><dt>Você tem</dt><dd>${fmt.qtd(a.posicao.quantidade)} ${FC.unidade(a, a.posicao.quantidade)}</dd></div>` : ""}
           <div class="kpi pequeno"><dt>Avaliação</dt><dd style="font-size:15px">${FC.pilula(a.cor, a.veredito_curto)}</dd></div>
         </dl>
         <div class="cresce">${C.indicadores(a)}</div>
         <button class="botao texto pequeno" type="button" data-ver="${a.ticker}">Ver análise</button>
       </div></div>`;
+  }
+
+  // grava o aporte (e fecha a folha, se veio de uma)
+  async function grava(botao, linha, msg, folha) {
+    try {
+      await FC.ui.ocupado(botao, async () => {
+        await FC.db.inserir("aportes", linha);
+        // comprou algo que estava só na watchlist: passa para a carteira
+        const at = linha.tipo === "ativo" && linha.quantidade > 0 && FC.estado.base.ativos.find((x) => x.ticker === linha.ticker);
+        if (at && at.lista === "watchlist") await FC.db.atualizar("ativos", at.id, { lista: "carteira" });
+      });
+      if (folha) folha.fechar();
+      await C.depoisDeMudar(msg, true);
+      FC.db.log("aporte", { destino: linha.ticker || linha.titulo, valor: linha.valor });
+    } catch (e) { FC.ui.erro(e); }
   }
 
   function historico(d) {
@@ -117,13 +250,20 @@
   FC.telas.aportes = async function (raiz, params) {
     const d = FC.estado.dados;
     const pre = (params[0] || "").toUpperCase();
-    if (pre) tipo = "ativo";
+    if (pre) tipo = "compra";
+    const rec = recorrentes();
     raiz.innerHTML = String(html`
       ${C.cabecalho("Aportes", "Compras, vendas, proventos e renda fixa. A posição e o preço médio saem daqui.",
         html`<button class="botao sec" id="bt-importar">${icone("importar", 18)} Importar extrato</button>`)}
+      ${rec.length ? html`<section class="mb3">
+        <div class="secao-topo"><h2>Repetir aporte</h2><span class="sub">toque, informe valor e quantidade, pronto</span></div>
+        <div class="grade entra" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${rec.slice(0, 12).map((g, i) => html`<div style="--i:${i}">${cartaoRecorrente(g)}</div>`)}</div>
+      </section>` : ""}
+      <div class="secao-topo mt3"><h2>Novo aporte</h2><span class="sub">em algo que você já tem ou em algo novo</span></div>
       <div class="cartao">
         <div class="segmentado mb3" role="group" aria-label="Tipo de lançamento" id="seg-tipo">
-          <button type="button" data-t="ativo" aria-pressed="${tipo === "ativo"}">Ativo</button>
+          <button type="button" data-t="compra" aria-pressed="${tipo === "compra"}">Compra</button>
+          <button type="button" data-t="venda" aria-pressed="${tipo === "venda"}">Venda</button>
           <button type="button" data-t="caixa" aria-pressed="${tipo === "caixa"}">Renda fixa</button>
           <button type="button" data-t="provento" aria-pressed="${tipo === "provento"}">Provento</button>
         </div>
@@ -132,9 +272,11 @@
       <section class="secao" id="area-hist">${historico(d)}</section>
     `);
 
+    FC.$$("[data-repete]", raiz).forEach((b) => b.addEventListener("click", () => repetir(rec.find((g) => g.k === b.dataset.repete))));
+
     const areaForm = FC.$("#area-form", raiz);
     function montaForm() {
-      areaForm.innerHTML = String(tipo === "ativo" ? formAtivo(d, pre) : tipo === "caixa" ? formCaixa(d) : formProvento(d));
+      areaForm.innerHTML = String(formNovo(pre));
       areaForm.firstElementChild && areaForm.firstElementChild.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250 });
       FC.animar(areaForm);
       ligaForm();
@@ -142,79 +284,112 @@
     FC.$$("#seg-tipo button", raiz).forEach((b) => b.addEventListener("click", () => { tipo = b.dataset.t; montaForm(); }));
 
     function ligaForm() {
-      const novoAtivo = FC.$("[data-novo-ativo]", areaForm);
-      if (novoAtivo) novoAtivo.addEventListener("click", () => C.formAtivo());
-      const novoRf = FC.$("[data-novo-rf]", areaForm);
-      if (novoRf) novoRf.addEventListener("click", () => C.formRendaFixa());
+      const form = FC.$("#f-novo", areaForm);
+      if (!form) return;
 
-      const fa = FC.$("#f-ap-ativo", areaForm);
-      if (fa) {
-        let op = "compra";
-        FC.$$("#ap-op button", fa).forEach((b) => b.addEventListener("click", () => { op = b.dataset.op; }));
-        const sel = FC.$("#ap-ticker", fa), qtd = FC.$("#ap-qtd", fa), preco = FC.$("#ap-preco", fa);
-        const atualiza = (trocouAtivo) => {
-          const a = C.acharAtivo(sel.value);
-          FC.$("#ap-previa", fa).innerHTML = String(previa(a));
-          FC.animar(FC.$("#ap-previa", fa));
-          const v = FC.$("[data-ver]", fa);
-          if (v) v.addEventListener("click", () => C.abreAtivo(v.dataset.ver));
-          if (trocouAtivo && a && ok(a.preco)) preco.value = String(Number(a.preco.toPrecision(10))).replace(".", ",");
-          if (trocouAtivo) {
-            const cripto = a && a.classe === "cripto";
-            FC.$("label[for=ap-qtd]", fa).textContent = cripto ? `Quantidade (${FC.unidade(a)})` : "Quantidade";
-            FC.$("label[for=ap-preco]", fa).textContent = cripto ? `Preço por ${FC.unidade(a)} (R$)` : "Preço por cota (R$)";
-            qtd.placeholder = cripto ? "0,0035" : "0";
+      // ------ compra / venda
+      if (tipo === "compra" || tipo === "venda") {
+        const tk = FC.$("#nv-ticker", form), q = FC.$("#nv-qtd", form), v = FC.$("#nv-valor", form);
+        const cls = FC.$("#nv-classe", form), pil = FC.$("#nv-pilar", form);
+        setTimeout(() => { const dl = FC.$("#nv-lista", form); if (dl) dl.innerHTML = sugestoesAtivos().map((t) => `<option value="${t}">`).join(""); }, 30);
+        const pilarDe = { acao_br: "acoes", acao_us: "acoes", fii: "real_estate", etf_br: "alternativos", etf_us: "alternativos", cripto: "alternativos" };
+        let classeManual = false;
+        cls.addEventListener("change", () => { classeManual = true; pil.value = pilarDe[cls.value]; atualiza(); });
+        const atualiza = () => {
+          const t = tk.value.trim().toUpperCase();
+          const a = C.acharAtivo(t);
+          const novo = !!t && !a && tipo === "compra";
+          FC.$("#nv-novo", form).hidden = !novo;
+          if (novo) {
+            FC.$("#nv-nome", form).textContent = t;
+            if (!classeManual) { cls.value = C.adivinhaClasse(t); pil.value = pilarDe[cls.value]; }
           }
-          const q = FC.lerNum(qtd.value), p = FC.lerNum(preco.value);
-          FC.$("#ap-total", fa).innerHTML = q && p ? `Total <b class="rs">${FC.fmt.brlTexto(q * p)}</b>` : "";
+          FC.$("#nv-previa", form).innerHTML = String(previa(a));
+          FC.animar(FC.$("#nv-previa", form));
+          const ver = FC.$("[data-ver]", form);
+          if (ver) ver.addEventListener("click", () => C.abreAtivo(ver.dataset.ver));
+          const cripto = (a && a.classe === "cripto") || (novo && cls.value === "cripto");
+          FC.$("label[for=nv-qtd]", form).textContent = cripto ? `Quantidade (${t.split("-")[0].replace(/\d+$/, "") || "moedas"})` : "Quantidade";
+          q.placeholder = cripto ? "0,00045" : "0";
+          const qq = FC.lerNum(q.value), vv = FC.lerNum(v.value);
+          FC.$("#nv-conta", form).innerHTML = qq > 0 && vv > 0 ? String(html`Preço por unidade <b>${fmt.preco(vv / qq)}</b>${a && ok(a.preco) ? html` · agora ${fmt.preco(a.preco)}` : ""}`) : "";
         };
-        sel.addEventListener("change", () => atualiza(true));
-        qtd.addEventListener("input", () => atualiza(false));
-        preco.addEventListener("input", () => atualiza(false));
-        if (sel.value) atualiza(true);
-        fa.addEventListener("submit", async (e) => {
+        [tk, q, v].forEach((el) => el.addEventListener("input", atualiza));
+        atualiza();
+        form.addEventListener("submit", async (e) => {
           e.preventDefault();
-          const f = FC.dadosDoForm(fa);
-          const q = FC.lerNum(f.quantidade), p = FC.lerNum(f.preco);
-          if (!f.ticker) return FC.ui.aviso("Escolha o ativo.", "erro");
-          if (!(q > 0 && p > 0)) return FC.ui.aviso("Quantidade e preço precisam ser maiores que zero.", "erro");
-          const venda = op === "venda";
-          const linha = { tipo: "ativo", ticker: f.ticker, quantidade: venda ? -q : q, preco: p, valor: (venda ? -q : q) * p,
-            data: f.data || FC.datas.hoje(), observacao: f.observacao || "", venda };
-          await grava(FC.$("button[type=submit]", fa), linha, venda ? "Venda registrada" : "Compra registrada");
+          const f = FC.dadosDoForm(form);
+          const cripto = f.classe === "cripto";
+          const t = (f.ticker || "").toUpperCase().replace(/[^A-Z0-9-]/g, "");
+          const qq = FC.lerNum(f.quantidade), vv = FC.lerNum(f.valor);
+          if (t.length < 2) return FC.ui.aviso("Informe o código do ativo.", "erro");
+          if (!(qq > 0 && vv > 0)) return FC.ui.aviso("Quantidade e valor precisam ser maiores que zero.", "erro");
+          const existe = C.acharAtivo(t);
+          if (tipo === "venda" && !existe) return FC.ui.aviso(`${t} não está na sua carteira.`, "erro");
+          if (tipo === "venda" && existe.posicao && qq > existe.posicao.quantidade + 1e-9) {
+            if (!(await FC.ui.confirma(`Você tem ${fmt.qtd(existe.posicao.quantidade)} ${FC.unidade(existe, 2)} registrados e está vendendo ${fmt.qtd(qq)}. Registrar mesmo assim?`, { botao: "Registrar" }))) return;
+          }
+          const venda = tipo === "venda";
+          const botao = FC.$("button[type=submit]", form);
+          try {
+            if (!existe) {
+              await FC.ui.ocupado(botao, () => FC.db.inserir("ativos", { ticker: cripto ? t : t.replace(/-/g, ""), classe: f.classe, pilar: f.pilar, lista: "carteira", quantidade: 0 }));
+            }
+          } catch (err) { return FC.ui.erro(err); }
+          await grava(botao, { tipo: "ativo", ticker: existe ? existe.ticker : cripto ? t : t.replace(/-/g, ""), quantidade: venda ? -qq : qq, preco: vv / qq,
+            valor: venda ? -vv : vv, data: f.data || FC.datas.hoje(), observacao: f.observacao || "", venda }, venda ? "Venda registrada" : "Aporte registrado");
         });
+        return;
       }
-      const fc = FC.$("#f-ap-caixa", areaForm);
-      if (fc) {
-        let op = "aporte";
-        FC.$$("#cx-op button", fc).forEach((b) => b.addEventListener("click", () => { op = b.dataset.op; }));
-        fc.addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const f = FC.dadosDoForm(fc);
-          const v = FC.lerNum(f.valor);
-          if (!(v > 0)) return FC.ui.aviso("Informe um valor maior que zero.", "erro");
-          await grava(FC.$("button[type=submit]", fc), { tipo: "caixa", titulo: f.titulo, valor: op === "resgate" ? -v : v,
-            data: f.data || FC.datas.hoje(), observacao: f.observacao || "" }, op === "resgate" ? "Resgate registrado" : "Aporte registrado");
-        });
-      }
-      const fp = FC.$("#f-ap-prov", areaForm);
-      if (fp) {
-        fp.addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const f = FC.dadosDoForm(fp);
-          const v = FC.lerNum(f.valor);
-          if (!(v > 0)) return FC.ui.aviso("Informe um valor maior que zero.", "erro");
-          await grava(FC.$("button[type=submit]", fp), { tipo: "provento", ticker: (f.ticker || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
-            valor: v, data: f.data || FC.datas.hoje(), observacao: f.observacao || "" }, "Provento registrado");
-        });
-      }
-    }
 
-    async function grava(botao, linha, msg) {
-      try {
-        await FC.ui.ocupado(botao, () => FC.db.inserir("aportes", linha));
-        await C.depoisDeMudar(msg, true);
-      } catch (e) { FC.ui.erro(e); }
+      // ------ renda fixa
+      if (tipo === "caixa") {
+        const ti = FC.$("#cx-titulo", form);
+        let op = "aporte";
+        FC.$$("#cx-op button", form).forEach((b) => b.addEventListener("click", () => { op = b.dataset.op; }));
+        const dicaTaxa = () => { FC.$("#cx-dica-taxa", form).textContent = { cdi: "100 = 100% do CDI", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#cx-tipo", form).value]; };
+        FC.$("#cx-tipo", form).addEventListener("change", dicaTaxa);
+        const atualiza = () => {
+          const nome = ti.value.trim();
+          const t = FC.estado.base.rendaFixa.find((r) => r.nome.toLowerCase() === nome.toLowerCase());
+          FC.$("#cx-novo", form).hidden = !nome || !!t;
+          FC.$("#cx-nome", form).textContent = nome;
+          const ap = t ? C.aportadoRf(t.nome) : 0;
+          FC.$("#cx-saldo", form).innerHTML = t ? String(html`Saldo atual de <b>${t.nome}</b>: ${fmt.brl(t.valor_aplicado + ap)}. Este lançamento soma a ele.`) : "";
+        };
+        ti.addEventListener("input", atualiza);
+        atualiza(); dicaTaxa();
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const f = FC.dadosDoForm(form);
+          const vv = FC.lerNum(f.valor);
+          const nome = (f.titulo || "").trim();
+          if (!nome) return FC.ui.aviso("Informe o título.", "erro");
+          if (!(vv > 0)) return FC.ui.aviso("Informe um valor maior que zero.", "erro");
+          const t = FC.estado.base.rendaFixa.find((r) => r.nome.toLowerCase() === nome.toLowerCase());
+          if (!t && op === "resgate") return FC.ui.aviso("Não dá para resgatar de um título que não existe.", "erro");
+          const botao = FC.$("button[type=submit]", form);
+          try {
+            if (!t) {
+              // título novo nasce com saldo zero: o aporte é o saldo (nada conta duas vezes)
+              await FC.ui.ocupado(botao, () => FC.db.inserir("renda_fixa", { nome, tipo: f.tipo_rf, taxa: FC.lerNum(f.taxa), vencimento: f.vencimento || null, valor_aplicado: 0, pilar: "caixa" }));
+            }
+          } catch (err) { return FC.ui.erro(err); }
+          await grava(botao, { tipo: "caixa", titulo: t ? t.nome : nome, valor: op === "resgate" ? -vv : vv, data: f.data || FC.datas.hoje(), observacao: f.observacao || "" },
+            op === "resgate" ? "Resgate registrado" : "Aporte registrado");
+        });
+        return;
+      }
+
+      // ------ provento
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = FC.dadosDoForm(form);
+        const vv = FC.lerNum(f.valor);
+        if (!(vv > 0)) return FC.ui.aviso("Informe um valor maior que zero.", "erro");
+        await grava(FC.$("button[type=submit]", form), { tipo: "provento", ticker: (f.ticker || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
+          valor: vv, data: f.data || FC.datas.hoje(), observacao: f.observacao || "" }, "Provento registrado");
+      });
     }
 
     function ligaHist() {
