@@ -17,7 +17,7 @@
   }
   const senhaValida = (s) => s.length >= 10 && /[a-z]/.test(s) && /[A-Z]/.test(s) && /\d/.test(s);
 
-  FC.telas.login = async function (raiz, { etapa } = {}) {
+  FC.telas.login = async function (raiz, { etapa, aviso } = {}) {
     document.title = "Entrar · Finance Control";
     raiz.innerHTML = '<div class="tela-login"><div class="roda"></div></div>';
     let modo = etapa || "entrar";
@@ -51,11 +51,12 @@
           ${modo === "criar" ? html`<div class="campo"><label for="senha2" class="sr">Repita a senha</label>
             <input id="senha2" name="senha2" type="password" autocomplete="new-password" placeholder="Repita a senha" required></div>` : ""}
         `}
+        ${aviso ? html`<div class="mensagem info">${icone("cadeado", 16)}<span>${aviso}</span></div>` : ""}
         <div id="erro-login" class="mensagem erro" hidden></div>
         <button class="botao cheio" type="submit">${modo === "criar" ? "Criar conta" : modo === "mfa" ? "Verificar" : "Entrar"}</button>
         ${modo === "mfa" ? html`<button class="botao texto" type="button" id="bt-sair-mfa">Usar outra conta</button>` : ""}
       </form>
-      <p class="rodape">${icone("cadeado", 14)} Conexão criptografada · senha protegida com bcrypt</p>
+      <p class="rodape">${icone("cadeado", 14)} Conexão criptografada · senha protegida com bcrypt · o login fica salvo neste aparelho por até 7 dias sem uso</p>
     </div></div>`);
 
     const form = FC.$("#f-login", raiz);

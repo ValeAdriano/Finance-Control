@@ -238,6 +238,7 @@
 
   FC.sair = async function () {
     await FC.auth.sair();
+    FC.local.apagar("ultimo-uso");
     estado.base = null; estado.dados = null;
     clearInterval(relogio);
     FC.mercado.limpaCacheLocal();
@@ -280,6 +281,43 @@
 
   window.addEventListener("hashchange", () => FC.rerender());
 
+  // ---------------------------------------------------------------- sessão de 7 dias
+  // O login fica guardado nesta máquina e só cai depois de 7 dias SEM USO.
+  // O Supabase renovaria a sessão para sempre (o limite de inatividade no
+  // servidor é recurso do plano Pro), então o app mede o uso e, passado o
+  // prazo, encerra a sessão — inclusive o token no Supabase.
+  const INATIVIDADE_MAX = 7 * 24 * 60 * 60 * 1000;
+  const CHAVE_USO = "ultimo-uso";
+  let ultimaMarca = 0;
+  function marcaUso() {
+    const agora = Date.now();
+    if (agora - ultimaMarca < 60 * 1000) return;   // no máximo 1 gravação por minuto
+    ultimaMarca = agora;
+    FC.local.gravar(CHAVE_USO, agora);
+  }
+  FC.marcaUso = () => { ultimaMarca = 0; marcaUso(); };
+  function expirou() {
+    const u = FC.local.ler(CHAVE_USO, null);
+    return u != null && Date.now() - u > INATIVIDADE_MAX;
+  }
+  async function encerraPorInatividade() {
+    try { await FC.sb.auth.signOut(); } catch (e) { /* já sem sessão */ }
+    estado.base = null; estado.dados = null;
+    clearInterval(relogio);
+    FC.local.apagar(CHAVE_USO);
+    FC.mercado.limpaCacheLocal();
+    location.hash = "";
+    FC.telas.login(FC.$("#raiz"), { aviso: "Sua sessão foi encerrada depois de 7 dias sem uso. Entre de novo." });
+  }
+  ["click", "keydown", "touchstart", "scroll"].forEach((ev) =>
+    window.addEventListener(ev, () => { if (estado.base) marcaUso(); }, { passive: true, capture: true }));
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !estado.base) return;
+    if (expirou()) encerraPorInatividade(); else marcaUso();
+  });
+  // aba esquecida aberta: confere de tempos em tempos
+  setInterval(() => { if (estado.base && expirou()) encerraPorInatividade(); }, 10 * 60 * 1000);
+
   // ---------------------------------------------------------------- início
   FC.entrarNoApp = async function () {
     const r = FC.$("#raiz");
@@ -287,6 +325,7 @@
     try {
       const s = await FC.auth.sessao();
       FC.auth.usuario = s.user;
+      FC.marcaUso();
       await FC.recarregaBase();
     } catch (e) {
       FC.ui.erro(e);
@@ -300,6 +339,12 @@
   };
 
   async function inicia() {
+    // sessão guardada, mas parada há mais de 7 dias: não entra
+    if (expirou()) {
+      try { await FC.sb.auth.signOut(); } catch (e) { /* segue */ }
+      FC.local.apagar(CHAVE_USO);
+      return FC.telas.login(FC.$("#raiz"), { aviso: "Sua sessão foi encerrada depois de 7 dias sem uso. Entre de novo." });
+    }
     let s = null;
     try { s = await FC.auth.sessao(); } catch (e) { /* sem sessão */ }
     if (!s) return FC.telas.login(FC.$("#raiz"));
