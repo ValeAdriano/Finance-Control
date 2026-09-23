@@ -1,0 +1,90 @@
+# ============================================================
+#  UNIVERSO DA ANÁLISE DE RENDA
+#
+#  Empresas de setores que NÃO dependem de preço de commodity:
+#  o lucro vem de tarifa regulada, contrato de longo prazo ou
+#  spread bancário, não de uma cotação internacional que sobe e
+#  desce sozinha. É essa a condição para o lucro líquido ser
+#  recorrente o bastante para sustentar dividendo por décadas.
+#
+#  Acrescente ou remova tickers à vontade — a tela lê esta lista.
+# ============================================================
+
+criterios_padrao:
+  dy_desejado: 6.0        # o DY que você quer; define o "preço justo"
+  payout_maximo: 100.0    # acima de 100% a empresa paga mais do que lucra
+  dl_ebitda_maximo: 3.0   # alavancagem que você aceita
+  liquidez_minima: 1.0    # em R$ milhões por dia
+
+setores:
+
+  Bancos:
+    # ATENÇÃO: banco não tem EBITDA. A estrutura de capital de um
+    # banco é o próprio negócio — dívida é matéria-prima, não risco
+    # de alavancagem. O filtro de DL/EBITDA não se aplica aqui, e a
+    # tela mostra "n/a" em vez de inventar um número.
+    sem_ebitda: true
+    empresas:
+      BBAS3:  Banco do Brasil
+      ITUB4:  Itaú Unibanco
+      BBDC4:  Bradesco
+      SANB11: Santander Brasil
+      BPAC11: BTG Pactual
+      ABCB4:  Banco ABC Brasil
+      BRSR6:  Banrisul
+      BMGB4:  Banco BMG
+      ITSA4:  Itaúsa
+      PINE4:  Banco Pine
+      BRBI11: BR Partners
+      BMEB4:  Banco Mercantil do Brasil
+
+  Energia:
+    # QUATRO EMPRESAS FORAM RETIRADAS por terem parado de negociar —
+    # ELET5, CPLE6, NEOE3 e SRNA3. Todas davam liquidez zero no
+    # Fundamentus E 404 no Yahoo, duas fontes independentes dizendo a
+    # mesma coisa. Preço parado contamina DY, P/L e P/VP de uma vez, e
+    # três delas entravam com DY 0 puxando a mediana do setor para
+    # baixo. A Eletrobras ficou de fora por tabela: o Fundamentus só
+    # lista ELET5, e ELET3/ELET6 não existem nessa fonte. Melhor um
+    # setor sem a maior empresa do que um setor com números falsos.
+    empresas:
+      EQTL3:  Equatorial
+      CMIG4:  Cemig
+      CPLE3:  Copel
+      ENGI11: Energisa
+      EGIE3:  Engie Brasil
+      TAEE11: Taesa
+      ISAE4:  ISA Energia
+      AURE3:  Auren Energia
+      CPFE3:  CPFL Energia
+      ALUP11: Alupar
+
+  Saneamento:
+    # SÓ HÁ TRÊS, e não há como chegar a cinco. A B3 lista Sabesp,
+    # Sanepar e Copasa, e mais nada de saneamento básico. SAPR3 e
+    # SAPR4 são outras classes da MESMA Sanepar: entrariam contando a
+    # empresa três vezes e dando a ela o peso de um setor. Orizon e
+    # Ambipar são resíduos e serviços ambientais, não tarifa de água.
+    # A tela avisa que a mediana daqui é frágil — é o correto.
+    empresas:
+      SBSP3:  Sabesp
+      SAPR11: Sanepar
+      CSMG3:  Copasa
+
+  Telecom:
+    empresas:
+      VIVT3:  Vivo (Telefônica Brasil)
+      TIMS3:  TIM Brasil
+      DESK3:  Desktop
+      FIQE3:  Unifique
+      BRST3:  Brisanet
+
+# ------------------------------------------------------------
+#  Referências para comparar o retorno de cada ação.
+#  ^BVSP é o Ibovespa; o CDI vem do Banco Central.
+# ------------------------------------------------------------
+benchmarks:
+  - {codigo: "^BVSP", nome: "Ibovespa", tipo: indice}
+  - {codigo: "IVVB11.SA", nome: "S&P 500 em reais", tipo: indice}
+  - {codigo: "cdi", nome: "CDI", tipo: cdi}
+  - {codigo: "ipca", nome: "IPCA", tipo: ipca}

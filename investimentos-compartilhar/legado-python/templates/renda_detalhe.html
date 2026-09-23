@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado %}
+{% block titulo %}{{ ticker }} · Renda{% endblock %}
+
+{% block estilo %}
+<style>
+.cabeca-renda{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap;
+              margin-bottom:20px}
+.cabeca-renda h1{font-size:28px;letter-spacing:-.022em}
+.cabeca-renda p{margin:3px 0 0;color:var(--ink-2);font-size:12.5px;
+                text-transform:uppercase;letter-spacing:.05em}
+.periodos{margin-left:auto;display:flex;gap:4px}
+.periodos a{font-size:12.5px;color:var(--ink-2);padding:5px 12px;
+            border-radius:6px;border:1px solid transparent}
+.periodos a:hover{background:var(--superficie-2)}
+.periodos a[aria-current]{background:var(--superficie);border-color:var(--borda);
+                          color:var(--ink);font-weight:600}
+
+.painel-r{background:var(--superficie);border:1px solid var(--linha);
+          border-radius:var(--r);padding:20px 22px;margin-bottom:14px}
+.painel-r > h3{margin:0 0 3px;font-size:13px;font-weight:600;
+               text-transform:uppercase;letter-spacing:.06em}
+.painel-r > p.sub{margin:0 0 18px;font-size:12.5px;color:var(--ink-2);
+                  max-width:80ch}
+.retornos{display:flex;gap:32px;flex-wrap:wrap;margin-bottom:20px}
+.retornos .item dt{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+                   letter-spacing:.055em;margin-bottom:3px;
+                   display:flex;align-items:center;gap:7px}
+.retornos .item dd{margin:0;font-size:24px;font-weight:600;
+                   letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.retornos .item small{display:block;font-size:11.5px;color:var(--ink-2);
+                      font-weight:400;margin-top:2px;letter-spacing:0}
+.destaque-div{background:var(--superficie-2);border-radius:var(--r);
+              padding:14px 16px;margin-top:18px;font-size:13px;
+              color:var(--ink-2);line-height:1.65;max-width:84ch}
+.destaque-div b{color:var(--ink)}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="cabeca-renda">
+  <div>
+    <h1>{{ nome }}</h1>
+    <p>{{ ticker }}{% if setor %} · {{ setor }}{% endif %}</p>
+  </div>
+  <nav class="periodos" aria-label="Período">
+    {% for n in [3, 5, 10] %}
+    <a href="/renda/{{ ticker }}?anos={{ n }}"
+       {{ 'aria-current=page'|safe if anos == n }}>{{ n }} anos</a>
+    {% endfor %}
+  </nav>
+</div>
+
+<div class="painel-r">
+  <h3>Retorno de R$ 100 investidos</h3>
+  <p class="sub">Tudo em base 100 no primeiro dia. A curva com dividendos
+    reinveste cada pagamento no preço do dia em que ele caiu — é o retorno de
+    quem nunca vende, que é o seu caso.</p>
+
+  <dl class="retornos">
+    <div class="item">
+      <dt><span class="chave-linha cl-principal"></span>Com dividendos</dt>
+      <dd class="{{ 'pos' if (resumo.com_dividendos or 0) >= 0 else 'neg' }}">
+        {{ '%+.1f'|format(resumo.com_dividendos) if resumo.com_dividendos is not none else '—' }}%
+        <small>{{ '%+.1f'|format(ao_ano.com_dividendos) if ao_ano.com_dividendos is not none else '—' }}% ao ano</small></dd>
+    </div>
+    <div class="item">
+      <dt><span class="chave-linha cl-secundaria"></span>Só a cota</dt>
+      <dd class="{{ 'pos' if (resumo.so_preco or 0) >= 0 else 'neg' }}">
+        {{ '%+.1f'|format(resumo.so_preco) if resumo.so_preco is not none else '—' }}%
+        <small>{{ '%+.1f'|format(ao_ano.so_preco) if ao_ano.so_preco is not none else '—' }}% ao ano</small></dd>
+    </div>
+    <div class="item">
+      <dt><span class="chave-linha cl-referencia"></span>Ibovespa</dt>
+      <dd style="color:var(--ink-2)">
+        {{ '%+.1f'|format(resumo.ibov) if resumo.ibov is not none else '—' }}%
+        <small>{{ '%+.1f'|format(ao_ano.ibov) if ao_ano.ibov is not none else '—' }}% ao ano</small></dd>
+    </div>
+    <div class="item">
+      <dt><span class="chave-linha cl-referencia-2"></span>CDI</dt>
+      <dd style="color:var(--ink-2)">
+        {{ '%+.1f'|format(resumo.cdi) if resumo.cdi is not none else '—' }}%
+        <small>{{ '%+.1f'|format(ao_ano.cdi) if ao_ano.cdi is not none else '—' }}% ao ano</small></dd>
+    </div>
+  </dl>
+
+  {{ grafico|safe }}
+  <div class="chaves">
+    {% for s in series %}
+    {% if s.pontos %}
+    <span><span class="chave-linha cl-{{ s.estilo }}"></span>{{ s.nome }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if resumo.com_dividendos is not none and resumo.so_preco is not none %}
+  <div class="destaque-div">
+    A distância entre as duas primeiras curvas é o que o dividendo fez.
+    Em {{ anos_reais|num(1) }} anos e {{ dividendos }} pagamentos, a cota
+    {% if resumo.so_preco >= 0 %}subiu{% else %}caiu{% endif %}
+    <b>{{ '%.1f'|format(resumo.so_preco|abs) }}%</b>, e quem reinvestiu os
+    proventos terminou com <b>{{ '%+.1f'|format(resumo.com_dividendos) }}%</b> —
+    {% set parte = resumo.com_dividendos - resumo.so_preco %}
+    <b>{{ '%.1f'|format(parte) }} pontos percentuais</b> vieram do dividendo,
+    não do preço.
+    {% if resumo.cdi is not none %}
+      {% if resumo.com_dividendos > resumo.cdi %}
+      No mesmo período o CDI rendeu {{ '%.1f'|format(resumo.cdi) }}%.
+      {% else %}
+      No mesmo período o CDI rendeu {{ '%.1f'|format(resumo.cdi) }}%, mais que
+      a ação — vale lembrar que o CDI não tem oscilação nem risco de empresa.
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if linha and not linha.ausente %}
+<h2 class="secao">Os quatro critérios hoje</h2>
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Critério</th><th class="n">Valor</th><th>Leitura</th><th></th>
+  </tr></thead>
+  <tbody>
+  <tr>
+    <td><span class="papel">Payout</span>
+      <span class="legenda">dividendo ÷ lucro</span></td>
+    <td class="n"><b>{{ linha.payout|num(0) if linha.payout is not none else '—' }}{% if linha.payout is not none %}%{% endif %}</b></td>
+    <td style="color:var(--ink-2);font-size:12.5px">
+      {% if linha.payout is none %}sem dado
+      {% elif linha.payout > 100 %}distribui mais do que lucra no período
+      {% else %}cabe dentro do lucro{% endif %}</td>
+    <td>{% if linha.testes.payout is none %}{{ estado('cinza','não se aplica') }}
+        {%- elif linha.testes.payout %}{{ estado('verde','passa') }}
+        {%- else %}{{ estado('vermelho','reprovado') }}{% endif %}</td>
+  </tr>
+  <tr>
+    <td><span class="papel">Lucro sobre preço</span>
+      <span class="legenda">inverso do P/L</span></td>
+    <td class="n"><b>{{ linha.lucro_preco|num if linha.lucro_preco is not none else '—' }}{% if linha.lucro_preco is not none %}%{% endif %}</b></td>
+    <td style="color:var(--ink-2);font-size:12.5px">
+      cada R$ 100 na ação correspondem a
+      {{ linha.lucro_preco|num if linha.lucro_preco else '—' }} de lucro ao ano</td>
+    <td>{{ estado('verde','lucrativa') if linha.testes.lucrativa else estado('vermelho','prejuízo') }}</td>
+  </tr>
+  <tr>
+    <td><span class="papel">Preço justo</span>
+      <span class="legenda">para o DY mediano de {{ setor or 'setor' }}{%
+        if linha.dy_alvo %}, {{ linha.dy_alvo|num }}%{% endif %}</span></td>
+    <td class="n"><b>{{ linha.preco_justo|num if linha.preco_justo else '—' }}</b>
+      <span class="legenda" style="text-transform:none">cota {{ linha.cotacao|num }}</span></td>
+    <td style="color:var(--ink-2);font-size:12.5px">
+      {% if linha.desconto is not none %}
+        {% if linha.desconto >= 0 %}está {{ linha.desconto|num(0) }}% abaixo do
+          preço que daria o yield desejado
+        {% else %}precisaria cair {{ (-linha.desconto)|num(0) }}% para dar o
+          yield desejado{% endif %}
+      {% else %}sem dividendo nos últimos 12 meses{% endif %}</td>
+    <td>{% if linha.testes.preco is none %}{{ estado('cinza','sem dado') }}
+        {%- elif linha.testes.preco %}{{ estado('verde','passa') }}
+        {%- else %}{{ estado('vermelho','acima') }}{% endif %}</td>
+  </tr>
+  <tr>
+    <td><span class="papel">Dívida líquida / EBITDA</span>
+      <span class="legenda">alavancagem</span></td>
+    <td class="n"><b>{% if linha.sem_ebitda %}n/a
+      {%- elif linha.dl_ebitda is none %}—
+      {%- else %}{{ linha.dl_ebitda|num(1) }}x{% endif %}</b></td>
+    <td style="color:var(--ink-2);font-size:12.5px">
+      {% if linha.sem_ebitda %}banco não tem EBITDA — dívida é matéria-prima
+        do negócio, não alavancagem
+      {% elif linha.dl_ebitda is none %}múltiplos indisponíveis
+      {% elif linha.dl_ebitda < 0 %}caixa líquido: tem mais caixa que dívida
+      {% else %}a dívida equivale a {{ linha.dl_ebitda|num(1) }} anos de
+        geração de caixa{% endif %}</td>
+    <td>{% if linha.testes.divida is none %}{{ estado('cinza','não se aplica') }}
+        {%- elif linha.testes.divida %}{{ estado('verde','passa') }}
+        {%- else %}{{ estado('vermelho','acima do limite') }}{% endif %}</td>
+  </tr>
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<p style="margin-top:26px"><a class="acao" href="/renda">← Voltar à tabela</a></p>
+
+{% endblock %}

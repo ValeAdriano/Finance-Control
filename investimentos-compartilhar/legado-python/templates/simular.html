@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado %}
+{% block titulo %}Simular aporte · Painel{% endblock %}
+
+{% block estilo %}
+<style>
+.painel-s{background:var(--superficie);border:1px solid var(--linha);
+          border-radius:var(--r);margin-bottom:14px}
+.painel-s > header{padding:16px 22px 0}
+.painel-s > header h3{margin:0 0 3px;font-size:13px;font-weight:600;
+                      text-transform:uppercase;letter-spacing:.06em}
+.painel-s > header p{margin:0 0 14px;font-size:12.5px;color:var(--ink-2);
+                     max-width:78ch}
+
+.cesta input[type=number]{background:var(--plano);border:1px solid var(--borda);
+  border-radius:6px;padding:7px 9px;font:400 14px system-ui,sans-serif;
+  color:var(--ink);font-variant-numeric:tabular-nums;width:82px;text-align:right}
+.cesta input[type=number]:focus{outline:2px solid var(--acento);
+  outline-offset:-1px;border-color:transparent}
+.cesta tr.tem-cota{background:var(--superficie-2)}
+.cesta .valor-linha{font-variant-numeric:tabular-nums;font-weight:600;
+                    min-width:88px;display:inline-block;text-align:right}
+
+.rodape-cesta{display:flex;gap:26px;align-items:center;flex-wrap:wrap;
+  padding:16px 22px;border-top:1px solid var(--linha);background:var(--superficie)}
+.rodape-cesta .bloco dt{font-size:11px;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.055em;margin-bottom:2px}
+.rodape-cesta .bloco dd{margin:0;font-size:22px;font-weight:600;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rodape-cesta .acoes{margin-left:auto;display:flex;gap:8px;align-items:center}
+.botao{background:var(--acento);color:#fff;border:0;border-radius:6px;
+       padding:9px 18px;font:600 13.5px system-ui,sans-serif;cursor:pointer}
+.botao:hover{filter:brightness(1.08)}
+.botao:disabled{opacity:.4;cursor:not-allowed;filter:none}
+.botao.fraco{background:transparent;color:var(--ink-2);
+             border:1px solid var(--borda);font-weight:400}
+.botao.fraco:hover{border-color:var(--acento);color:var(--acento);filter:none}
+
+.cenarios{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+          gap:14px}
+.cenario{background:var(--superficie);border:1px solid var(--linha);
+         border-radius:var(--r);padding:18px 20px}
+.cenario h4{margin:0 0 3px;font-size:13px;font-weight:600}
+.cenario p.expl{margin:0 0 14px;font-size:12px;color:var(--ink-2);
+                min-height:32px}
+.cenario table{font-size:13px}
+.cenario td,.cenario th{padding:8px 6px}
+.cenario td:first-child,.cenario th:first-child{padding-left:0}
+.cenario td:last-child,.cenario th:last-child{padding-right:0}
+.desvio{font-variant-numeric:tabular-nums;font-size:12.5px}
+.longe{color:var(--ruim);font-weight:600}
+.perto{color:var(--ink-2)}
+.vazio-sim{padding:26px 22px;color:var(--ink-2);font-size:13px}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="cabeca" style="display:flex;align-items:baseline;gap:14px;
+                           flex-wrap:wrap;margin-bottom:18px">
+  <h1 style="font-size:26px">Simular aporte</h1>
+  <span style="color:var(--ink-2);font-size:13px">
+    monte a cesta e veja o efeito antes de comprar</span>
+</div>
+
+<form method="post" action="/simular/registrar" id="form-cesta">
+<input type="hidden" name="data" value="{{ hoje }}">
+
+<div class="painel-s cesta">
+  <header>
+    <h3>Cesta</h3>
+    <p>Digite as cotas de cada ativo. Ordenado pelo score — que é a
+      aderência aos critérios do seu <code>regras.yaml</code>, não uma
+      recomendação. Preço é a cotação de hoje.</p>
+  </header>
+
+  <table>
+    <thead><tr>
+      <th>Ativo</th>
+      <th>Score</th>
+      <th class="n">Preço</th>
+      <th class="n">Cotas</th>
+      <th class="n">Valor</th>
+      <th class="esconde-mob">Principais indicadores</th>
+    </tr></thead>
+    <tbody>
+    {% for a in ativos %}
+    <tr data-ticker="{{ a.ticker }}">
+      <td>
+        <span class="papel"><a href="/ativo/{{ a.ticker }}">{{ a.ticker }}</a></span>
+        <span class="legenda">{{ a.tipo_rotulo }}
+          {%- if a.pilar %} · {{ a.pilar|replace('_',' ') }}{% endif %}</span>
+      </td>
+      <td style="width:150px">
+        <div class="medida">
+          <span class="trilha"><i style="width:{{ a.score|round|int }}%"></i></span>
+          <span class="pontos">{{ a.score|num(0) }}</span>
+        </div>
+      </td>
+      <td class="n">{{ a.preco|num }}</td>
+      <td class="n">
+        <input type="number" name="qtd_{{ a.ticker }}" min="0" step="1"
+               placeholder="0" aria-label="cotas de {{ a.ticker }}">
+        <input type="hidden" name="preco_{{ a.ticker }}" value="{{ a.preco }}">
+      </td>
+      <td class="n"><span class="valor-linha rs" data-valor>—</span></td>
+      <td class="esconde-mob indicadores">
+        {% for m in a.destaques %}
+          {%- if not loop.first %}<i>·</i>{% endif -%}
+          {{ m.rotulo_curto }} <b>{{ m|valor_metrica }}</b>
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="rodape-cesta">
+    <div class="bloco"><dt>Total da cesta</dt>
+      <dd><span class="rs" id="total">R$ 0,00</span></dd></div>
+    <div class="bloco"><dt>Ativos</dt><dd id="n-ativos">0</dd></div>
+    <div class="bloco"><dt>Score médio ponderado</dt><dd id="score-medio">—</dd></div>
+    <div class="acoes">
+      <button type="button" class="botao fraco" id="limpar">Limpar</button>
+      <button type="submit" class="botao" id="registrar" disabled>
+        Registrar como compras</button>
+    </div>
+  </div>
+</div>
+</form>
+
+<h2 class="secao">Efeito na alocação
+  <span class="conta">a mesma cesta, conforme de onde sai o dinheiro</span></h2>
+
+<div id="sem-cesta" class="painel-s"><p class="vazio-sim">
+  Digite as cotas acima para ver como a alocação fica.</p></div>
+
+<div class="cenarios" id="cenarios" hidden>
+  <div class="cenario">
+    <h4>A · Dinheiro novo</h4>
+    <p class="expl">Aporte vindo de fora — o patrimônio cresce e o caixa
+      fica onde está.</p>
+    <table><thead><tr>
+      <th>Pilar</th><th class="n">Hoje</th><th class="n">Depois</th>
+      <th class="n">vs meta</th></tr></thead>
+      <tbody id="tab-a"></tbody></table>
+  </div>
+
+  <div class="cenario">
+    <h4>B · Saindo do caixa</h4>
+    <p class="expl">Você move dinheiro que já tem — o patrimônio não muda,
+      só a composição.</p>
+    <table><thead><tr>
+      <th>Pilar</th><th class="n">Hoje</th><th class="n">Depois</th>
+      <th class="n">vs meta</th></tr></thead>
+      <tbody id="tab-b"></tbody></table>
+  </div>
+</div>
+
+<p style="font-size:12px;color:var(--ink-2);margin:16px 0 0;max-width:80ch">
+  O desvio em vermelho marca o pilar que fica <b>mais distante</b> da meta
+  depois da compra. Aportar em dois pilares pode aproximar os dois e afastar
+  um terceiro — é aritmética de proporção, não erro da cesta.
+</p>
+
+<script>
+(function () {
+  var ATIVOS = {{ ativos_json|safe }};
+  var ALOCACAO = {{ alocacao_json|safe }};
+  var BASE = ALOCACAO.reduce(function (s, l) { return s + l.valor; }, 0);
+
+  var linhas = Array.prototype.slice.call(
+    document.querySelectorAll('.cesta tbody tr'));
+
+  function moeda(v) {
+    return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2});
+  }
+
+  function calcula() {
+    var total = 0, n = 0, somaScore = 0, porPilar = {};
+
+    linhas.forEach(function (tr) {
+      var tk = tr.getAttribute('data-ticker');
+      var a = ATIVOS[tk];
+      var campo = tr.querySelector('input[type=number]');
+      var cotas = parseFloat(campo.value) || 0;
+      var valor = cotas * (a.preco || 0);
+
+      tr.classList.toggle('tem-cota', cotas > 0);
+      tr.querySelector('[data-valor]').textContent = cotas > 0 ? moeda(valor) : '—';
+
+      if (cotas > 0) {
+        total += valor; n += 1;
+        somaScore += (a.score || 0) * valor;
+        if (a.pilar) { porPilar[a.pilar] = (porPilar[a.pilar] || 0) + valor; }
+      }
+    });
+
+    document.getElementById('total').textContent = moeda(total);
+    document.getElementById('n-ativos').textContent = n;
+    document.getElementById('score-medio').textContent =
+      total > 0 ? Math.round(somaScore / total) : '—';
+    document.getElementById('registrar').disabled = (total <= 0);
+
+    document.getElementById('cenarios').hidden = (total <= 0);
+    document.getElementById('sem-cesta').hidden = (total > 0);
+    if (total > 0) { desenha(porPilar, total); }
+  }
+
+  function desenha(porPilar, total) {
+    [['tab-a', true], ['tab-b', false]].forEach(function (par) {
+      var corpo = document.getElementById(par[0]);
+      var novoDinheiro = par[1];
+      var totalDepois = novoDinheiro ? BASE + total : BASE;
+
+      // primeiro calcula tudo, para saber qual pilar fica mais distante
+      var linhasCalc = ALOCACAO.map(function (l) {
+        var v = l.valor + (porPilar[l.chave] || 0);
+        if (!novoDinheiro && l.chave === 'caixa') { v = l.valor - total; }
+        var pct = totalDepois > 0 ? v / totalDepois * 100 : 0;
+        return {nome: l.nome, hoje: l.pct, pct: pct,
+                desvio: pct - l.alvo_pct};
+      });
+      var pior = linhasCalc.reduce(function (m, l) {
+        return Math.abs(l.desvio) > Math.abs(m.desvio) ? l : m;
+      }, linhasCalc[0]);
+
+      corpo.innerHTML = linhasCalc.map(function (l) {
+        var sinal = (l.desvio >= 0 ? '+' : '−') +
+                    Math.abs(l.desvio).toFixed(1) + ' pp';
+        var classe = (l === pior && Math.abs(l.desvio) >= 1) ? 'longe' : 'perto';
+        return '<tr><td>' + l.nome + '</td>' +
+               '<td class="n" style="color:var(--ink-3)">' +
+                 l.hoje.toFixed(1) + '%</td>' +
+               '<td class="n"><b>' + l.pct.toFixed(1) + '%</b></td>' +
+               '<td class="n desvio ' + classe + '">' + sinal + '</td></tr>';
+      }).join('');
+    });
+  }
+
+  linhas.forEach(function (tr) {
+    tr.querySelector('input[type=number]').addEventListener('input', calcula);
+  });
+  document.getElementById('limpar').addEventListener('click', function () {
+    linhas.forEach(function (tr) {
+      tr.querySelector('input[type=number]').value = '';
+    });
+    calcula();
+  });
+  document.getElementById('form-cesta').addEventListener('submit', function (e) {
+    if (!confirm('Registrar essas compras como aportes de hoje?')) {
+      e.preventDefault();
+    }
+  });
+
+  calcula();
+})();
+</script>
+
+{% endblock %}

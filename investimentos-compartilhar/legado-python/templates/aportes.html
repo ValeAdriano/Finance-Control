@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado %}
+{% block titulo %}Aportes · Painel{% endblock %}
+
+{% block estilo %}
+<style>
+.form-aporte{background:var(--superficie);border:1px solid var(--linha);
+             border-radius:var(--r);padding:20px 22px;margin-bottom:16px}
+.linha-campos{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.campo{display:flex;flex-direction:column;gap:5px}
+.campo label{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+             letter-spacing:.055em}
+.campo input,.campo select{
+  background:var(--plano);border:1px solid var(--borda);border-radius:6px;
+  padding:8px 10px;font:400 14px system-ui,-apple-system,sans-serif;
+  color:var(--ink);font-variant-numeric:tabular-nums;min-width:120px}
+.campo input:focus,.campo select:focus{outline:2px solid var(--acento);
+                                       outline-offset:-1px;border-color:transparent}
+.campo.largo input{min-width:210px}
+.botao{background:var(--acento);color:#fff;border:0;border-radius:6px;
+       padding:9px 18px;font:600 13.5px system-ui,sans-serif;cursor:pointer}
+.botao:hover{filter:brightness(1.08)}
+.botao.fraco{background:transparent;color:var(--ink-2);
+             border:1px solid var(--borda);font-weight:400;padding:6px 12px}
+.botao.fraco:hover{border-color:var(--ruim);color:var(--ruim);filter:none}
+
+/* cartão que aparece ao escolher o ativo: preço de hoje e o score que a
+   ferramenta já calculou, para a decisão não exigir trocar de tela */
+.previa{margin-top:16px;padding:14px 16px;border:1px solid var(--linha);
+        border-radius:var(--r);background:var(--plano);
+        display:flex;gap:30px;flex-wrap:wrap;align-items:center}
+.previa .bloco dt{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+                  letter-spacing:.055em;margin-bottom:2px}
+.previa .bloco dd{margin:0;font-size:19px;font-weight:600;letter-spacing:-.015em}
+.previa .bloco dd small{font-size:12px;font-weight:400;color:var(--ink-2);
+                        display:block;letter-spacing:0}
+.previa .indics{font-size:12.5px;color:var(--ink-2);
+                font-variant-numeric:tabular-nums;flex:1;min-width:180px}
+.previa .indics b{color:var(--ink)}
+.previa a.ver{margin-left:auto;font-size:12.5px;color:var(--acento)}
+
+.abas-tipo{display:flex;gap:4px;margin-bottom:16px}
+.abas-tipo button{background:transparent;border:1px solid transparent;
+  border-radius:6px;padding:6px 13px;font:400 13px system-ui,sans-serif;
+  color:var(--ink-2);cursor:pointer}
+.abas-tipo button[aria-pressed="true"]{background:var(--superficie-2);
+  border-color:var(--borda);color:var(--ink);font-weight:600}
+
+.erro{background:var(--superficie);border:1px solid var(--ruim);
+      border-left-width:3px;border-radius:var(--r);padding:11px 14px;
+      font-size:13px;color:var(--ruim);margin-bottom:14px}
+.vazio{padding:30px 16px;color:var(--ink-2);font-size:13px}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="cabeca" style="display:flex;align-items:baseline;gap:14px;
+                           flex-wrap:wrap;margin-bottom:18px">
+  <h1 style="font-size:26px">Aportes</h1>
+  <span style="color:var(--ink-2);font-size:13px">
+    o preço vem da cotação de hoje — ajuste para o que você pagou de fato</span>
+</div>
+
+{% if erro %}<div class="erro">{{ erro }}</div>{% endif %}
+{% if ok %}<div class="erro" style="border-color:var(--bom);color:var(--bom)">
+  {{ ok }}</div>{% endif %}
+
+<form class="form-aporte" method="post" action="/aportes/importar"
+      enctype="multipart/form-data" style="padding:16px 22px">
+  <div class="linha-campos">
+    <div class="campo largo">
+      <label for="extrato">Importar extrato (CSV ou ZIP)</label>
+      <input type="file" name="extrato" id="extrato" accept=".csv,.zip,.txt"
+             style="padding:6px 8px">
+    </div>
+    <div class="campo">
+      <label for="senha">Senha do ZIP <span style="text-transform:none">(se tiver)</span></label>
+      <input type="password" name="senha" id="senha" autocomplete="off">
+    </div>
+    <div class="campo medio">
+      <label for="titulo_caixa">Cofrinho vai para</label>
+      <select name="titulo_caixa" id="titulo_caixa">
+        {% for t in titulos %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="botao fraco" type="submit" style="padding:9px 16px">
+      Importar</button>
+  </div>
+  <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0;max-width:76ch">
+    Reconhece extrato de conta do PicPay (movimentações de cofrinho) e extrato
+    de negociação de corretora (compras e vendas). Importar o mesmo arquivo
+    duas vezes não duplica nada — cada lançamento tem uma identidade própria.
+  </p>
+</form>
+
+<form class="form-aporte" method="post" action="/aportes">
+  <div class="abas-tipo" role="group" aria-label="Tipo de aporte">
+    <button type="button" id="bt-ativo" aria-pressed="true">Ativo</button>
+    <button type="button" id="bt-caixa" aria-pressed="false">Renda fixa</button>
+  </div>
+  <input type="hidden" name="tipo" id="tipo" value="ativo">
+
+  <div id="campos-ativo">
+    <div class="linha-campos">
+      <div class="campo">
+        <label for="ticker">Ativo</label>
+        <select name="ticker" id="ticker">
+          <option value="">selecione…</option>
+          {% for a in opcoes %}
+          <option value="{{ a.ticker }}">{{ a.ticker }} — {{ a.tipo_rotulo }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="quantidade">Quantidade</label>
+        <input type="number" name="quantidade" id="quantidade" step="any" min="0"
+               placeholder="0">
+      </div>
+      <div class="campo">
+        <label for="preco">Preço pago (R$)</label>
+        <input type="number" name="preco" id="preco" step="0.01" min="0"
+               placeholder="0,00">
+      </div>
+      <div class="campo">
+        <label for="data">Data</label>
+        <input type="date" name="data" id="data" value="{{ hoje }}">
+      </div>
+      <div class="campo largo">
+        <label for="observacao">Observação</label>
+        <input type="text" name="observacao" id="observacao"
+               placeholder="corretora, motivo…" maxlength="120">
+      </div>
+      <button class="botao" type="submit">Registrar aporte</button>
+    </div>
+
+    <div class="previa" id="previa" hidden>
+      <div class="bloco"><dt>Cotação de hoje</dt>
+        <dd id="pv-preco">—</dd></div>
+      <div class="bloco"><dt>Score</dt>
+        <dd id="pv-score">—<small id="pv-veredito"></small></dd></div>
+      <div class="indics" id="pv-indics"></div>
+      <a class="ver" id="pv-link" href="#">ver análise completa →</a>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:12px 0 0" id="dica-total"></p>
+  </div>
+
+  <div id="campos-caixa" hidden>
+    <div class="linha-campos">
+      <div class="campo">
+        <label for="titulo">Título</label>
+        <select name="titulo" id="titulo">
+          {% for t in titulos %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="campo">
+        <label for="valor">Valor (R$)</label>
+        <input type="number" name="valor" id="valor" step="0.01" min="0"
+               placeholder="0,00">
+      </div>
+      <div class="campo">
+        <label for="data2">Data</label>
+        <input type="date" name="data" id="data2" value="{{ hoje }}">
+      </div>
+      <div class="campo largo">
+        <label for="obs2">Observação</label>
+        <input type="text" name="observacao" id="obs2" maxlength="120">
+      </div>
+      <button class="botao" type="submit">Registrar aporte</button>
+    </div>
+  </div>
+</form>
+
+<h2 class="secao">Histórico
+  <span class="conta">{{ lista|length }} aporte{{ 's' if lista|length != 1 }}
+    {%- if total_aportado %} · {{ total_aportado|dinheiro }} no total{% endif %}</span></h2>
+
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Data</th><th>Destino</th><th class="n">Quantidade</th>
+    <th class="n">Preço</th><th class="n">Valor</th><th>Observação</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for a in lista %}
+  <tr>
+    <td style="white-space:nowrap">{{ a.data_br }}</td>
+    <td><span class="papel">
+      {%- if a.tipo == 'ativo' %}<a href="/ativo/{{ a.ticker }}">{{ a.ticker }}</a>
+      {%- else %}{{ a.titulo }}{% endif %}</span>
+      <span class="legenda">{{ 'renda fixa' if a.tipo == 'caixa' else 'ativo' }}</span></td>
+    <td class="n">{% if a.tipo == 'ativo' %}{{ a.quantidade|num(0) }}{% else %}—{% endif %}</td>
+    <td class="n">{% if a.tipo == 'ativo' %}{{ a.preco|num }}{% else %}—{% endif %}</td>
+    <td class="n">{{ a.valor|dinheiro }}</td>
+    <td style="color:var(--ink-2);font-size:12.5px">{{ a.observacao or '—' }}</td>
+    <td class="n">
+      <form method="post" action="/aportes/excluir" style="display:inline"
+            onsubmit="return confirm('Excluir este aporte?')">
+        <input type="hidden" name="id" value="{{ a.id }}">
+        <button class="botao fraco" type="submit">Excluir</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  {% if not lista %}
+  <tr><td colspan="7" class="vazio">
+    Nenhum aporte registrado ainda. A posição mostrada no painel é a que está
+    em {{ onde_carteira }}; o que você registrar aqui soma a ela.
+  </td></tr>
+  {% endif %}
+  </tbody>
+</table>
+</div>
+
+<script>
+(function () {
+  var ATIVOS = {{ opcoes_json|safe }};
+
+  var sel = document.getElementById('ticker');
+  var previa = document.getElementById('previa');
+  var qtd = document.getElementById('quantidade');
+  var preco = document.getElementById('preco');
+  var dica = document.getElementById('dica-total');
+
+  function moeda(v) {
+    return 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2});
+  }
+
+  function mostraPrevia() {
+    var a = ATIVOS[sel.value];
+    if (!a) { previa.hidden = true; dica.textContent = ''; return; }
+    previa.hidden = false;
+    document.getElementById('pv-preco').textContent =
+      a.preco != null ? moeda(a.preco) : '—';
+    document.getElementById('pv-score').firstChild.textContent =
+      a.score != null ? Math.round(a.score) : '—';
+    document.getElementById('pv-veredito').textContent = a.veredito || '';
+    document.getElementById('pv-indics').innerHTML = a.indicadores || '';
+    document.getElementById('pv-link').href = '/ativo/' + a.ticker;
+    // o preço já vem preenchido com a cotação; é só ajustar se pagou outro
+    if (a.preco != null) { preco.value = a.preco.toFixed(2); }
+    atualizaTotal();
+  }
+
+  function atualizaTotal() {
+    var q = parseFloat(qtd.value), p = parseFloat(preco.value);
+    // o total é dinheiro do usuário: entra marcado, para o modo privado
+    // conseguir escondê-lo como esconde o resto
+    dica.innerHTML = (q > 0 && p > 0)
+      ? 'Total do aporte: <span class="rs">' + moeda(q * p) + '</span>'
+      : '';
+  }
+
+  sel.addEventListener('change', mostraPrevia);
+  qtd.addEventListener('input', atualizaTotal);
+  preco.addEventListener('input', atualizaTotal);
+
+  var btA = document.getElementById('bt-ativo'), btC = document.getElementById('bt-caixa');
+  function troca(tipo) {
+    document.getElementById('tipo').value = tipo;
+    document.getElementById('campos-ativo').hidden = (tipo !== 'ativo');
+    document.getElementById('campos-caixa').hidden = (tipo !== 'caixa');
+    btA.setAttribute('aria-pressed', tipo === 'ativo');
+    btC.setAttribute('aria-pressed', tipo === 'caixa');
+  }
+  btA.addEventListener('click', function () { troca('ativo'); });
+  btC.addEventListener('click', function () { troca('caixa'); });
+})();
+</script>
+
+{% endblock %}

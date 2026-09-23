@@ -1,0 +1,13 @@
+# chaves — nunca versionar
+.env
+
+# legado Python
+legado-python/config/carteira.yaml
+legado-python/dados/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+
+# arquivos temporários da CLI do Supabase
+supabase/.temp/

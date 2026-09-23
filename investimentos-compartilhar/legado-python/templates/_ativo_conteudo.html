@@ -1,0 +1,114 @@
+{% from "_macros.html" import icone, estado %}
+<div class="cabeca">
+  <div class="ident">
+    <h1>{{ a.ticker }}</h1>
+    <p>{{ a.tipo_rotulo }}{% if a.segmento %} · {{ a.segmento }}{% endif %}</p>
+  </div>
+  <div class="veredito">
+    <span class="pontos-g">{{ a.score|num(0) }}</span>
+    {{ estado(a.cor, a.veredito) }}
+  </div>
+</div>
+
+<div class="cartao">
+  <dl class="tiras">
+    <div class="tira"><dt>Preço</dt><dd>{{ a.preco|num }}</dd></div>
+    {% if a.faixa_svg %}
+    <div class="tira" style="min-width:150px">
+      <dt>Faixa 52 semanas</dt>
+      <dd>{{ a.faixa_svg|safe }}</dd>
+    </div>
+    {% endif %}
+    {% if a.posicao %}
+    <div class="tira"><dt>Posição</dt><dd>{{ a.posicao.atual|dinheiro }}</dd></div>
+    <div class="tira"><dt>Quantidade</dt><dd>{{ a.posicao.quantidade|int }}</dd></div>
+    {% if a.posicao.variacao is not none %}
+    <div class="tira"><dt>Preço médio</dt><dd>{{ a.posicao.preco_medio|num }}</dd></div>
+    <div class="tira"><dt>Resultado</dt>
+      <dd class="{{ 'pos' if a.posicao.resultado >= 0 else 'neg' }}">
+        {{ '%+.1f'|format(a.posicao.variacao) }}%</dd></div>
+    {% endif %}
+    {% endif %}
+    <div class="tira"><dt>Grupo comparado</dt>
+      <dd style="font-size:13px;font-weight:400;color:var(--ink-2)">
+        {{ a.grupo_pares or '—' }}</dd></div>
+  </dl>
+</div>
+
+{% for av in a.avisos %}
+<div class="alerta" style="margin-top:14px">
+  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M8 4.5v4.2M8 11.2v.6" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round"/></svg>
+  <span>{{ av }}</span>
+</div>
+{% endfor %}
+
+<h2 class="secao">Indicadores
+  <span class="conta">valor de hoje frente a cada referência</span></h2>
+
+{% for m in a.metricas %}
+{% if m.valor is none and not m.sinal_ruim %}
+{# sem dado nenhum: uma linha basta, não um cartão inteiro vazio #}
+<section class="metrica vazia">
+  {{ icone('cinza', 13) }}
+  <h3>{{ m.rotulo }}</h3>
+  <span class="peso">peso {{ m.peso }}</span>
+  <span class="motivo">sem dado disponível — não entra no score</span>
+</section>
+{% else %}
+<section class="metrica">
+  <header>
+    <h3>{{ m.rotulo }}</h3>
+    <span class="peso">peso {{ m.peso }}</span>
+    {% if m.divergencia >= 25 %}
+    <span class="conflito">{{ icone('amarelo', 13) }} as referências discordam</span>
+    {% endif %}
+  </header>
+
+  <div class="leitura">
+    <div class="agora-val">
+      <b>{{ m|valor_metrica }}</b>
+      <small>hoje</small>
+      {% if m.valor_alt %}
+      <div class="segunda">{{ m.valor_alt.valor|num }}% {{ m.valor_alt.rotulo }}</div>
+      {% endif %}
+      {% if m.sinal_ruim %}
+      <div class="segunda" style="color:var(--ruim)">negativo — reprovado</div>
+      {% endif %}
+    </div>
+
+    {% if m.spark_svg %}
+    <div>{{ m.spark_svg|safe }}
+      <small style="display:block;font-size:10.5px;color:var(--ink-3);
+                    letter-spacing:.04em;margin-top:1px">
+        3 anos{% if m.chave == 'pvp' %} · aproximado{% endif %}</small></div>
+    {% endif %}
+
+    {% if m.nota is not none %}
+    <div class="nota-val"><b>{{ m.nota|num(0) }}</b><small>nota</small></div>
+    {% endif %}
+  </div>
+
+  {% if m.regua_svg %}
+  <div class="faixa-regua">{{ m.regua_svg|safe }}</div>
+  {% endif %}
+
+  <div class="lentes">
+    {% for L in m.lentes %}
+    <div class="lente {{ 'calada' if L.nota is none }}">
+      {{ icone(L.cor, 13) }}
+      <span class="quem">{{ L.titulo }}</span>
+      <span class="viu">{{ L.texto }}</span>
+      <span class="val">{{ L.nota|num(0) if L.nota is not none else '' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endfor %}
+
+{% if not em_modal %}
+<p style="margin-top:26px"><a class="acao" href="/">← Voltar ao painel</a></p>
+{% endif %}

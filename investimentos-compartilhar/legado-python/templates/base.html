@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Painel de investimentos{% endblock %}</title>
+<script>
+// Roda antes de qualquer pintura: se o modo privado estava ligado, a
+// classe já entra no <html> e os valores nunca chegam a aparecer. Fazer
+// isso no fim da página deixaria o patrimônio piscar na tela.
+try {
+  if (localStorage.getItem("valores-ocultos") === "1") {
+    document.documentElement.classList.add("oculto");
+  }
+} catch (e) {}
+</script>
+<style>
+/* ==========================================================================
+   TOKENS
+   Superfícies, tinta e status vêm de uma paleta validada: o amarelo de
+   atenção tem contraste 1,79:1 no fundo claro, então status nunca é
+   comunicado por cor sozinha — sempre ícone com forma própria + rótulo.
+   ========================================================================== */
+:root{
+  color-scheme: light;
+  --plano:#f9f9f7;         /* plano de fundo da página */
+  --superficie:#fcfcfb;    /* cartões e tabelas */
+  --superficie-2:#f2f2ef;  /* trilhos, hover */
+  --ink:#0b0b0b;
+  --ink-2:#52514e;
+  --ink-3:#898781;
+  --linha:#e1e0d9;
+  --regua-base:#c3c2b7;
+  --faixa-boa:#d3d2ca;
+  --borda:rgba(11,11,11,.10);
+  --acento:#2a78d6;
+  --bom:#0ca30c;
+  --atencao:#fab219;
+  --ruim:#d03b3b;
+  --positivo:#006300;
+  --serie-1:#2a78d6;
+  --serie-2:#eb6834;
+  --serie-3:#1baf7a;
+
+  --r:8px;
+  --passo:4px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --plano:#0d0d0d;
+    --superficie:#1a1a19;
+    --superficie-2:#242423;
+    --ink:#ffffff;
+    --ink-2:#c3c2b7;
+    --ink-3:#898781;
+    --linha:#2c2c2a;
+    --regua-base:#383835;
+    --faixa-boa:#3f3f3c;
+    --borda:rgba(255,255,255,.10);
+    --acento:#3987e5;
+    --positivo:#0ca30c;
+    --serie-1:#3987e5;
+    --serie-2:#d95926;
+    --serie-3:#199e70;
+  }
+}
+
+*{box-sizing:border-box}
+/* sem isto, display:flex/block vence o atributo hidden */
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--plano);color:var(--ink);
+  font:400 14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding-bottom:72px;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit;text-decoration:none}
+.env{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* ---------------------------------------------------------------- cabeçalho */
+.topo{border-bottom:1px solid var(--linha);background:var(--superficie);
+      padding:14px 0;margin-bottom:32px}
+.topo .env{display:flex;align-items:center;gap:14px}
+.marca{font-size:13px;font-weight:600;letter-spacing:-.005em}
+.carimbo{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.abas{display:flex;gap:4px}
+.abas a{font-size:13px;color:var(--ink-2);padding:5px 12px;border-radius:6px;
+        transition:background .12s,color .12s}
+.abas a:hover{background:var(--superficie-2)}
+.abas a[aria-current]{background:var(--superficie-2);color:var(--ink);
+                      font-weight:600}
+.acao{margin-left:auto;border:1px solid var(--borda);background:transparent;
+      color:var(--ink-2);padding:6px 13px;border-radius:6px;font-size:12.5px;
+      transition:border-color .12s,color .12s}
+.acao:hover,.acao:focus-visible{border-color:var(--acento);color:var(--acento)}
+
+/* ------------------------------------------------------------------ títulos */
+h1{font-size:19px;font-weight:600;letter-spacing:-.012em;margin:0}
+.secao{font-size:11.5px;font-weight:600;color:var(--ink-3);
+       text-transform:uppercase;letter-spacing:.07em;
+       margin:36px 0 12px;display:flex;align-items:baseline;gap:9px}
+.secao .conta{font-weight:400;letter-spacing:0;text-transform:none;font-size:12px}
+
+/* -------------------------------------------------------------- números-chave */
+.heroi{font-size:clamp(38px,6vw,52px);font-weight:600;line-height:1.05;
+       letter-spacing:-.028em;margin:0}          /* figuras proporcionais */
+.heroi-rot{font-size:12px;color:var(--ink-3);margin:0 0 2px;
+           text-transform:uppercase;letter-spacing:.06em}
+
+.tiras{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-end}
+.tira{min-width:82px}
+.tira dt{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+         letter-spacing:.055em;margin-bottom:3px}
+.tira dd{margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em}
+
+.cartao{background:var(--superficie);border:1px solid var(--linha);
+        border-radius:var(--r);padding:20px 22px}
+
+/* --------------------------------------------------------- modo privado
+   Borra em vez de trocar por bolinhas: o layout não pula quando liga e
+   desliga, e nada some do lugar. */
+html.oculto .rs,
+html.oculto .gcanvas .eixo,
+html.oculto .gcanvas .valor-fim{
+  filter:blur(7px);
+  user-select:none;
+  -webkit-user-select:none;
+}
+html.oculto .heroi .rs{filter:blur(14px)}   /* proporcional ao tamanho */
+.rs{transition:filter .12s}
+.olho{border:1px solid var(--borda);background:transparent;color:var(--ink-2);
+      width:32px;height:30px;border-radius:6px;cursor:pointer;padding:0;
+      display:inline-flex;align-items:center;justify-content:center}
+.olho:hover,.olho:focus-visible{border-color:var(--acento);color:var(--acento)}
+.olho svg{display:block}
+html.oculto .olho{color:var(--acento);border-color:var(--acento)}
+
+/* --------------------------------------------------------------- estado
+   Forma + rótulo carregam o significado; a cor só reforça.           */
+.estado{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.estado svg{flex:none;display:block}
+.estado span{font-size:13px;color:var(--ink-2)}
+.i-bom{color:var(--bom)} .i-atencao{color:var(--atencao)}
+.i-ruim{color:var(--ruim)} .i-nulo{color:var(--ink-3)}
+
+/* --------------------------------------------------------------- tabela */
+.quadro{background:var(--superficie);border:1px solid var(--linha);
+        border-radius:var(--r);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;color:var(--ink-3);font-weight:600;
+   text-transform:uppercase;letter-spacing:.055em;padding:11px 16px;
+   border-bottom:1px solid var(--linha);white-space:nowrap;background:var(--superficie)}
+td{padding:14px 16px;border-bottom:1px solid var(--linha);vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr{transition:background .1s}
+tbody tr:hover{background:var(--superficie-2)}
+tbody tr:focus-within{background:var(--superficie-2);outline:2px solid var(--acento);
+                      outline-offset:-2px}
+.n{text-align:right;font-variant-numeric:tabular-nums}
+
+.papel{font-size:14.5px;font-weight:600;letter-spacing:-.01em;display:block}
+.papel a:focus-visible{outline:2px solid var(--acento);outline-offset:3px;
+                       border-radius:3px}
+.legenda{font-size:11px;color:var(--ink-2);text-transform:uppercase;
+         letter-spacing:.05em;margin-top:2px;display:block}
+.indicadores{font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.indicadores b{font-weight:600;color:var(--ink)}
+.indicadores i{font-style:normal;color:var(--ink-3);margin:0 5px}
+
+/* score: magnitude é sequencial — um hue só, o comprimento é o dado */
+.medida{display:flex;align-items:center;gap:11px}
+.trilha{flex:1;min-width:56px;height:5px;background:var(--superficie-2);
+        border-radius:3px;overflow:hidden}
+.trilha i{display:block;height:100%;background:var(--acento);border-radius:3px}
+.pontos{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;
+        min-width:26px;text-align:right;letter-spacing:-.01em}
+
+.delta{font-variant-numeric:tabular-nums;font-size:13.5px}
+.pos{color:var(--positivo)} .neg{color:var(--ruim)}
+
+/* -------------------------------------------------- bolinha de ajuda
+   Aparece no hover e também no foco de teclado: um tooltip que só
+   responde ao mouse deixa a informação inacessível para quem navega
+   sem ele. */
+.ajuda{display:inline-flex;position:relative;color:var(--ink-3);
+  cursor:help;vertical-align:middle;margin-left:3px;border-radius:50%}
+.ajuda:hover,.ajuda:focus-visible{color:var(--acento);outline:none}
+.ajuda:focus-visible{box-shadow:0 0 0 2px var(--acento)}
+.ajuda svg{display:block}
+.ajuda .balao{position:absolute;bottom:calc(100% + 9px);left:50%;
+  transform:translateX(-50%);z-index:6;width:250px;
+  background:var(--superficie);border:1px solid var(--borda);
+  border-radius:7px;padding:10px 12px;font-size:12px;line-height:1.5;
+  color:var(--ink-2);box-shadow:0 6px 20px rgba(0,0,0,.16);
+  text-transform:none;letter-spacing:0;font-weight:400;
+  opacity:0;visibility:hidden;transition:opacity .12s;pointer-events:none}
+.ajuda:hover .balao,.ajuda:focus-visible .balao,
+.ajuda:focus-within .balao{opacity:1;visibility:visible}
+.ajuda .balao b{display:block;color:var(--ink);font-size:12.5px;
+  margin-bottom:3px}
+.ajuda .balao .d{display:block;margin-bottom:6px}
+.ajuda .balao .o{display:block;color:var(--ink-3);font-size:11.5px}
+.ajuda .balao .q{display:block;color:var(--ink-3);font-size:11.5px;
+  font-variant-numeric:tabular-nums}
+.ajuda .balao .alerta-fonte{display:block;margin-top:6px;padding-top:6px;
+  border-top:1px solid var(--linha);color:var(--atencao);font-size:11.5px}
+/* perto da borda direita o balão sairia da tela */
+.tiras .tira:last-child .ajuda .balao{left:auto;right:-8px;transform:none}
+
+/* ------------------------------------------------- pilar expansível */
+.linha-pilar{cursor:pointer}
+.linha-pilar .seta{display:inline-block;width:14px;color:var(--ink-3);
+  transition:transform .15s;font-size:15px;line-height:1}
+.linha-pilar[aria-expanded="true"] .seta{transform:rotate(90deg);
+  color:var(--acento)}
+.linha-pilar[aria-expanded="true"]{background:var(--superficie-2)}
+.linha-pilar:focus-visible{outline:2px solid var(--acento);outline-offset:-2px}
+
+.linha-dentro > td{padding:0;background:var(--plano);
+  border-bottom:1px solid var(--linha)}
+table.dentro{width:100%}
+table.dentro td{padding:10px 16px 10px 30px;border-bottom:1px solid var(--linha);
+  background:transparent}
+table.dentro tr:last-child td{border-bottom:0}
+table.dentro tr:hover{background:var(--superficie-2)}
+table.dentro .papel{font-size:13.5px}
+/* a barra aqui é peso dentro do pilar, não score: tom mais discreto */
+.trilha.peso-pilar{max-width:150px;height:4px}
+.trilha.peso-pilar i{background:var(--regua-base)}
+
+/* --------------------------------------------------------------- filtros */
+.filtros{display:flex;gap:6px;align-items:center;margin-bottom:14px}
+.filtros a{font-size:12.5px;color:var(--ink-2);padding:5px 12px;border-radius:6px;
+           border:1px solid transparent;transition:background .12s,color .12s}
+.filtros a:hover{background:var(--superficie-2)}
+.filtros a[aria-current="true"]{background:var(--superficie);
+           border-color:var(--borda);color:var(--ink);font-weight:600}
+
+/* --------------------------------------------------------------- SVG */
+.regua{width:100%;max-width:620px;height:auto;overflow:visible;display:block}
+.regua .trilho{fill:var(--superficie-2)}
+.regua .faixa-boa{fill:var(--faixa-boa)}
+.regua .tick{stroke:var(--regua-base);stroke-width:1}
+.regua .rot{fill:var(--ink-3);font:400 10.5px system-ui,sans-serif}
+.regua .direcao{fill:var(--ink-3);font:400 10.5px system-ui,sans-serif;
+                letter-spacing:.02em}
+.regua .hoje{fill:var(--ink-2);font:600 10.5px system-ui,sans-serif;
+             letter-spacing:.03em}
+.regua .agulha{stroke:var(--acento);stroke-width:2;stroke-linecap:round}
+.regua .anel{fill:var(--superficie)}
+.regua .agora{fill:var(--acento)}
+/* segunda medição: mesmo hue, vazado — é o mesmo dado, outra fonte */
+.regua .agora-alt{fill:var(--superficie);stroke:var(--acento);
+                  stroke-width:2}
+
+/* --- gráficos de projeção --- */
+.gcanvas{width:100%;max-width:680px;height:auto;display:block}
+.gcanvas .grade{stroke:var(--linha);stroke-width:1}
+.gcanvas .eixo{fill:var(--ink-3);font:400 10.5px system-ui,sans-serif;
+               font-variant-numeric:tabular-nums}
+.gcanvas .banda{fill:var(--acento);opacity:.12}
+/* coluna: marca fina, topo arredondado, base assentada */
+/* comparação de retorno: cor só nas curvas do ativo, benchmark em cinza */
+.gcomp .linha{fill:none;stroke-width:2;stroke-linejoin:round;
+              stroke-linecap:round}
+.gcomp .linha.principal{stroke:var(--serie-1)}
+.gcomp .linha.secundaria{stroke:var(--serie-2)}
+.gcomp .linha.referencia{stroke:var(--regua-base)}
+.gcomp .linha.referencia-2{stroke:var(--ink-3);stroke-dasharray:5 4}
+.gcomp .base100{stroke:var(--linha);stroke-width:1}
+.chave-linha{display:inline-block;width:16px;height:2px;border-radius:1px;
+             vertical-align:middle}
+.cl-principal{background:var(--serie-1)}
+.cl-secundaria{background:var(--serie-2)}
+.cl-referencia{background:var(--regua-base)}
+.cl-referencia-2{background:var(--ink-3)}
+
+.gcolunas .coluna{fill:var(--acento)}
+.gcolunas .hover-alvo .fio{stroke:var(--regua-base)}
+.gcanvas .serie{fill:none;stroke:var(--acento);stroke-width:2;
+                stroke-linejoin:round;stroke-linecap:round}
+/* linha de referência: mesma espessura, peso visual menor */
+.gcanvas .serie-ref{fill:none;stroke:var(--regua-base);stroke-width:2;
+                    stroke-linejoin:round;stroke-linecap:round}
+.kref{background:var(--regua-base)}
+.gganho .zero{stroke:var(--regua-base);stroke-width:1}
+.gganho .area-ganho{fill:var(--acento);opacity:.13}
+.gcanvas .anel{fill:var(--superficie)}
+.gcanvas .ponta{fill:var(--acento)}
+.gcanvas .valor-fim{fill:var(--ink);font:600 12px system-ui,sans-serif;
+                    font-variant-numeric:tabular-nums}
+
+/* --- camada de leitura dos gráficos --- */
+.graf{position:relative}
+.gcanvas .captura{cursor:crosshair}
+.gcanvas .hover-alvo .fio{stroke:var(--regua-base);stroke-width:1}
+.gcanvas .hover-alvo .marca{fill:var(--acento);stroke:var(--superficie);
+                            stroke-width:2}
+.dica-graf{position:absolute;pointer-events:none;z-index:3;
+  background:var(--superficie);border:1px solid var(--borda);
+  border-radius:7px;padding:9px 11px;font-size:12.5px;color:var(--ink-2);
+  box-shadow:0 6px 20px rgba(0,0,0,.14);white-space:nowrap;
+  transform:translate(-50%,-100%);margin-top:-12px}
+.dica-graf b{display:block;color:var(--ink);font-size:12px;font-weight:600;
+             margin-bottom:5px}
+.dica-graf .par{display:flex;gap:14px;justify-content:space-between;
+                line-height:1.5}
+.dica-graf .par span:last-child{font-variant-numeric:tabular-nums;
+                                color:var(--ink);font-weight:600}
+
+.gbarra{width:100%;max-width:680px;height:auto;display:block}
+.gbarra .s1{fill:var(--serie-1)}
+.gbarra .s2{fill:var(--serie-2)}
+.gbarra .s3{fill:var(--serie-3)}
+.gbarra .dentro{fill:#fff;font:600 11px system-ui,sans-serif}
+
+.chaves{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;
+        color:var(--ink-2)}
+.chaves span{display:inline-flex;align-items:center;gap:6px}
+.chaves i{width:10px;height:10px;border-radius:2px;display:block}
+.k1{background:var(--serie-1)}
+.k2{background:var(--serie-2)}
+.k3{background:var(--serie-3)}
+.kbanda{background:var(--acento);opacity:.25}
+
+/* alocação: barra é o valor, traço é a meta (bullet chart) */
+.aloc{width:210px;height:22px;display:block}
+.aloc .trilho{fill:var(--superficie-2)}
+.aloc .preenche{fill:var(--acento)}
+.aloc .alvo{stroke:var(--ink);stroke-width:2;stroke-linecap:round}
+
+.spark{width:132px;height:32px;overflow:visible}
+.spark polyline{fill:none;stroke:var(--acento);stroke-width:2;
+                stroke-linejoin:round;stroke-linecap:round}
+.spark .anel{fill:var(--superficie)}
+.spark .ponta{fill:var(--acento)}
+
+.faixa52{width:150px;height:30px;overflow:visible}
+.faixa52 .trilho{fill:var(--superficie-2)}
+.faixa52 .anel{fill:var(--superficie)}
+.faixa52 .agora{fill:var(--acento)}
+.faixa52 .rot{fill:var(--ink-3);font:400 10px system-ui,sans-serif;
+              font-variant-numeric:tabular-nums}
+
+/* --------------------------------------------------------------- avisos */
+.alerta{display:flex;gap:9px;align-items:flex-start;
+        background:var(--superficie);border:1px solid var(--linha);
+        border-radius:var(--r);padding:11px 14px;font-size:12.5px;
+        color:var(--ink-2);margin-bottom:10px}
+.alerta svg{flex:none;margin-top:2px;color:var(--atencao)}
+
+.rodape{color:var(--ink-3);font-size:11.5px;line-height:1.65;margin-top:44px;
+        border-top:1px solid var(--linha);padding-top:16px;max-width:76ch}
+.rodape code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+             font-size:11px;background:var(--superficie-2);padding:1px 5px;
+             border-radius:4px}
+
+/* --- modal do ativo ---
+   <dialog> nativo: ESC fecha, o foco fica preso dentro e o resto da
+   página vira inerte sem uma linha de JS para isso. */
+dialog.modal{border:1px solid var(--linha);border-radius:12px;padding:0;
+  background:var(--plano);color:var(--ink);width:min(920px,94vw);
+  max-height:88vh;overflow:auto;box-shadow:0 18px 48px rgba(0,0,0,.22)}
+dialog.modal::backdrop{background:rgba(0,0,0,.42)}
+/* trava a rolagem do fundo: sem isto a roda do mouse rola a
+   página de trás e o modal parece ter sumido */
+body.com-modal{overflow:hidden}
+dialog.modal .topo-modal{position:sticky;top:0;z-index:2;display:flex;
+  align-items:center;gap:12px;padding:12px 20px;background:var(--superficie);
+  border-bottom:1px solid var(--linha)}
+dialog.modal .topo-modal .t{font-size:12px;color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+dialog.modal .topo-modal a.abrir{margin-left:auto;font-size:12.5px;
+  color:var(--acento)}
+dialog.modal .fechar{background:transparent;border:1px solid var(--borda);
+  border-radius:6px;width:28px;height:28px;cursor:pointer;color:var(--ink-2);
+  font-size:17px;line-height:1;padding:0}
+dialog.modal .fechar:hover{border-color:var(--ruim);color:var(--ruim)}
+dialog.modal .corpo{padding:22px 24px 26px}
+dialog.modal .corpo .cabeca{margin-top:0}
+dialog.modal .carregando{padding:46px 24px;text-align:center;
+  color:var(--ink-3);font-size:13px}
+/* dentro do modal a régua tem menos largura disponível */
+dialog.modal .regua{max-width:100%}
+
+/* --- detalhe do ativo (página e modal usam as mesmas classes) --- */
+.cabeca{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;
+        margin-bottom:22px}
+.cabeca .ident h1{font-size:30px;letter-spacing:-.022em}
+.cabeca .ident p{margin:3px 0 0;color:var(--ink-2);font-size:12.5px;
+                 text-transform:uppercase;letter-spacing:.05em}
+.veredito{margin-left:auto;text-align:right}
+.veredito .pontos-g{font-size:36px;font-weight:600;letter-spacing:-.025em;
+                    line-height:1;display:block;margin-bottom:6px}
+
+.metrica{background:var(--superficie);border:1px solid var(--linha);
+         border-radius:var(--r);padding:18px 22px;margin-bottom:12px}
+.metrica > header{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.metrica > header h3{margin:0;font-size:13px;font-weight:600;
+                     text-transform:uppercase;letter-spacing:.06em}
+.metrica > header .peso{font-size:11.5px;color:var(--ink-3)}
+.conflito{margin-left:auto;font-size:11.5px;color:var(--ink-2);
+          display:inline-flex;align-items:center;gap:6px}
+
+.leitura{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+.leitura .agora-val b{font-size:26px;font-weight:600;letter-spacing:-.02em;
+                      display:block;line-height:1.15}
+.leitura .agora-val small,.leitura .nota-val small{display:block;font-size:11px;
+    color:var(--ink-3);text-transform:uppercase;letter-spacing:.055em;margin-top:2px}
+.leitura .nota-val{margin-left:auto;text-align:right}
+.leitura .nota-val b{font-size:22px;font-weight:600;letter-spacing:-.02em;
+                     display:block;font-variant-numeric:tabular-nums}
+.segunda{font-size:12px;color:var(--ink-3);margin-top:5px;
+         font-variant-numeric:tabular-nums}
+
+/* a régua ganha a linha inteira: com 620px de escala os rótulos das
+   referências cabem sem se atropelar */
+.faixa-regua{margin-top:14px}
+.metrica.vazia{padding:13px 22px;display:flex;align-items:baseline;gap:12px}
+.metrica.vazia h3{margin:0;font-size:13px;font-weight:600;text-transform:uppercase;
+                  letter-spacing:.06em;color:var(--ink-2)}
+.metrica.vazia .motivo{font-size:12.5px;color:var(--ink-2);margin-left:auto}
+
+.lentes{margin:16px 0 0;padding:14px 0 0;border-top:1px solid var(--linha);
+        display:grid;gap:9px}
+.lente{display:flex;gap:10px;align-items:flex-start;font-size:12.5px}
+.lente .quem{min-width:104px;color:var(--ink);font-weight:600;flex:none}
+.lente .viu{color:var(--ink-2);flex:1}
+.lente .val{font-variant-numeric:tabular-nums;color:var(--ink-3);flex:none;
+            min-width:26px;text-align:right}
+.lente.calada .quem,.lente.calada .viu{color:var(--ink-3);font-weight:400}
+
+@media (max-width:720px){
+  .env{padding:0 16px}
+  .esconde-mob{display:none}
+  td,th{padding:11px 12px}
+}
+</style>
+{% block estilo %}{% endblock %}
+</head>
+<body>
+{% from "_macros.html" import icone, estado %}
+
+<header class="topo"><div class="env">
+  <span class="marca"><a href="/">Painel de investimentos</a></span>
+  <nav class="abas" aria-label="Seções">
+    <a href="/" {{ 'aria-current=page'|safe if aba == 'painel' }}>Carteira</a>
+    <a href="/renda" {{ 'aria-current=page'|safe if aba == 'renda' }}>Renda</a>
+    <a href="/simular" {{ 'aria-current=page'|safe if aba == 'simular' }}>Simular</a>
+    <a href="/aportes" {{ 'aria-current=page'|safe if aba == 'aportes' }}>Aportes</a>
+    <a href="/projecoes" {{ 'aria-current=page'|safe if aba == 'projecoes' }}>Projeções</a>
+  </nav>
+  <span class="carimbo">{{ d.atualizado }}</span>
+  <button type="button" class="olho" id="olho" style="margin-left:auto"
+          aria-pressed="false" aria-label="Ocultar valores"
+          title="Ocultar valores (mostra de novo ao clicar)">
+    <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path id="olho-aberto" d="M1.5 10S4.7 4.5 10 4.5 18.5 10 18.5 10 15.3 15.5 10 15.5 1.5 10 1.5 10Z"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle id="olho-pupila" cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/>
+      <path id="olho-corte" d="M3.5 3.5l13 13" stroke="currentColor" stroke-width="1.6"
+            stroke-linecap="round" hidden/>
+    </svg>
+  </button>
+  <a class="acao" href="/atualizar" style="margin-left:0">Atualizar</a>
+</div></header>
+
+<main class="env">
+{% block conteudo %}{% endblock %}
+  <p class="rodape">
+    Os vereditos são a aplicação mecânica dos critérios definidos em
+    <code>config/regras.yaml</code> — não constituem recomendação de
+    investimento. Dados: Fundamentus (fundamentos), Yahoo Finance (preços e
+    proventos), Banco Central (Selic, CDI, IPCA).
+  </p>
+</main>
+
+<dialog class="modal" id="modal-ativo" aria-label="Análise do ativo">
+  <div class="topo-modal">
+    <span class="t" id="modal-titulo">Análise</span>
+    <a class="abrir" id="modal-link" href="#">abrir em página inteira →</a>
+    <button class="fechar" type="button" id="modal-fechar"
+            aria-label="Fechar">&times;</button>
+  </div>
+  <div class="corpo" id="modal-corpo"></div>
+</dialog>
+
+<script>
+// Pilar clicável: revela quais ativos estão dentro dele. Um pilar em 23%
+// não diz se está apoiado num ativo só ou espalhado em cinco.
+(function () {
+  function alterna(linha) {
+    var dentro = document.getElementById(linha.getAttribute('aria-controls'));
+    if (!dentro) { return; }
+    var aberto = linha.getAttribute('aria-expanded') === 'true';
+    linha.setAttribute('aria-expanded', !aberto);
+    dentro.hidden = aberto;
+  }
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('.linha-pilar'), function (linha) {
+      linha.addEventListener('click', function (e) {
+        // clicar num ticker dentro da linha abre a análise, não alterna
+        if (e.target.closest('a')) { return; }
+        if (getSelection().toString()) { return; }
+        alterna(linha);
+      });
+      linha.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          alterna(linha);
+        }
+      });
+    });
+})();
+</script>
+
+<script>
+// Leitura dos gráficos: um só ouvinte serve todos eles. Cada SVG traz os
+// próprios pontos num data-attribute, então acrescentar um gráfico novo
+// não pede uma linha de JS a mais.
+(function () {
+  function prepara(captura) {
+    var svg = captura.ownerSVGElement;
+    var pontos;
+    try { pontos = JSON.parse(captura.getAttribute('data-pontos')); }
+    catch (e) { return; }
+    if (!pontos || !pontos.length) { return; }
+
+    // Cada gráfico ganha o PRÓPRIO invólucro. Sem isso, dois gráficos no
+    // mesmo cartão ancoram os tooltips no mesmo elemento, e o segundo
+    // aparece deslocado — as coordenadas são relativas ao seu SVG, não
+    // ao cartão inteiro.
+    var caixa = svg.parentNode;
+    if (!caixa.classList.contains('graf')) {
+      caixa = document.createElement('div');
+      caixa.className = 'graf';
+      svg.parentNode.insertBefore(caixa, svg);
+      caixa.appendChild(svg);
+    }
+    var alvo = svg.querySelector('.hover-alvo');
+    var fio = alvo.querySelector('.fio');
+    var marca = alvo.querySelector('.marca');
+
+    var dica = document.createElement('div');
+    dica.className = 'dica-graf';
+    dica.hidden = true;
+    caixa.appendChild(dica);
+
+    // o viewBox tem largura própria; o mouse chega em pixels de tela
+    function paraViewBox(evento) {
+      var r = svg.getBoundingClientRect();
+      // largura zero (aba oculta, janela colapsada) daria NaN, e o NaN
+      // perde toda comparação: o ponto "mais próximo" ficaria travado no
+      // primeiro, mexesse o mouse onde mexesse
+      if (!r.width) { return null; }
+      var vb = svg.viewBox.baseVal;
+      return (evento.clientX - r.left) / r.width * vb.width;
+    }
+
+    function move(evento) {
+      var x = paraViewBox(evento);
+      if (x === null || isNaN(x)) { return; }
+      var perto = pontos[0], menor = Infinity;
+      for (var i = 0; i < pontos.length; i++) {
+        var d = Math.abs(pontos[i].x - x);
+        if (d < menor) { menor = d; perto = pontos[i]; }
+      }
+
+      alvo.removeAttribute('hidden');
+      fio.setAttribute('x1', perto.x);
+      fio.setAttribute('x2', perto.x);
+      marca.setAttribute('cx', perto.x);
+      marca.setAttribute('cy', perto.y);
+
+      var r = svg.getBoundingClientRect();
+      var vb = svg.viewBox.baseVal;
+      var escala = r.width / vb.width;
+      dica.style.left = (perto.x * escala) + 'px';
+      dica.style.top = (perto.y * escala) + 'px';
+      dica.innerHTML = '<b>' + perto.titulo + '</b>' +
+        perto.linhas.map(function (l) {
+          // l = [rótulo, valor, é_dinheiro] — dinheiro some no modo privado
+          var v = l[2] ? '<span class="rs">' + l[1] + '</span>'
+                       : '<span>' + l[1] + '</span>';
+          return '<span class="par"><span>' + l[0] + '</span>' + v + '</span>';
+        }).join('');
+      dica.hidden = false;
+    }
+
+    function sai() {
+      alvo.setAttribute('hidden', '');
+      dica.hidden = true;
+    }
+
+    captura.addEventListener('mousemove', move);
+    captura.addEventListener('mouseleave', sai);
+    // toque: mesma leitura, sem exigir mouse
+    captura.addEventListener('touchmove', function (e) {
+      if (e.touches[0]) { move(e.touches[0]); }
+    }, {passive: true});
+    captura.addEventListener('touchend', sai);
+  }
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('.gcanvas .captura'), prepara);
+})();
+</script>
+
+<script>
+(function () {
+  var botao = document.getElementById('olho');
+  var corte = document.getElementById('olho-corte');
+  var raiz = document.documentElement;
+
+  function pinta() {
+    var oculto = raiz.classList.contains('oculto');
+    botao.setAttribute('aria-pressed', oculto);
+    botao.setAttribute('aria-label', oculto ? 'Mostrar valores' : 'Ocultar valores');
+    botao.title = oculto ? 'Mostrar valores' : 'Ocultar valores';
+    corte.hidden = !oculto;
+  }
+
+  botao.addEventListener('click', function () {
+    var oculto = raiz.classList.toggle('oculto');
+    try { localStorage.setItem('valores-ocultos', oculto ? '1' : '0'); } catch (e) {}
+    pinta();
+  });
+
+  pinta();
+})();
+</script>
+
+<script>
+(function () {
+  var dlg = document.getElementById('modal-ativo');
+  if (!dlg || !dlg.showModal) { return; }   // sem suporte: os links navegam
+  var corpo = document.getElementById('modal-corpo');
+  var titulo = document.getElementById('modal-titulo');
+  var link = document.getElementById('modal-link');
+  var ultimoFoco = null;
+
+  function abrir(ticker, origem) {
+    ultimoFoco = origem || null;
+    titulo.textContent = ticker;
+    link.href = '/ativo/' + ticker;
+    corpo.innerHTML = '<p class="carregando">Carregando ' + ticker + '…</p>';
+    document.body.classList.add('com-modal');
+    dlg.showModal();
+
+    fetch('/ativo/' + encodeURIComponent(ticker) + '/fragmento')
+      .then(function (r) {
+        if (!r.ok) { throw new Error(r.status); }
+        return r.text();
+      })
+      .then(function (html) { corpo.innerHTML = html; })
+      .catch(function () {
+        // falhou o fragmento: manda para a página, que sempre existe
+        window.location = '/ativo/' + ticker;
+      });
+  }
+
+  document.getElementById('modal-fechar').addEventListener('click', function () {
+    dlg.close();
+  });
+
+  // clique no fundo escuro fecha
+  dlg.addEventListener('click', function (e) {
+    if (e.target === dlg) { dlg.close(); }
+  });
+
+  dlg.addEventListener('close', function () {
+    document.body.classList.remove('com-modal');
+    corpo.innerHTML = '';
+    if (ultimoFoco && ultimoFoco.focus) { ultimoFoco.focus(); }
+  });
+
+  // um só ouvinte para a página inteira: pega links e linhas de tabela,
+  // inclusive os que forem inseridos depois
+  document.addEventListener('click', function (e) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) { return; }
+
+    var alvo = e.target.closest('[data-ativo]');
+    if (alvo) {
+      e.preventDefault();
+      abrir(alvo.getAttribute('data-ativo'), alvo);
+      return;
+    }
+    var a = e.target.closest('a[href^="/ativo/"]');
+    if (a && !a.classList.contains('abrir')) {
+      var t = a.getAttribute('href').split('/')[2];
+      if (t) { e.preventDefault(); abrir(t, a); }
+    }
+  });
+})();
+</script>
+</body>
+</html>

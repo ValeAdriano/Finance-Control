@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado, ajuda %}
+
+{% macro linha(a) %}
+<tr {% if not a.erro %}data-ativo="{{ a.ticker }}"{% endif %}
+    style="cursor:pointer">
+  <td>
+    <span class="papel"><a href="/ativo/{{ a.ticker }}">{{ a.ticker }}</a></span>
+    <span class="legenda">
+      {%- if a.na_carteira %}carteira · {% endif -%}
+      {%- if a.perfil == 'fii_papel' %}papel{% elif a.perfil == 'fii_tijolo' %}tijolo
+      {%- else %}{{ a.tipo_rotulo }}{% endif -%}
+      {%- if a.segmento %} · {{ a.segmento }}{% endif -%}
+    </span>
+  </td>
+
+  {% if a.erro %}
+  <td colspan="5" style="color:var(--ink-3)">{{ a.erro }}</td>
+  {% else %}
+
+  <td class="esconde-mob indicadores">
+    {% for m in a.destaques %}
+      {%- if not loop.first %}<i>·</i>{% endif -%}
+      {{ m.rotulo_curto }} <b>{{ m|valor_metrica }}</b>
+    {% endfor %}
+  </td>
+
+  <td class="n">{{ a.preco|num }}</td>
+
+  <td class="n">
+    {% if a.posicao %}
+      <span>{{ a.posicao.atual|dinheiro }}</span>
+      <span class="legenda">{{ a.posicao.quantidade|int }} cotas
+        {%- if a.posicao.variacao is not none %} ·
+        <span class="{{ 'pos' if a.posicao.resultado >= 0 else 'neg' }}">
+        {{ '%+.1f'|format(a.posicao.variacao) }}%</span>{% endif %}</span>
+    {% else %}
+      <span style="color:var(--ink-3)">—</span>
+    {% endif %}
+  </td>
+
+  <td style="width:150px">
+    <div class="medida">
+      <span class="trilha"><i style="width:{{ (a.score or 0)|round|int }}%"></i></span>
+      <span class="pontos">{{ a.score|num(0) }}</span>
+    </div>
+  </td>
+
+  <td>{{ estado(a.cor, a.veredito_curto) }}</td>
+  {% endif %}
+</tr>
+{% endmacro %}
+
+
+{% block conteudo %}
+
+<div class="cartao" style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-end;
+                           justify-content:space-between">
+  <div>
+    {% if d.resumo.patrimonio %}
+    <p class="heroi-rot">Patrimônio</p>
+    <p class="heroi">{{ d.resumo.patrimonio|dinheiro }}</p>
+    <dl class="tiras" style="margin:16px 0 0">
+      <div class="tira"><dt>Renda variável</dt><dd>{{ d.resumo.atual|dinheiro }}</dd></div>
+      <div class="tira"><dt>Renda fixa</dt><dd>{{ d.resumo.renda_fixa|dinheiro }}</dd></div>
+      {% if d.resumo.tem_preco_medio %}
+      <div class="tira"><dt>Resultado</dt>
+        <dd class="{{ 'pos' if d.resumo.resultado >= 0 else 'neg' }}">
+          {{ '%+.1f'|format(d.resumo.variacao) }}%</dd></div>
+      {% endif %}
+    </dl>
+    {% else %}
+    <p class="heroi-rot">Ativos acompanhados</p>
+    <p class="heroi">{{ ativos|length }}</p>
+    {% endif %}
+  </div>
+
+  <dl class="tiras" style="margin:0;border-left:1px solid var(--linha);
+                           padding-left:32px;align-self:stretch;align-items:flex-end">
+    {% for chave, rotulo in [('selic_meta','Selic'), ('cdi','CDI'),
+                             ('ipca_12m','IPCA 12m'), ('juro_real','Juro real')] %}
+    <div class="tira">
+      <dt>{{ rotulo }} {{ ajuda(d.macro.fontes[chave]) }}</dt>
+      <dd>{{ d.macro[chave]|num }}%</dd>
+    </div>
+    {% endfor %}
+  </dl>
+</div>
+
+{% if d.historico and d.historico.pontos|length > 2 %}
+<h2 class="secao">Evolução da carteira
+  <span class="conta">reconstruída dos seus aportes desde
+    {{ d.historico.primeiro_aporte.strftime('%m/%Y') }}</span></h2>
+<div class="cartao">
+  <dl class="tiras" style="margin-bottom:18px">
+    <div class="tira"><dt>Valor hoje</dt>
+      <dd>{{ d.historico.valor_final|dinheiro }}</dd></div>
+    <div class="tira"><dt>Custo acumulado</dt>
+      <dd>{{ d.historico.custo_final|dinheiro }}</dd></div>
+    <div class="tira"><dt>Ganho</dt>
+      <dd class="{{ 'pos' if d.historico.ganho >= 0 else 'neg' }}">
+        {{ d.historico.ganho|dinheiro }}
+        {%- if d.historico.custo_final %}
+        <small style="font-size:12px;font-weight:400;color:var(--ink-2);
+                      display:block">
+          {{ '%+.1f'|format(d.historico.ganho / d.historico.custo_final * 100) }}%
+          sobre o que entrou</small>{% endif %}</dd></div>
+    {% if d.historico.total_proventos %}
+    <div class="tira"><dt>Proventos recebidos</dt>
+      <dd>{{ d.historico.total_proventos|dinheiro }}
+        <small style="font-size:12px;font-weight:400;color:var(--ink-2);
+                      display:block">
+          {{ d.historico.proventos|length }} pagamentos, já na conta</small></dd>
+    </div>
+    {% endif %}
+  </dl>
+  {{ d.historico.grafico|safe }}
+  <div class="chaves">
+    <span><i class="k1"></i>valor da carteira</span>
+    <span><i class="kref"></i>custo acumulado (o que você colocou)</span>
+  </div>
+
+  <p style="font-size:12px;color:var(--ink-2);margin:14px 0 0;max-width:76ch">
+    A distância entre as duas linhas é o ganho. Sozinha, a linha do valor
+    confundiria crescimento por aporte com crescimento por rendimento — uma
+    carteira que só recebe dinheiro sobe igual a uma que rende.
+    {% if d.historico.so_caixa %}
+    Por enquanto só há aportes de renda fixa registrados, que entram pelo
+    valor aplicado: as duas linhas coincidem até você importar as compras
+    de ativos.
+    {% elif d.historico.rendimento_rf > 1 %}
+    A curva conta a renda fixa pelo principal aportado — não existe
+    histórico de saldo diário de CDB. Por isso ela termina
+    {{ d.historico.rendimento_rf|dinheiro }} abaixo do patrimônio: essa
+    diferença é o rendimento que a renda fixa acumulou.
+    {% endif %}
+  </p>
+
+  {% if d.historico.grafico_ganho %}
+  <h3 style="font-size:11.5px;font-weight:600;color:var(--ink-3);
+             text-transform:uppercase;letter-spacing:.06em;margin:26px 0 4px">
+    Ganho acumulado</h3>
+  <p style="font-size:12px;color:var(--ink-2);margin:0 0 10px;max-width:76ch">
+    A mesma diferença de cima, com escala própria — num gráfico que vai a
+    R$ 15 mil, um ganho de 1,6% é fino demais para se ver.</p>
+  {{ d.historico.grafico_ganho|safe }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if d.historico and d.historico.renda_mensal and d.historico.renda_mensal.n_meses > 1 %}
+<h2 class="secao">Proventos por mês
+  <span class="conta">o que a carteira deposita sem você vender nada</span></h2>
+<div class="cartao">
+  <dl class="tiras" style="margin-bottom:18px">
+    <div class="tira"><dt>Último mês</dt>
+      <dd>{{ d.historico.renda_mensal.ultimo|dinheiro }}</dd></div>
+    <div class="tira"><dt>Média dos 3 últimos</dt>
+      <dd>{{ d.historico.renda_mensal.media_recente|dinheiro }}</dd></div>
+    <div class="tira"><dt>Média do período</dt>
+      <dd style="color:var(--ink-2)">{{ d.historico.renda_mensal.media|dinheiro }}</dd></div>
+    <div class="tira"><dt>Total recebido</dt>
+      <dd>{{ d.historico.renda_mensal.total|dinheiro }}
+        <small style="font-size:12px;font-weight:400;color:var(--ink-2);
+                      display:block">em {{ d.historico.renda_mensal.n_meses }} meses</small></dd></div>
+  </dl>
+
+  {{ d.historico.grafico_renda|safe }}
+  <div class="chaves">
+    <span><i class="k1"></i>recebido no mês</span>
+    <span style="color:var(--ink-3)">passe o mouse para ver de quais ativos</span>
+  </div>
+  <p style="font-size:12px;color:var(--ink-2);margin:14px 0 0;max-width:78ch">
+    Colunas, não linha: cada mês é um período fechado, com um valor que caiu
+    na conta — uma linha sugeriria que existe um valor intermediário entre
+    dois meses. As duas médias estão lado a lado de propósito: a do período
+    inteiro ({{ d.historico.renda_mensal.media|dinheiro }}) inclui meses em que
+    a carteira era bem menor, então ela subestima o que você recebe hoje.
+  </p>
+</div>
+{% endif %}
+
+{% if d.alocacao %}
+<h2 class="secao">Alocação por pilar
+  <span class="conta">barra é o que você tem; o traço é a sua meta</span></h2>
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Pilar</th><th class="n">Valor</th><th class="n">Atual</th>
+    <th class="n">Meta</th><th>&nbsp;</th><th>Para bater a meta</th>
+  </tr></thead>
+  <tbody>
+  {% for l in d.alocacao %}
+  <tr class="linha-pilar" data-pilar="{{ l.chave }}" tabindex="0" role="button"
+      aria-expanded="false" aria-controls="dentro-{{ l.chave }}"
+      title="Ver os ativos deste pilar">
+    <td>
+      <span class="papel"><span class="seta" aria-hidden="true">›</span>{{ l.nome }}</span>
+      <span class="legenda">{{ l.composicao|length }} ativo{{ 's' if l.composicao|length != 1 }}</span>
+    </td>
+    <td class="n">{{ l.valor|dinheiro }}</td>
+    <td class="n"><b>{{ l.pct|num(1) }}%</b></td>
+    <td class="n" style="color:var(--ink-2)">{{ l.alvo_pct|num(0) }}%</td>
+    <td style="width:220px">{{ l.barra_svg|safe }}</td>
+    <td>
+      {% if l.desvio_pct|abs < 1 %}
+        <span style="color:var(--ink-2)">na meta</span>
+      {% elif l.desvio_reais > 0 %}
+        <span>aportar <b>{{ l.desvio_reais|dinheiro }}</b></span>
+      {% else %}
+        <span style="color:var(--ink-2)">{{ (-l.desvio_reais)|dinheiro }} acima</span>
+      {% endif %}
+    </td>
+  </tr>
+  <tr class="linha-dentro" id="dentro-{{ l.chave }}" hidden>
+    <td colspan="6">
+      <table class="dentro">
+        <tbody>
+        {% for x in l.composicao %}
+        <tr>
+          <td style="width:34%">
+            <span class="papel">
+              {%- if x.ticker %}<a href="/ativo/{{ x.ticker }}">{{ x.nome }}</a>
+              {%- else %}{{ x.nome }}{% endif %}</span>
+            <span class="legenda">{{ x.tipo }}
+              {%- if x.quantidade %} · {{ x.quantidade|int }} cotas{% endif %}</span>
+          </td>
+          <td class="n" style="width:16%">{{ x.valor|dinheiro }}</td>
+          <td class="n" style="width:9%"><b>{{ x.peso|num(1) }}%</b>
+            <span class="legenda" style="text-transform:none">do pilar</span></td>
+          <td style="width:22%">
+            <span class="trilha peso-pilar"><i style="width:{{ x.peso|round|int }}%"></i></span>
+          </td>
+          <td class="n" style="width:10%">
+            {% if x.variacao is not none %}
+            <span class="delta {{ 'pos' if x.variacao >= 0 else 'neg' }}">
+              {{ '%+.1f'|format(x.variacao) }}%</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if x.score is not none %}{{ estado(x.cor, '%.0f'|format(x.score)) }}
+            {% else %}<span style="color:var(--ink-2);font-size:12.5px">
+              {{ x.veredito or '' }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2 class="secao">Ativos
+  <span class="conta">ordenados por aderência aos seus critérios</span></h2>
+
+<nav class="filtros" aria-label="Filtrar ativos">
+  {% for chave, texto in [('todos','Todos'),('carteira','Carteira'),('watchlist','Watchlist')] %}
+  <a href="?filtro={{ chave }}" aria-current="{{ 'true' if filtro == chave else 'false' }}">
+    {{ texto }}</a>
+  {% endfor %}
+</nav>
+
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Ativo</th>
+    <th class="esconde-mob">Principais indicadores</th>
+    <th class="n">Preço</th>
+    <th class="n">Posição</th>
+    <th>Score</th>
+    <th>Avaliação</th>
+  </tr></thead>
+  <tbody>
+  {% for a in ativos %}{{ linha(a) }}{% endfor %}
+  {% if not ativos %}
+  <tr><td colspan="6" style="color:var(--ink-3);padding:28px 16px">
+    Nenhum ativo neste filtro. Adicione tickers em
+    {{ onde_carteira }}.</td></tr>
+  {% endif %}
+  </tbody>
+</table>
+</div>
+
+{% if d.renda_fixa %}
+<h2 class="secao">Renda fixa
+  <span class="conta">comparada ao CDI de hoje ({{ d.macro.cdi|num }}%)</span></h2>
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Título</th><th>Contratado</th>
+    <th class="n">Taxa nominal</th><th class="n">Taxa real</th>
+    <th>Frente ao CDI</th><th class="n">Aplicado</th>
+  </tr></thead>
+  <tbody>
+  {% for r in d.renda_fixa %}
+  <tr>
+    <td><span class="papel">{{ r.nome }}</span>
+        {% if r.vencimento %}<span class="legenda">vence {{ r.vencimento }}</span>{% endif %}</td>
+    <td style="color:var(--ink-2)">{{ r.base }}</td>
+    <td class="n">{% if r.nominal is not none %}{{ r.nominal|num }}%{% else %}—{% endif %}</td>
+    <td class="n">{% if r.real is not none %}{{ r.real|num }}%{% else %}—{% endif %}</td>
+    <td>{{ estado(r.cor, r.leitura) }}</td>
+    <td class="n">{{ r.valor_aplicado|dinheiro }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p style="color:var(--ink-2);font-size:12px;margin:10px 0 0;max-width:74ch">
+  A comparação é a foto de hoje. Um título indexado ao IPCA rende menos que
+  o CDI enquanto a Selic está alta e a inflação baixa, e a relação se inverte
+  no cenário oposto — o prêmio instantâneo não mede a proteção que ele dá
+  contra inflação futura.
+</p>
+{% endif %}
+
+{% endblock %}

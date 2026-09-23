@@ -1,0 +1,48 @@
+{# --- ícones de estado: a FORMA distingue, mesmo sem cor nenhuma --- #}
+{% macro icone(cor, tamanho=15) -%}
+{% if cor == 'verde' %}
+<svg width="{{ tamanho }}" height="{{ tamanho }}" viewBox="0 0 16 16" class="i-bom" aria-hidden="true">
+  <circle cx="8" cy="8" r="7" fill="currentColor"/>
+  <path d="M4.8 8.2l2.1 2.1 4.3-4.5" fill="none" stroke="#fff" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round"/></svg>
+{% elif cor == 'amarelo' %}
+<svg width="{{ tamanho }}" height="{{ tamanho }}" viewBox="0 0 16 16" class="i-atencao" aria-hidden="true">
+  <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+  <path d="M8 1a7 7 0 0 1 0 14z" fill="currentColor"/></svg>
+{% elif cor == 'vermelho' %}
+<svg width="{{ tamanho }}" height="{{ tamanho }}" viewBox="0 0 16 16" class="i-ruim" aria-hidden="true">
+  <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+  <path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+{% else %}
+<svg width="{{ tamanho }}" height="{{ tamanho }}" viewBox="0 0 16 16" class="i-nulo" aria-hidden="true">
+  <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-dasharray="2.5 2.5"/></svg>
+{% endif %}
+{%- endmacro %}
+
+{% macro estado(cor, texto) -%}
+<span class="estado">{{ icone(cor) }}<span>{{ texto }}</span></span>
+{%- endmacro %}
+
+
+{# --- bolinha de ajuda: procedência do número, no hover e no foco --- #}
+{% macro ajuda(f) -%}
+{% if f %}
+<span class="ajuda" tabindex="0" role="note"
+      aria-label="{{ f.rotulo }}: {{ f.origem }}{% if f.quando %}, {{ f.quando }}{% endif %}">
+  <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M6.3 6.1a1.75 1.75 0 1 1 2.2 1.75c-.4.13-.5.4-.5.75v.5"
+          fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="8" cy="11.4" r=".85" fill="currentColor"/>
+  </svg>
+  <span class="balao">
+    <b>{{ f.rotulo }}</b>
+    {% if f.descricao %}<span class="d">{{ f.descricao }}</span>{% endif %}
+    <span class="o">{{ f.origem }}</span>
+    {% if f.quando %}<span class="q">{{ f.quando }}</span>{% endif %}
+    {% if f.atrasado %}<span class="alerta-fonte">{{ f.atrasado }}</span>{% endif %}
+  </span>
+</span>
+{% endif %}
+{%- endmacro %}

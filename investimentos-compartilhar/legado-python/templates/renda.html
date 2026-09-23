@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado %}
+{% block titulo %}Renda · Painel{% endblock %}
+
+{% block estilo %}
+<style>
+.filtros-renda{background:var(--superficie);border:1px solid var(--linha);
+               border-radius:var(--r);padding:18px 22px;margin-bottom:16px}
+.filtros-renda h3{margin:0 0 4px;font-size:13px;font-weight:600;
+                  text-transform:uppercase;letter-spacing:.06em}
+.filtros-renda > p{margin:0 0 16px;font-size:12.5px;color:var(--ink-2);
+                   max-width:80ch}
+.linha-filtros{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end}
+.campo{display:flex;flex-direction:column;gap:5px}
+.campo label{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+             letter-spacing:.055em}
+.campo input, .campo select{background:var(--plano);border:1px solid var(--borda);
+  border-radius:6px;padding:8px 10px;font:400 14px system-ui,sans-serif;
+  color:var(--ink);font-variant-numeric:tabular-nums;width:116px}
+.campo select{width:168px}
+.campo input:focus, .campo select:focus{outline:2px solid var(--acento);
+  outline-offset:-1px;border-color:transparent}
+.campo .dica{font-size:11px;color:var(--ink-3)}
+.campo.inativo input{opacity:.4}
+.campo.inativo label, .campo.inativo .dica{opacity:.55}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;
+       color:var(--ink-2);padding-bottom:9px}
+.botao{background:var(--acento);color:#fff;border:0;border-radius:6px;
+       padding:9px 18px;font:600 13.5px system-ui,sans-serif;cursor:pointer}
+.botao:hover{filter:brightness(1.08)}
+.botao.fraco{background:transparent;color:var(--ink-2);
+             border:1px solid var(--borda);font-weight:400}
+
+/* ---- panorama: um cartão por setor, o DY mediano como número herói */
+.panorama{display:grid;gap:10px;margin-bottom:22px;
+  grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
+.setor-cartao{background:var(--superficie);border:1px solid var(--linha);
+  border-radius:var(--r);padding:14px 16px}
+.setor-cartao .nome{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+  letter-spacing:.055em;display:block;margin-bottom:6px}
+.setor-cartao .dy{font-size:23px;font-weight:600;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;display:block;line-height:1.1}
+.setor-cartao .dy small{font-size:12px;font-weight:400;color:var(--ink-2);
+  letter-spacing:0}
+.setor-cartao .conta-s{font-size:12px;color:var(--ink-2);margin-top:5px;
+  display:block}
+
+/* ---- tabela densa: são muitas colunas numéricas para comparar de uma vez */
+table.renda th, table.renda td{padding:10px 10px;font-size:13px}
+table.renda th:first-child, table.renda td:first-child{padding-left:16px}
+table.renda th:last-child, table.renda td:last-child{padding-right:16px}
+table.renda .empresa{font-size:13.5px;font-weight:600;display:block;
+                     letter-spacing:-.005em}
+table.renda .cod{font-size:11px;color:var(--ink-2);letter-spacing:.05em;
+                 text-transform:uppercase}
+tr.reprovado td{opacity:.55}
+tr.reprovado:hover td{opacity:1}
+tr.tenho{box-shadow:inset 3px 0 0 var(--acento)}
+tr.mediana td{background:var(--superficie-2);font-size:12px;
+  color:var(--ink-2);border-top:1px solid var(--borda);
+  border-bottom:1px solid var(--borda)}
+tr.mediana td b{color:var(--ink);font-weight:600}
+tr.mediana .rotulo{text-transform:uppercase;letter-spacing:.055em;
+  font-size:10.5px;color:var(--ink-3)}
+.ruim-num{color:var(--ruim);font-weight:600}
+.bom-num{color:var(--positivo);font-weight:600}
+.na{color:var(--ink-3);font-size:12px}
+.marca-tenho{font-size:10px;color:var(--acento);text-transform:uppercase;
+             letter-spacing:.05em;font-weight:600}
+.delta{display:block;font-size:11px;color:var(--ink-3);letter-spacing:0;
+       font-weight:400}
+.cabeca-setor{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+  margin:30px 0 10px}
+.cabeca-setor h2{font-size:17px;letter-spacing:-.012em;margin:0}
+.cabeca-setor .alvo{font-size:12px;color:var(--ink-2)}
+.legenda-tabela{font-size:12px;color:var(--ink-2);margin:14px 0 0;
+                max-width:84ch;line-height:1.65}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="cabeca" style="display:flex;align-items:baseline;gap:14px;
+                           flex-wrap:wrap;margin-bottom:18px">
+  <h1 style="font-size:26px">Renda</h1>
+  <span style="color:var(--ink-2);font-size:13px">
+    empresas de setores que não dependem de preço de commodity</span>
+</div>
+
+<form class="filtros-renda" method="get" action="/renda">
+  <h3>Seus critérios</h3>
+  <p>O <b>preço justo</b> é o preço em que o dividendo de hoje renderia o DY
+    alvo. Com o alvo na <b>mediana do setor</b>, cada empresa é medida contra
+    as próprias pares — é a comparação que se sustenta, porque banco, energia,
+    saneamento e telecom vivem em patamares de yield diferentes por razões
+    estruturais. Com um <b>piso fixo</b>, todas respondem à mesma pergunta:
+    quem paga pelo menos isto, venha de onde vier.</p>
+
+  <div class="linha-filtros">
+    <div class="campo">
+      <label for="alvo">DY alvo</label>
+      <select name="alvo" id="alvo">
+        <option value="setor" {{ 'selected' if criterios.alvo != 'fixo' }}>
+          Mediana do setor</option>
+        <option value="fixo" {{ 'selected' if criterios.alvo == 'fixo' }}>
+          Piso fixo</option>
+      </select>
+      <span class="dica">contra quem medir o preço</span>
+    </div>
+    <div class="campo {{ '' if criterios.alvo == 'fixo' else 'inativo' }}">
+      <label for="dy_desejado">Piso fixo (%)</label>
+      <input type="number" name="dy_desejado" id="dy_desejado" step="0.5"
+             min="0" value="{{ criterios.dy_desejado }}">
+      <span class="dica">só vale no modo piso</span>
+    </div>
+    <div class="campo">
+      <label for="payout_maximo">Payout máximo (%)</label>
+      <input type="number" name="payout_maximo" id="payout_maximo" step="5"
+             min="0" value="{{ criterios.payout_maximo }}">
+      <span class="dica">acima disso paga mais que lucra</span>
+    </div>
+    <div class="campo">
+      <label for="dl_ebitda_maximo">DL/EBITDA máximo</label>
+      <input type="number" name="dl_ebitda_maximo" id="dl_ebitda_maximo"
+             step="0.5" value="{{ criterios.dl_ebitda_maximo }}">
+      <span class="dica">alavancagem aceitável</span>
+    </div>
+    <div class="campo">
+      <label for="liquidez_minima">Liquidez mín. (R$ mi)</label>
+      <input type="number" name="liquidez_minima" id="liquidez_minima"
+             step="0.5" min="0" value="{{ criterios.liquidez_minima }}">
+      <span class="dica">negociação por dia</span>
+    </div>
+    <label class="check">
+      <input type="checkbox" name="so_aprovados" {{ 'checked' if so_aprovados }}>
+      só os que passam
+    </label>
+    <button class="botao" type="submit" style="margin-bottom:9px">Aplicar</button>
+    <a class="botao fraco" href="/renda"
+       style="margin-bottom:9px;padding:9px 16px">Voltar ao padrão</a>
+  </div>
+</form>
+
+<h2 class="secao">Panorama dos setores
+  <span class="conta">DY mediano de cada um · {{ resumo.total }} empresas
+    no total</span></h2>
+
+<div class="panorama">
+  {% for b in blocos %}
+  <div class="setor-cartao">
+    <span class="nome">{{ b.setor }}</span>
+    <span class="dy">{{ b.medianas.dy|num if b.medianas.dy else '—' }}{%
+      if b.medianas.dy %}<small>%</small>{% endif %}</span>
+    <span class="conta-s">{{ b.aprovadas }} de {{ b.total }} passam{%
+      if b.tenho %} · {{ b.tenho }} na carteira{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="legenda-tabela" style="margin:-8px 0 0">
+  A diferença entre esses números não é qualidade: é estrutura. Setor com
+  muito investimento em curso retém mais lucro e paga menos; setor maduro de
+  tarifa regulada distribui quase tudo. Comparar um banco com uma transmissora
+  pelo DY é comparar decisões de capital, não empresas.
+</p>
+
+{% for b in blocos %}
+<div class="cabeca-setor">
+  <h2>{{ b.setor }}</h2>
+  <span class="alvo">
+    {% if criterios.alvo == 'fixo' %}
+      preço justo calculado com piso de {{ criterios.dy_desejado|num }}%
+    {% else %}
+      preço justo calculado com o DY mediano do setor,
+      <b>{{ b.medianas.dy|num if b.medianas.dy else '—' }}%</b>
+    {% endif %}
+    · {{ b.aprovadas }} de {{ b.total }} passam
+  </span>
+  {% if b.mediana_fina %}
+  <span class="alvo" style="color:var(--atencao);display:inline-flex;
+        align-items:center;gap:6px">
+    {{ icone('amarelo', 13) }} mediana de apenas {{ b.n_dy }} empresa{{
+      's' if b.n_dy != 1 }} — referência frágil, um caso atípico vira “o setor”
+  </span>
+  {% endif %}
+</div>
+
+<div class="quadro" style="overflow-x:auto">
+<table class="renda">
+  <thead><tr>
+    <th>Empresa</th>
+    <th class="n">Cotação</th>
+    <th class="n">L/P</th>
+    <th class="n">Preço justo</th>
+    <th class="n">DL/EBITDA</th>
+    <th class="n">Payout</th>
+    <th class="n">DY</th>
+    <th class="n">ROE</th>
+    <th class="n">P/VP</th>
+    <th></th>
+  </tr></thead>
+  <tbody>
+  <tr class="mediana">
+    <td class="rotulo">Mediana do setor</td>
+    <td class="n">—</td>
+    <td class="n">{{ b.medianas.lucro_preco|num if b.medianas.lucro_preco
+      else '—' }}{% if b.medianas.lucro_preco %}%{% endif %}</td>
+    <td class="n">—</td>
+    <td class="n">{% if b.sem_ebitda %}<span class="na">n/a</span>
+      {%- elif b.medianas.dl_ebitda is none %}—
+      {%- else %}{{ b.medianas.dl_ebitda|num(1) }}x{% endif %}</td>
+    <td class="n">{{ b.medianas.payout|num(0) if b.medianas.payout is not none
+      else '—' }}{% if b.medianas.payout is not none %}%{% endif %}</td>
+    <td class="n"><b>{{ b.medianas.dy|num if b.medianas.dy else '—' }}{%
+      if b.medianas.dy %}%{% endif %}</b></td>
+    <td class="n">{{ b.medianas.roe|num(0) if b.medianas.roe else '—'
+      }}{% if b.medianas.roe %}%{% endif %}</td>
+    <td class="n">{{ b.medianas.pvp|num if b.medianas.pvp else '—' }}</td>
+    <td></td>
+  </tr>
+
+  {% for l in b.linhas %}
+  {% if l.ausente %}
+  <tr class="reprovado">
+    <td><span class="empresa">{{ l.nome }}</span>
+        <span class="cod">{{ l.ticker }}</span></td>
+    <td colspan="9" class="na">não encontrado no Fundamentus —
+      confira o código em <code>config/renda.yaml</code></td>
+  </tr>
+  {% else %}
+  <tr class="{{ 'reprovado' if not l.passa }} {{ 'tenho' if l.tenho }}"
+      style="cursor:pointer"
+      onclick="if(!getSelection().toString()&&!event.target.closest('a'))location='/renda/{{ l.ticker }}'">
+    <td>
+      <span class="empresa"><a href="/renda/{{ l.ticker }}">{{ l.nome }}</a></span>
+      <span class="cod">{{ l.ticker }}</span>
+      {% if l.tenho %}<span class="marca-tenho">na carteira</span>{% endif %}
+    </td>
+    <td class="n">{{ l.cotacao|num }}</td>
+    <td class="n">{% if l.lucro_preco is not none %}{{ l.lucro_preco|num }}%
+        {%- else %}<span class="na">—</span>{% endif %}</td>
+    <td class="n">
+      {% if l.preco_justo is not none %}
+        <b>{{ l.preco_justo|num }}</b>
+        <span class="delta">
+          {%- if l.desconto|abs < 0.5 %}na cota
+          {%- elif l.desconto > 0 %}{{ l.desconto|num(0) }}% acima da cota
+          {%- else %}{{ (-l.desconto)|num(0) }}% abaixo da cota{% endif %}</span>
+      {% else %}<span class="na">—</span>{% endif %}
+    </td>
+    <td class="n">
+      {% if l.sem_ebitda %}<span class="na">n/a</span>
+      {% elif l.dl_ebitda is none %}<span class="na">—</span>
+      {% else %}<span class="{{ 'ruim-num' if l.testes.divida is false }}">
+        {{ l.dl_ebitda|num(1) }}x</span>{% endif %}
+    </td>
+    <td class="n">
+      {% if l.payout is not none %}
+        <span class="{{ 'ruim-num' if l.testes.payout is false }}">
+          {{ l.payout|num(0) }}%</span>
+        {% if l.payout_vs_setor is not none %}
+        <span class="delta">{{ l.payout_vs_setor|delta(0) }} p.p.</span>
+        {% endif %}
+      {% else %}<span class="na">—</span>{% endif %}
+    </td>
+    <td class="n"><b>{{ l.dy|num if l.dy else '—' }}{% if l.dy %}%{% endif %}</b>
+      {% if l.dy_vs_setor is not none %}
+      <span class="delta">{{ l.dy_vs_setor|delta }} p.p. vs setor</span>
+      {% endif %}</td>
+    <td class="n" style="color:var(--ink-2)">{{ l.roe|num(0) if l.roe else '—'
+      }}{% if l.roe %}%{% endif %}</td>
+    <td class="n" style="color:var(--ink-2)">{{ l.pvp|num if l.pvp else '—' }}</td>
+    <td>{% if l.passa %}{{ estado('verde', 'passa') }}
+        {%- else %}{{ estado('vermelho', '%d critério%s' % (l.n_reprovados,
+           's' if l.n_reprovados != 1 else '')) }}{% endif %}</td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endfor %}
+
+<p class="legenda-tabela" style="margin-top:26px">
+  <b>L/P</b> é o inverso do P/L — quanto a empresa lucra por real investido,
+  lido como rendimento. <b>Payout</b> = dividendo ÷ lucro, calculado como
+  DY × P/L. A linha cinza no topo de cada bloco é a <b>mediana</b>, não a
+  média: um payout de 250% num ano de venda de ativo puxaria a média do setor
+  inteiro e estragaria a referência de todos os vizinhos.
+</p>
+<p class="legenda-tabela">
+  O <b>“vs setor”</b> é neutro de propósito, sem cor de bom ou ruim. DY acima
+  das pares tanto pode ser uma empresa que distribui mais quanto um preço que
+  caiu por um motivo que o indicador não mostra — o payout e o L/P da mesma
+  linha é que separam os dois casos.
+</p>
+<p class="legenda-tabela">
+  <b>Banco não tem EBITDA</b>, e por isso o setor inteiro aparece com
+  <span class="na">n/a</span> na coluna de dívida: para um banco a dívida é
+  matéria-prima do negócio, não sinal de alavancagem — o critério simplesmente
+  não se aplica, e inventar um número ali seria pior que deixar em branco.
+  Bancos são avaliados pelos outros três.
+</p>
+
+{% endblock %}

@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icone, estado %}
+{% block titulo %}Projeções · Painel{% endblock %}
+
+{% block estilo %}
+<style>
+.aviso-forte{display:flex;gap:11px;align-items:flex-start;
+  background:var(--superficie);border:1px solid var(--linha);
+  border-left:3px solid var(--atencao);border-radius:var(--r);
+  padding:14px 16px;margin-bottom:14px;font-size:13px;color:var(--ink-2);
+  max-width:80ch;line-height:1.6}
+.aviso-forte svg{flex:none;margin-top:2px;color:var(--atencao)}
+.aviso-forte b{color:var(--ink)}
+
+.painel-g{background:var(--superficie);border:1px solid var(--linha);
+          border-radius:var(--r);padding:20px 22px;margin-bottom:14px}
+.painel-g > h3{margin:0 0 3px;font-size:13px;font-weight:600;
+               text-transform:uppercase;letter-spacing:.06em}
+.painel-g > p.sub{margin:0 0 18px;font-size:12.5px;color:var(--ink-2);
+                  max-width:76ch}
+
+.destaques{display:flex;gap:34px;flex-wrap:wrap;margin-bottom:20px}
+.destaques .item dt{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+                    letter-spacing:.055em;margin-bottom:3px}
+.destaques .item dd{margin:0;font-size:24px;font-weight:600;
+                    letter-spacing:-.02em}
+.destaques .item small{font-size:11.5px;color:var(--ink-2);font-weight:400;
+                       display:block;margin-top:2px;letter-spacing:0}
+
+.simulador{background:var(--superficie);border:1px solid var(--linha);
+           border-radius:var(--r);padding:18px 22px;margin-bottom:16px}
+.simulador h3{margin:0 0 14px;font-size:13px;font-weight:600;
+              text-transform:uppercase;letter-spacing:.06em}
+.grupo{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;
+       padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--linha)}
+.grupo:last-of-type{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.grupo > .rotulo-grupo{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+       letter-spacing:.055em;width:100%;margin-bottom:-6px}
+.campo{display:flex;flex-direction:column;gap:5px}
+.campo label{font-size:11px;color:var(--ink-3);text-transform:uppercase;
+             letter-spacing:.055em}
+.campo input,.campo select{background:var(--plano);border:1px solid var(--borda);
+  border-radius:6px;padding:8px 10px;font:400 14px system-ui,sans-serif;
+  color:var(--ink);font-variant-numeric:tabular-nums;width:118px}
+.campo.medio input,.campo.medio select{width:172px}
+.campo input:focus,.campo select:focus{outline:2px solid var(--acento);
+  outline-offset:-1px;border-color:transparent}
+.campo .dica{font-size:11px;color:var(--ink-3)}
+.check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)}
+.botao{background:var(--acento);color:#fff;border:0;border-radius:6px;
+       padding:9px 18px;font:600 13.5px system-ui,sans-serif;cursor:pointer}
+.botao:hover{filter:brightness(1.08)}
+.botao.fraco{background:transparent;color:var(--ink-2);
+             border:1px solid var(--borda);font-weight:400}
+.botao.fraco:hover{border-color:var(--acento);color:var(--acento);filter:none}
+.marca-sim{font-size:12px;color:var(--ink-2);display:inline-flex;
+           align-items:center;gap:6px}
+</style>
+{% endblock %}
+
+{% block conteudo %}
+
+<div class="cabeca" style="display:flex;align-items:baseline;gap:14px;
+                           flex-wrap:wrap;margin-bottom:18px">
+  <h1 style="font-size:26px">Projeções</h1>
+  <span style="color:var(--ink-2);font-size:13px">
+    {{ p.premissas.horizonte_anos }} anos · aportando
+    {{ p.premissas.aporte_mensal|dinheiro }} por mês</span>
+</div>
+
+<form class="simulador" method="get" action="/projecoes" id="sim">
+  <h3>Simular</h3>
+
+  <div class="grupo">
+    <div class="campo">
+      <label for="aporte_mensal">Aporte mensal (R$)</label>
+      <input type="number" name="aporte_mensal" id="aporte_mensal" step="any"
+             min="0" value="{{ p.premissas.aporte_mensal }}">
+    </div>
+    <div class="campo">
+      <label for="horizonte_anos">Horizonte (anos)</label>
+      <input type="number" name="horizonte_anos" id="horizonte_anos" min="1"
+             max="60" value="{{ p.premissas.horizonte_anos }}">
+    </div>
+    <div class="campo medio">
+      <label for="distribuicao_aporte">Destino do aporte</label>
+      <select name="distribuicao_aporte" id="distribuicao_aporte">
+        <option value="rebalancear"
+          {{ 'selected' if p.premissas.distribuicao_aporte == 'rebalancear' }}>
+          pilar mais defasado</option>
+        <option value="proporcional"
+          {{ 'selected' if p.premissas.distribuicao_aporte == 'proporcional' }}>
+          proporcional à meta</option>
+      </select>
+    </div>
+    <label class="check" style="padding-bottom:9px">
+      <input type="checkbox" name="reinvestir_proventos"
+             {{ 'checked' if p.premissas.reinvestir_proventos }}>
+      reinvestir proventos
+    </label>
+  </div>
+
+  <div class="grupo">
+    <span class="rotulo-grupo">Valorização real ao ano, sem contar proventos</span>
+    <div class="campo">
+      <label for="val_acoes">Ações (%)</label>
+      <input type="number" name="val_acoes" id="val_acoes" step="any"
+             value="{{ p.premissas.valorizacao_real_anual.acoes }}">
+    </div>
+    <div class="campo">
+      <label for="val_real_estate">Real Estate (%)</label>
+      <input type="number" name="val_real_estate" id="val_real_estate" step="any"
+             value="{{ p.premissas.valorizacao_real_anual.real_estate }}">
+    </div>
+    <div class="campo">
+      <label for="val_alternativos">Alternativos (%)</label>
+      <input type="number" name="val_alternativos" id="val_alternativos" step="any"
+             value="{{ p.premissas.valorizacao_real_anual.alternativos }}">
+    </div>
+    <div class="campo">
+      <label for="cen_pessimista">Pessimista (p.p.)</label>
+      <input type="number" name="cen_pessimista" id="cen_pessimista" step="any"
+             value="{{ p.premissas.cenarios.pessimista }}">
+    </div>
+    <div class="campo">
+      <label for="cen_otimista">Otimista (p.p.)</label>
+      <input type="number" name="cen_otimista" id="cen_otimista" step="any"
+             value="{{ p.premissas.cenarios.otimista }}">
+    </div>
+  </div>
+
+  <div class="grupo">
+    <span class="rotulo-grupo">Cenário macro de longo prazo — em branco usa o de hoje</span>
+    <div class="campo">
+      <label for="cdi_lp">CDI (% a.a.)</label>
+      <input type="number" name="cdi_lp" id="cdi_lp" step="any"
+             value="{{ p.premissas.macro_longo_prazo.cdi if p.premissas.macro_longo_prazo.cdi is not none }}"
+             placeholder="{{ d.macro.cdi|num }}">
+      <span class="dica">hoje {{ d.macro.cdi|num }}%</span>
+    </div>
+    <div class="campo">
+      <label for="ipca_lp">IPCA (% a.a.)</label>
+      <input type="number" name="ipca_lp" id="ipca_lp" step="any"
+             value="{{ p.premissas.macro_longo_prazo.ipca if p.premissas.macro_longo_prazo.ipca is not none }}"
+             placeholder="{{ d.macro.ipca_12m|num }}">
+      <span class="dica">hoje {{ d.macro.ipca_12m|num }}%</span>
+    </div>
+    <button class="botao" type="submit">Simular</button>
+    <button class="botao fraco" type="submit" formmethod="post"
+            formaction="/projecoes/salvar">Salvar como padrão</button>
+    {% if p.tem_salvo %}
+    <button class="botao fraco" type="submit" formmethod="post"
+            formaction="/projecoes/restaurar"
+            formnovalidate>Voltar ao arquivo</button>
+    {% endif %}
+  </div>
+
+  {% if p.simulando %}
+  <p class="marca-sim" style="margin:14px 0 0">{{ icone('cinza', 13) }}
+    Simulação não salva — os números abaixo usam os valores do formulário.
+    Use <b>Salvar como padrão</b> para mantê-los.</p>
+  {% endif %}
+</form>
+
+<div class="aviso-forte">
+  {{ icone('amarelo', 16) }}
+  <span><b>Projeção não é previsão.</b> Tudo abaixo é a aritmética das
+  premissas de <code>config/projecao.yaml</code> — mude uma delas e o
+  resultado muda junto. Os valores estão em <b>moeda de hoje</b>: um
+  patrimônio de {{ p.base.final|dinheiro }} aqui significa esse poder de
+  compra, não o número que aparecerá no extrato lá na frente, que será
+  maior e comprará o mesmo.</span>
+</div>
+
+{% if p.alerta_caixa %}
+<div class="aviso-forte">
+  {{ icone('amarelo', 16) }}
+  <span><b>A premissa macro está distorcendo esta projeção.</b> Com o CDI de
+  hoje ({{ p.macro_lp.cdi|num }}%) e o IPCA em {{ p.macro_lp.ipca|num }}%, o
+  seu caixa rende <b>{{ p.caixa_real|num }}% ao ano acima da inflação</b> —
+  mais que a renda variável nas suas premissas. Projetar isso por
+  {{ p.premissas.horizonte_anos }} anos assume que o Brasil mantém juro real
+  perto de {{ p.macro_lp.juro_real|num }}% por
+  {{ p.premissas.horizonte_anos }} anos seguidos, o que empurra a conta toda
+  a favor da renda fixa. Para testar outro cenário, preencha
+  <code>macro_longo_prazo</code> em <code>config/projecao.yaml</code>.</span>
+</div>
+{% endif %}
+
+<div class="painel-g">
+  <h3>Patrimônio projetado</h3>
+  <p class="sub">Linha cheia é o cenário base; a faixa em volta vai do
+    pessimista ({{ p.premissas.cenarios.pessimista|num(1) }} p.p. na
+    valorização) ao otimista (+{{ p.premissas.cenarios.otimista|num(1) }} p.p.).
+    A faixa está aí para o número do meio não ser lido como promessa.</p>
+
+  <dl class="destaques">
+    <div class="item"><dt>Hoje</dt><dd>{{ p.base.inicial|dinheiro }}</dd></div>
+    <div class="item"><dt>Em {{ p.premissas.horizonte_anos }} anos</dt>
+      <dd>{{ p.base.final|dinheiro }}
+        <small>entre {{ p.pessimista.final|dinheiro }} e
+               {{ p.otimista.final|dinheiro }}</small></dd></div>
+    <div class="item"><dt>Você coloca</dt>
+      <dd>{{ (p.base.inicial + p.base.aportado)|dinheiro }}
+        <small>o que tem hoje mais {{ p.premissas.horizonte_anos }} anos
+               de aporte</small></dd></div>
+    <div class="item"><dt>Multiplicador</dt>
+      <dd>{{ (p.base.final / (p.base.inicial + p.base.aportado))|num(1) }}×
+        <small>sobre o dinheiro que você colocou — não sobre o de hoje</small>
+      </dd></div>
+  </dl>
+
+  {{ p.grafico_patrimonio|safe }}
+  <div class="chaves">
+    <span><i class="k1"></i>cenário base</span>
+    <span><i class="kbanda"></i>entre pessimista e otimista</span>
+    <span style="color:var(--ink-3)">eixo horizontal em anos</span>
+  </div>
+</div>
+
+<div class="painel-g">
+  <h3>Renda de proventos</h3>
+  <p class="sub">Quanto a carteira deposita por mês, sem vender nada. Calculado
+    com o dividend yield que os seus ativos efetivamente pagaram nos últimos 12
+    meses — não com uma expectativa. ETFs de índice entram com zero porque
+    reinvestem internamente em vez de distribuir.</p>
+
+  <dl class="destaques">
+    <div class="item"><dt>Hoje</dt>
+      <dd>{{ p.base.renda_mensal_hoje|dinheiro }}<small>por mês</small></dd></div>
+    <div class="item"><dt>Em {{ p.premissas.horizonte_anos }} anos</dt>
+      <dd>{{ p.base.renda_mensal_final|dinheiro }}
+        <small>por mês, em poder de compra de hoje</small></dd></div>
+    <div class="item"><dt>Total recebido no período</dt>
+      <dd>{{ p.base.proventos|dinheiro }}</dd></div>
+  </dl>
+
+  {{ p.grafico_renda|safe }}
+  <div class="chaves">
+    <span><i class="k1"></i>provento mensal</span>
+    <span style="color:var(--ink-3)">eixo horizontal em anos</span>
+  </div>
+</div>
+
+<div class="painel-g">
+  <h3>De onde vem o patrimônio</h3>
+  <p class="sub">A parte que depende de premissa é só a valorização. O que
+    você aporta é decisão sua, e os proventos vêm de dado observado — juntos
+    costumam pesar mais do que a intuição sugere.</p>
+
+  {{ p.grafico_composicao|safe }}
+  <div class="chaves">
+    <span><i class="k1"></i>seus aportes — {{ p.base.aportado|dinheiro }}</span>
+    <span><i class="k2"></i>proventos reinvestidos — {{ p.base.proventos|dinheiro }}</span>
+    <span><i class="k3"></i>valorização — {{ p.base.valorizacao|dinheiro }}</span>
+  </div>
+  <p style="font-size:12px;color:var(--ink-2);margin:14px 0 0">
+    Mais o patrimônio de hoje, {{ p.base.inicial|dinheiro }}.
+  </p>
+</div>
+
+<h2 class="secao">Premissas por pilar
+  <span class="conta">o retorno total é o que você deve achar plausível</span></h2>
+<div class="quadro">
+<table>
+  <thead><tr>
+    <th>Pilar</th><th class="n">Valor hoje</th>
+    <th class="n">Proventos</th><th class="n">Valorização real</th>
+    <th class="n">Retorno total real</th><th>Origem</th>
+  </tr></thead>
+  <tbody>
+  {% for l in p.pilares %}
+  <tr>
+    <td><span class="papel">{{ l.nome }}</span></td>
+    <td class="n">{{ l.valor|dinheiro }}</td>
+    <td class="n">{% if l.dy is not none %}{{ l.dy|num }}%{% else %}—{% endif %}</td>
+    <td class="n">{% if l.valorizacao is not none %}{{ l.valorizacao|num }}%
+        {%- else %}—{% endif %}</td>
+    <td class="n"><b>{{ l.total|num }}%</b></td>
+    <td style="color:var(--ink-2);font-size:12.5px">
+      {% if l.chave == 'caixa' %}taxa contratada de cada título
+      {% else %}DY observado + sua premissa de valorização{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if p.titulos_caixa %}
+<h2 class="secao">Renda fixa contratada
+  <span class="conta">a única parte da projeção que não depende de premissa de mercado</span></h2>
+<div class="quadro">
+<table>
+  <thead><tr><th>Título</th><th class="n">Valor</th>
+    <th class="n">Nominal</th><th class="n">Real</th></tr></thead>
+  <tbody>
+  {% for t in p.titulos_caixa %}
+  <tr>
+    <td><span class="papel">{{ t.nome }}</span></td>
+    <td class="n">{{ t.valor|dinheiro }}</td>
+    <td class="n">{{ t.nominal|num }}%</td>
+    <td class="n"><b>{{ t.real|num }}%</b></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% endblock %}

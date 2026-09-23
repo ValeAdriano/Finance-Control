@@ -1,0 +1,295 @@
+# ============================================================
+#  REGRAS DE AVALIACAO
+#
+#  Cada metrica e olhada por ate 4 LENTES independentes:
+#
+#   historica -> onde o valor de hoje esta na propria historia do ativo
+#                (percentil dos ultimos N anos). Responde:
+#                "esta barato em relacao a ele mesmo?"
+#
+#   regra     -> as faixas que VOCE define aqui embaixo. Responde:
+#                "esta dentro do que eu aceito?"
+#
+#   pares     -> onde o valor esta em relacao aos ativos do mesmo
+#                segmento. Responde: "esta caro perto dos concorrentes?"
+#
+#   macro     -> comparacao com CDI / IPCA / Selic do dia. Responde:
+#                "compensa o risco frente a renda fixa?"
+#
+#  Cada lente da uma nota 0-100. A nota da metrica e a media
+#  ponderada das lentes disponiveis. O score do ativo e a media
+#  ponderada das metricas.
+# ============================================================
+
+# Quanto cada lente pesa. Se voce confia mais no historico do
+# proprio ativo do que na sua faixa fixa, aumente 'historica'.
+pesos_lentes:
+  historica: 0.30
+  regra:     0.30
+  pares:     0.25
+  macro:     0.15
+
+# Janela do historico proprio, em anos.
+janela_historico_anos: 3
+
+# Faixas do veredito final (score 0-100).
+vereditos:
+  atende:   70    # >= 70 -> atende seus criterios
+  observar: 45    # 45-70 -> zona cinzenta
+                  # < 45  -> fora dos seus criterios
+
+# ------------------------------------------------------------
+#  COMO LER AS FAIXAS
+#  otimo / aceitavel / ruim geram uma curva de nota:
+#     valor no 'otimo'     -> 100
+#     valor no 'aceitavel' ->  60
+#     valor no 'ruim'      ->   0
+#  com interpolacao linear entre os pontos. A direcao diz se
+#  numero menor e melhor (P/VP) ou maior e melhor (DY).
+# ------------------------------------------------------------
+
+perfis:
+
+  fii_tijolo:
+    descricao: "FII de imóveis físicos — lajes, shoppings, galpões, renda urbana"
+    # rendimento de FII e isento de IR para pessoa fisica, entao a
+    # lente macro compara com o CDI LIQUIDO. Se a regra tributaria
+    # mudar, basta virar para false aqui.
+    isento_ir: true
+    metricas:
+      pvp:
+        rotulo: "P/VP"
+        direcao: menor_melhor
+        peso: 3
+        otimo: 0.90
+        aceitavel: 1.02
+        ruim: 1.25
+        ancora_macro: null
+      dy:
+        rotulo: "Dividend Yield 12m"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 3
+        otimo: 11.0
+        aceitavel: 8.5
+        ruim: 6.0
+        ancora_macro: cdi          # compara com o CDI do dia
+      vacancia:
+        rotulo: "Vacância média"
+        unidade: "%"
+        direcao: menor_melhor
+        peso: 2
+        otimo: 3.0
+        aceitavel: 10.0
+        ruim: 25.0
+      cap_rate:
+        rotulo: "Cap Rate"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 1
+        otimo: 10.0
+        aceitavel: 7.5
+        ruim: 5.0
+      liquidez:
+        rotulo: "Liquidez diária"
+        unidade: "R$"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 3000000
+        aceitavel: 500000
+        ruim: 100000
+
+  fii_papel:
+    descricao: "FII de CRI — recebíveis indexados a IPCA ou CDI"
+    isento_ir: true
+    metricas:
+      pvp:
+        rotulo: "P/VP"
+        direcao: menor_melhor
+        peso: 4
+        otimo: 0.95          # fundo de papel raramente merece agio grande
+        aceitavel: 1.03
+        ruim: 1.12
+      dy:
+        rotulo: "Dividend Yield 12m"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 4
+        otimo: 13.0
+        aceitavel: 10.0
+        ruim: 8.0
+        ancora_macro: cdi
+      liquidez:
+        rotulo: "Liquidez diária"
+        unidade: "R$"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 3000000
+        aceitavel: 500000
+        ruim: 100000
+
+  acao_br:
+    descricao: "Ação listada na B3"
+    # Deixe false se dividendo de acao passar a ser tributado.
+    isento_ir: true
+    metricas:
+      pl:
+        rotulo: "P/L"
+        direcao: menor_melhor
+        peso: 3
+        otimo: 7.0
+        aceitavel: 12.0
+        ruim: 20.0
+      pvp:
+        rotulo: "P/VP"
+        direcao: menor_melhor
+        peso: 2
+        otimo: 1.0
+        aceitavel: 2.0
+        ruim: 4.0
+      dy:
+        rotulo: "Dividend Yield"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 8.0
+        aceitavel: 5.0
+        ruim: 2.0
+        # SEM ancora macro de proposito: o retorno de uma acao e dividendo
+        # MAIS valorizacao. Comparar so o dividendo com o CDI reprovaria
+        # qualquer empresa de crescimento. Descomente se quiser mesmo:
+        # ancora_macro: cdi
+      roe:
+        rotulo: "ROE"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 3
+        otimo: 20.0
+        aceitavel: 12.0
+        ruim: 5.0
+      div_liq_pl:
+        rotulo: "Dívida líquida / Patrimônio"
+        direcao: menor_melhor
+        peso: 2
+        otimo: 0.3
+        aceitavel: 1.0
+        ruim: 2.5
+      cresc_rec_5a:
+        rotulo: "Crescimento da receita em 5 anos"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 15.0
+        aceitavel: 5.0
+        ruim: 0.0
+      liquidez:
+        rotulo: "Liquidez 2 meses"
+        unidade: "R$"
+        direcao: maior_melhor
+        peso: 1
+        otimo: 50000000
+        aceitavel: 5000000
+        ruim: 500000
+
+  etf_br:
+    descricao: "ETF de índice na B3 — IVVB11, BOVA11, GOLD11, NASD11"
+    # Um ETF de índice NÃO tem P/VP nem P/L próprios, e os brasileiros não
+    # distribuem dividendos (reinvestem internamente). Não existe análise
+    # fundamentalista a fazer aqui: o único parâmetro disponível é o preço
+    # contra a própria história. Por isso este perfil avalia só timing.
+    #
+    # RESSALVA IMPORTANTE: num índice em tendência de alta de longo prazo,
+    # estar acima da média móvel é o estado NORMAL, não um alerta. Um score
+    # baixo aqui significa "não está descontado agora", não "ativo ruim".
+    isento_ir: false
+    metricas:
+      premio_media_200d:
+        rotulo: "Prêmio sobre a média de 200 dias"
+        unidade: "%"
+        direcao: menor_melhor
+        peso: 3
+        otimo: -5.0
+        aceitavel: 8.0
+        ruim: 25.0
+      dist_maxima_52s:
+        rotulo: "Desconto da máxima de 52 semanas"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 15.0
+        aceitavel: 5.0
+        ruim: 0.0
+
+  acao_us:
+    descricao: "Ação listada nos EUA — cobertura fundamentalista menor"
+    metricas:
+      dy:
+        rotulo: "Dividend Yield 12m"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 4.0
+        aceitavel: 2.0
+        ruim: 0.5
+      dist_maxima_52s:
+        rotulo: "Desconto da máxima de 52 semanas"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 2
+        otimo: 25.0
+        aceitavel: 10.0
+        ruim: 0.0
+      premio_media_200d:
+        rotulo: "Prêmio sobre a média de 200 dias"
+        unidade: "%"
+        direcao: menor_melhor
+        peso: 2
+        otimo: -5.0
+        aceitavel: 8.0
+        ruim: 25.0
+
+  etf_us:
+    descricao: "ETF — avaliado por preço relativo e distribuição"
+    metricas:
+      dy:
+        rotulo: "Dividend Yield 12m"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 1
+        otimo: 3.0
+        aceitavel: 1.5
+        ruim: 0.3
+      dist_maxima_52s:
+        rotulo: "Desconto da máxima de 52 semanas"
+        unidade: "%"
+        direcao: maior_melhor
+        peso: 3
+        otimo: 20.0
+        aceitavel: 8.0
+        ruim: 0.0
+      premio_media_200d:
+        rotulo: "Prêmio sobre a média de 200 dias"
+        unidade: "%"
+        direcao: menor_melhor
+        peso: 2
+        otimo: -5.0
+        aceitavel: 8.0
+        ruim: 25.0
+
+# ------------------------------------------------------------
+#  CLASSIFICACAO DE FII
+#  O Fundamentus erra alguns segmentos (ex: classifica MXRF11 como
+#  Logistica, sendo fundo de papel). Force a mao aqui quando precisar.
+# ------------------------------------------------------------
+override_perfil:
+  MXRF11: fii_papel
+  KNCR11: fii_papel
+  IRDM11: fii_papel
+  RECR11: fii_papel
+  CPTS11: fii_papel
+
+# Segmentos do Fundamentus que sao fundo de papel.
+segmentos_papel:
+  - "Títulos e Val. Mob."
+  - "Titulos e Val. Mob."
+  - "Papel"

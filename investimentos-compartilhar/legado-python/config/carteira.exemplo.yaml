@@ -1,0 +1,102 @@
+# ============================================================
+#  CARTEIRA DE EXEMPLO  —  substitua tudo por o que é seu
+#
+#  Esta é uma carteira FICTÍCIA, com quantidades redondas de
+#  propósito para deixar claro que é exemplo. Ela existe para a
+#  ferramenta abrir funcionando no primeiro uso e para mostrar o
+#  formato de cada campo.
+#
+#  Para começar: copie este arquivo para `carteira.yaml`, no mesmo
+#  diretório, e edite. O `carteira.yaml` é o que a ferramenta lê;
+#  este aqui nunca é lido, só serve de molde.
+#
+#      cp config/carteira.exemplo.yaml config/carteira.yaml
+# ============================================================
+
+# Alocação-alvo por pilar, em %. O padrão ARCA é 25% em cada.
+# O painel compara a alocação real com esta meta e mostra quanto
+# falta (ou sobra) em reais para cada pilar.
+alocacao_alvo:
+  acoes: 25
+  real_estate: 25
+  alternativos: 25
+  caixa: 25
+
+# ------------------------------------------------------------
+#  ATIVOS QUE VOCÊ TEM
+#
+#  classe: acao_br | etf_br | fii | acao_us | etf_us
+#          — decide qual perfil de `regras.yaml` avalia o ativo
+#  pilar:  acoes | real_estate | alternativos | caixa
+#          — decide em qual meta da ARCA ele conta
+#
+#  A `quantidade` vale enquanto não houver aportes registrados. Assim
+#  que você registrar compras (na aba Aportes ou importando extrato),
+#  a posição e o preço médio passam a vir de lá, que é a fonte exata.
+# ------------------------------------------------------------
+carteira:
+
+  # --------- Ações -----------------------------------------
+  - {ticker: BOVA11, classe: etf_br,  pilar: acoes,        quantidade: 10}
+  - {ticker: ITSA4,  classe: acao_br, pilar: acoes,        quantidade: 100}
+  - {ticker: EGIE3,  classe: acao_br, pilar: acoes,        quantidade: 20}
+
+  # --------- Real Estate -----------------------------------
+  - {ticker: KNCR11, classe: fii,     pilar: real_estate,  quantidade: 50}
+  - {ticker: VISC11, classe: fii,     pilar: real_estate,  quantidade: 30}
+
+  # --------- Alternativos ----------------------------------
+  - {ticker: IVVB11, classe: etf_br,  pilar: alternativos, quantidade: 10}
+  - {ticker: GOLD11, classe: etf_br,  pilar: alternativos, quantidade: 50}
+
+# ------------------------------------------------------------
+#  ATIVOS QUE VOCÊ MONITORA MAS NÃO TEM
+#  Entram em todas as análises e na aba Simular, sem contar
+#  no patrimônio.
+# ------------------------------------------------------------
+watchlist:
+  - {ticker: TAEE11, classe: acao_br, pilar: acoes}
+  - {ticker: MXRF11, classe: fii,     pilar: real_estate}
+
+# ------------------------------------------------------------
+#  CAIXA E RENDA FIXA
+#  Não há API pública confiável para CDB, então a taxa é declarada
+#  aqui e comparada com o CDI/IPCA do dia, vindos do Banco Central.
+#
+#    tipo: cdi        -> taxa é o % do CDI         (110 = 110% do CDI)
+#    tipo: ipca       -> taxa é o spread real      (5 = IPCA + 5%)
+#    tipo: prefixado  -> taxa é o % ao ano nominal (13.2)
+#
+#  Onde a taxa está como `null` a ferramenta NÃO chuta: ela mostra
+#  "taxa não informada" e deixa o título fora da comparação. Basta
+#  preencher com o que você contratou. O último item abaixo está
+#  assim de propósito, para você ver como aparece na tela.
+# ------------------------------------------------------------
+renda_fixa:
+  - nome: CDB pós-fixado
+    tipo: cdi
+    taxa: 102.0
+    vencimento: null
+    valor_aplicado: 1000
+    pilar: caixa
+
+  - nome: CDB IPCA+
+    tipo: ipca
+    taxa: 6.5
+    vencimento: null
+    valor_aplicado: 1000
+    pilar: caixa
+
+  - nome: Tesouro Prefixado
+    tipo: prefixado
+    taxa: 13.0
+    vencimento: null
+    valor_aplicado: 500
+    pilar: caixa
+
+  - nome: Conta remunerada (taxa a preencher)
+    tipo: cdi
+    taxa: null
+    vencimento: null
+    valor_aplicado: 500
+    pilar: caixa

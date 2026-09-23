@@ -1,0 +1,72 @@
+# ============================================================
+#  PREMISSAS DA PROJEÇÃO
+#
+#  Projeção não é previsão. Os números desta aba são a aritmética
+#  das premissas abaixo — se elas estiverem erradas, o resultado
+#  estará errado, por mais bonito que seja o gráfico.
+#
+#  Tudo é calculado em MOEDA DE HOJE (termos reais, já descontada
+#  a inflação). Um patrimônio projetado de R$ 200 mil aqui significa
+#  R$ 200 mil com o poder de compra de hoje — não o número nominal
+#  que aparecerá no extrato daqui a 20 anos, que será bem maior e
+#  compra a mesma coisa.
+# ============================================================
+
+horizonte_anos: 20
+
+# Quanto você aporta por mês, em reais de hoje.
+aporte_mensal: 500
+
+# Os proventos recebidos voltam para a carteira?
+reinvestir_proventos: true
+
+# Para onde vai o aporte de cada mês:
+#   rebalancear -> tudo para o pilar mais distante da meta ARCA
+#                  (é o rebalanceamento por aporte, sem vender nada)
+#   proporcional -> distribuído conforme a meta de cada pilar
+distribuicao_aporte: rebalancear
+
+# ------------------------------------------------------------
+#  VALORIZAÇÃO REAL ESPERADA, EM % AO ANO
+#
+#  ATENÇÃO: aqui entra SÓ a valorização da cota, acima da inflação.
+#  Os proventos NÃO entram nesta conta — eles são calculados à parte,
+#  a partir do dividend yield que cada ativo realmente paga hoje.
+#  Somar as duas coisas aqui contaria o dividendo duas vezes.
+#
+#  É por isso que real_estate aparece baixo: um FII entrega quase
+#  todo o retorno via rendimento mensal, não via valorização da cota.
+#  O painel mostra o retorno total resultante para você conferir se
+#  o número faz sentido.
+#
+#  Estes são pontos de partida conservadores, não recomendação.
+#  Ajuste para o que VOCÊ acredita.
+# ------------------------------------------------------------
+valorizacao_real_anual:
+  acoes: 4.0
+  real_estate: 0.5
+  alternativos: 3.5
+  caixa: 0.0          # caixa rende pela taxa contratada, não por valorização
+
+# Cenários alternativos, em pontos percentuais somados à valorização
+# acima. Formam a banda de incerteza do gráfico.
+cenarios:
+  pessimista: -4.0
+  otimista: 3.0
+
+# ------------------------------------------------------------
+#  CENÁRIO MACRO DE LONGO PRAZO
+#
+#  Deixe null para usar o valor de hoje do Banco Central. MAS PENSE
+#  ANTES: o CDI está em 13,90% e o IPCA em 4,44%, o que dá mais de
+#  9% de juro real. Projetar isso por 20 anos assume que o Brasil
+#  mantém juro real de 9% por duas décadas — o que faria o caixa
+#  render mais que a bolsa em termos reais, provavelmente distorcendo
+#  toda a projeção a favor da renda fixa.
+#
+#  Um número de longo prazo mais defensável costuma ser bem menor.
+#  A escolha é sua; a ferramenta só aplica o que estiver aqui.
+# ------------------------------------------------------------
+macro_longo_prazo:
+  cdi: null           # % ao ano nominal; null = usa o CDI de hoje
+  ipca: null          # % ao ano;         null = usa o IPCA de hoje
