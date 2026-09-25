@@ -16,13 +16,10 @@
   // ------------------------------------------------------------------ sessão
   FC.auth = {
     async sessao() { return checa(await sb.auth.getSession()).session; },
-    async temDono() {
-      const { data, error } = await sb.rpc("painel_tem_dono");
-      if (error) return true; // na dúvida, esconde o cadastro
-      return !!data;
-    },
     async entrar(email, senha) { return checa(await sb.auth.signInWithPassword({ email, password: senha })); },
-    async cadastrar(email, senha) { return checa(await sb.auth.signUp({ email, password: senha })); },
+    async cadastrar(email, senha, nome = "") {
+      return checa(await sb.auth.signUp({ email, password: senha, options: { data: nome ? { nome } : {} } }));
+    },
     async sair() { await sb.auth.signOut(); },
     async trocarSenha(nova) { return checa(await sb.auth.updateUser({ password: nova })); },
     // verificação em duas etapas (TOTP)

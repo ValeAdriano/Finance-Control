@@ -581,6 +581,8 @@ dl { margin: 0; }
 .caixa-login h1 { font-size: 28px; text-align: center; }
 .caixa-login .sub { text-align: center; color: var(--ink-2); margin: 6px 0 var(--e4); font-size: 15px; }
 .caixa-login .form { gap: 12px; }
+.caixa-login .troca-modo { text-align: center; font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+.caixa-login .troca-modo .botao { display: inline; padding: 0 2px; min-height: 0; font-size: 14px; }
 .caixa-login .rodape { text-align: center; font-size: 12.5px; color: var(--ink-3); margin-top: var(--e4); display: flex; gap: 6px; align-items: center; justify-content: center; }
 .forca { display: flex; gap: 4px; margin-top: 2px; }
 .forca i { flex: 1; height: 4px; border-radius: 2px; background: var(--campo); transition: background .3s; }

@@ -310,7 +310,9 @@
     if (/Password should be|password.*characters/i.test(m)) return "A senha precisa de ao menos 10 caracteres, com maiúscula, minúscula e número.";
     if (/Invalid TOTP|invalid.*code/i.test(m)) return "Código incorreto. Confira o app autenticador.";
     if (/rate limit|too many/i.test(m)) return "Muitas tentativas. Espere um minuto e tente de novo.";
-    if (/já tem dono/i.test(m)) return "Este painel já tem dono. Novos cadastros estão fechados.";
+    if (/already registered|already been registered|user_already_exists/i.test(m)) return "Já existe uma conta com esse e-mail. Entre com ela.";
+    if (/Signups not allowed|signup.*disabled/i.test(m)) return "O cadastro de novas contas está desligado no momento.";
+    if (/Unable to validate email|invalid.*email/i.test(m)) return "Esse e-mail não parece válido.";
     if (/check constraint/i.test(m)) return "Algum valor está fora do permitido. Revise o formulário.";
     return m;
   }

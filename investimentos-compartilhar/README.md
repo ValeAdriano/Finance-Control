@@ -23,7 +23,7 @@ assets/js/
   telas/                   uma por aba + login + peças comuns
   app.js                   rotas, navegação, carregamento
 supabase/
-  schema.sql               tabelas, RLS, dono único
+  schema.sql               tabelas e RLS por usuário
   functions/mercado/       Fundamentus + Yahoo + Banco Central, com cache
 legado-python/             a versão Flask anterior (não é usada)
 ```
@@ -48,8 +48,7 @@ e 1 h no navegador) → scores e gráficos são recalculados no navegador.
 | `mercado_cache` | cotações públicas; só a Edge Function acessa |
 
 Todas as tabelas do usuário têm `user_id default auth.uid()` e a política
-`user_id = auth.uid()`. O gatilho `painel_um_dono_so` em `auth.users`
-recusa qualquer cadastro depois do primeiro.
+`user_id = auth.uid()`: cada conta só enxerga as próprias linhas.
 
 ## Segurança
 
@@ -57,8 +56,9 @@ recusa qualquer cadastro depois do primeiro.
   maiúscula, minúscula e número; o app recusa senhas que já vazaram
   (Have I Been Pwned por k-anonimato, só o prefixo do SHA-1 sai do
   aparelho). Trocar a senha pede a senha atual.
-- **Cadastro fechado** no Auth (`disable_signup`) e por gatilho no banco
-  (`painel_um_dono_so`).
+- **Cadastro aberto** pela tela "Criar conta": nome, e-mail e senha (as
+  mesmas regras de força e de senha vazada). Cada conta nova começa vazia e
+  a RLS isola os dados de cada uma.
 - **2FA (TOTP) opcional**, até 3 autenticadores (principal + reserva).
   Com ele ligado, a política restritiva `exige 2fa` em todas as tabelas só
   aceita sessões `aal2` — sem o código, a API devolve lista vazia e recusa

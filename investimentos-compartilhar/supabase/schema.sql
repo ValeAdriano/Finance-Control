@@ -3,8 +3,8 @@
 --
 --  Tudo o que o app guarda mora aqui. Cada linha pertence a um
 --  usuário (user_id) e a RLS só deixa cada um ver e mexer no que é
---  seu. A conta é de dono único: depois do primeiro cadastro, o banco
---  recusa qualquer outro (veja painel_um_dono_so).
+--  seu. O cadastro é aberto: qualquer pessoa cria a própria conta e
+--  só enxerga os próprios dados.
 --
 --  Rodar de novo é seguro: nada aqui apaga dado existente.
 -- ============================================================
@@ -168,33 +168,12 @@ end $$;
 alter table public.mercado_cache enable row level security;
 revoke all on public.mercado_cache from anon, authenticated;
 
--- ------------------------------------------------------------ dono único
--- O app é pessoal: o primeiro cadastro vira o dono e o banco recusa
--- qualquer outro, mesmo que alguém descubra a URL e a chave pública.
-create or replace function public.painel_um_dono_so()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  if exists (select 1 from auth.users) then
-    raise exception 'Este painel já tem dono. Novos cadastros estão fechados.';
-  end if;
-  return new;
-end $$;
-
--- só o gatilho usa esta função; ninguém a chama pela API
-revoke all on function public.painel_um_dono_so() from public, anon, authenticated;
-
+-- ------------------------------------------------------------ cadastro aberto
+-- Começou como painel de dono único (gatilho que recusava o 2º cadastro).
+-- Agora cada pessoa cria a própria conta; a RLS acima separa os dados.
 drop trigger if exists painel_um_dono_so on auth.users;
-create trigger painel_um_dono_so before insert on auth.users
-  for each row execute function public.painel_um_dono_so();
-
--- a tela de login pergunta isso para saber se mostra "criar conta".
--- Exposta ao anon DE PROPÓSITO: devolve só verdadeiro/falso.
-create or replace function public.painel_tem_dono()
-returns boolean language sql security definer set search_path = '' stable as $$
-  select exists (select 1 from auth.users);
-$$;
-revoke all on function public.painel_tem_dono() from public;
-grant execute on function public.painel_tem_dono() to anon, authenticated;
+drop function if exists public.painel_um_dono_so();
+drop function if exists public.painel_tem_dono();
 
 notify pgrst, 'reload schema';
 

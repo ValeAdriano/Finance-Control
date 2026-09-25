@@ -35,7 +35,7 @@
       ${grupo("Conta", "", html`<div class="lista">
         <div class="item"><span style="color:var(--acento)">${icone("cadeado", 22)}</span>
           <div class="principal"><div class="titulo">${u.email}</div>
-            <div class="detalhe">Dono do painel desde ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
+            <div class="detalhe">Conta criada em ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
         <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
           <input class="entrada" id="aj-nome" style="max-width:200px;min-height:38px" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
       </div>`)}
@@ -60,13 +60,12 @@
           <li>Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.</li>
           <li>Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).</li>
           <li>Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.</li>
-          <li>Cadastro fechado: o Supabase recusa contas novas, e um gatilho no banco garante que só exista o dono.</li>
           <li>Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso.</li>
         </ul></details>`)}
 
       ${grupo("Suas informações", "tudo isto está vinculado à sua conta", html`<div class="cartao">
         <dl class="kpis">${contagem.map(([n, v]) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${fmt.int(v)}</dd></div>`)}</dl>
-        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda este dono, e ninguém mais consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
+        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda esta conta, e nenhuma outra conta consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
       </div>`)}
 
       ${grupo("Aparência", "", html`<div class="lista">

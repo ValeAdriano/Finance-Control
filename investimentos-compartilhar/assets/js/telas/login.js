@@ -23,14 +23,10 @@
     let modo = etapa || "entrar";
     let fatoresMfa = [];
     if (modo === "mfa") { try { fatoresMfa = ((await FC.auth.fatores()).totp || []).filter((f) => f.status === "verified"); } catch (e) { /* segue */ } }
-    if (!etapa) {
-      const temDono = await FC.auth.temDono();
-      if (!temDono) modo = "criar";
-    }
 
     const titulos = {
       entrar: ["Finance Control", "Entre para ver sua carteira."],
-      criar: ["Bem-vindo", "Crie a conta de dono. Depois dela, o cadastro fecha para sempre."],
+      criar: ["Criar conta", "Seus investimentos em um lugar só. Só você vê o que cadastrar."],
       mfa: ["Verificação", "Digite o código de 6 dígitos do seu app autenticador."],
     };
     const [t, sub] = titulos[modo];
@@ -44,6 +40,8 @@
           <div class="campo"><label for="codigo" class="sr">Código</label>
             <input id="codigo" name="codigo" class="codigo-mfa" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required></div>
         ` : html`
+          ${modo === "criar" ? html`<div class="campo"><label for="nome" class="sr">Nome</label>
+            <input id="nome" name="nome" autocomplete="given-name" placeholder="Como quer ser chamado" maxlength="40"></div>` : ""}
           <div class="campo"><label for="email" class="sr">E-mail</label>
             <input id="email" name="email" type="email" autocomplete="username" placeholder="E-mail" required></div>
           <div class="campo"><label for="senha" class="sr">Senha</label>
@@ -58,6 +56,8 @@
         <div id="erro-login" class="mensagem erro" hidden></div>
         <button class="botao cheio" type="submit">${modo === "criar" ? "Criar conta" : modo === "mfa" ? "Verificar" : "Entrar"}</button>
         ${modo === "mfa" ? html`<button class="botao texto" type="button" id="bt-sair-mfa">Usar outra conta</button>` : ""}
+        ${modo === "entrar" ? html`<p class="troca-modo">Ainda não tem conta? <button class="botao texto" type="button" id="bt-criar">Criar conta</button></p>` : ""}
+        ${modo === "criar" ? html`<p class="troca-modo">Já tem conta? <button class="botao texto" type="button" id="bt-entrar">Entrar</button></p>` : ""}
       </form>
       <p class="rodape">${icone("cadeado", 14)} Conexão criptografada · senha protegida com bcrypt · o login fica salvo neste aparelho por até 7 dias sem uso</p>
     </div></div>`);
@@ -68,7 +68,9 @@
 
     if (modo === "criar") {
       FC.$("#senha", raiz).addEventListener("input", (e) => { FC.$("#forca", raiz).className = "forca n" + forca(e.target.value); });
+      FC.$("#bt-entrar", raiz).addEventListener("click", () => FC.telas.login(raiz, { etapa: "entrar" }));
     }
+    if (modo === "entrar") FC.$("#bt-criar", raiz).addEventListener("click", () => FC.telas.login(raiz, { etapa: "criar" }));
     if (modo === "mfa") {
       FC.$("#bt-sair-mfa", raiz).addEventListener("click", async () => { await FC.auth.sair(); FC.telas.login(raiz); });
       FC.$("#codigo", raiz).addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, ""); if (e.target.value.length === 6) form.requestSubmit(); });
@@ -92,10 +94,14 @@
           if (modo === "criar") {
             if (!senhaValida(d.senha)) throw new Error("A senha precisa de ao menos 10 caracteres, com maiúscula, minúscula e número.");
             if (d.senha !== d.senha2) throw new Error("As senhas não coincidem.");
-            await FC.auth.cadastrar(d.email, d.senha);
-            const s = await FC.auth.sessao();
-            if (!s) await FC.auth.entrar(d.email, d.senha);
-            FC.ui.aviso("Conta criada. O cadastro agora está fechado.");
+            const vazou = await FC.auth.senhaVazada(d.senha);
+            if (vazou) throw new Error(`Essa senha já apareceu em ${FC.fmt.int(vazou)} vazamento(s) de dados. Escolha outra.`);
+            const r = await FC.auth.cadastrar(d.email, d.senha, (d.nome || "").trim());
+            // com confirmação de e-mail ligada no Supabase, a sessão só vem depois do link
+            if (!r.session) {
+              return FC.telas.login(raiz, { etapa: "entrar", aviso: "Conta criada. Abra o link que enviamos para " + d.email + " e depois entre." });
+            }
+            FC.ui.aviso("Conta criada. Bem-vindo!");
             return FC.entrarNoApp();
           }
           await FC.auth.entrar(d.email, d.senha);
