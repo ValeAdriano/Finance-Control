@@ -23,8 +23,11 @@
     return "";
   };
 
+  // estados vazios: ícone da família do app num quadrado suave
+  const ICONE_VAZIO = { "🧾": "recibo", "🧭": "bussola", "💼": "carteira", "🎁": "presente", "💸": "moeda", "📅": "calendario",
+    "📈": "projecoes", "🏦": "renda", "🐂": "boi", "🐄": "boi", "⚖️": "balanca", "🧺": "cesta", "📊": "ativos" };
   C.vazio = (emoji, titulo, texto, acao) => html`<div class="vazio">
-    <div class="icone-grande">${emoji}</div><h3 style="font-size:19px;margin-bottom:6px">${titulo}</h3>
+    <div class="icone-grande">${icone(ICONE_VAZIO[emoji] || emoji, 26)}</div><h3 style="font-size:19px;margin-bottom:6px">${titulo}</h3>
     <p class="texto-p" style="margin:0 auto 16px">${texto}</p>${acao || ""}</div>`;
 
   C.indicadores = (a) => html`<span class="indicadores">${(a.destaques || []).map((m, i) => html`${i ? html`<i>·</i>` : ""}${m.rotulo_curto} <b>${fmt.metrica(m.valor, m.unidade)}</b>`)}</span>`;

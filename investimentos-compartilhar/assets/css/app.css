@@ -308,7 +308,7 @@ dl { margin: 0; }
 .lista > .item .valores small { font-size: 12.5px; color: var(--ink-2); }
 .lista > .item .chevron { color: var(--ink-3); flex: none; }
 .lista .vazio { padding: var(--e5) var(--e4); text-align: center; color: var(--ink-2); }
-.lista .vazio .icone-grande { font-size: 40px; margin-bottom: 8px; opacity: .8; }
+.vazio .icone-grande { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin: 0 auto 12px; background: var(--acento-suave); color: var(--acento); }
 .lista .grupo-titulo { padding: 10px var(--e4); font-size: 12.5px; color: var(--ink-2); background: var(--bg-3); border-top: 1px solid var(--linha); font-weight: 500; }
 .indicadores { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .indicadores b { color: var(--ink); font-weight: 600; }
@@ -837,3 +837,18 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
   .ob-opcoes { grid-template-columns: 1fr; }
   .ob-rodape .botao { min-width: 96px; }
 }
+
+/* ------------------------------------------------------------ guia da tela (ajuda) */
+.guia-resumo { font-size: 16px; line-height: 1.5; color: var(--ink); }
+.guia-rot { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); margin: var(--e4) 0 var(--e2); }
+.guia-partes { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.guia-partes li {
+  display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; padding: 12px 0;
+  opacity: 0; animation: sobe .45s var(--mola) calc(.05s + var(--i) * .05s) forwards;
+}
+.guia-partes li + li { border-top: 1px solid var(--linha); }
+.guia-ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--acento-suave); color: var(--acento); }
+.guia-partes b { font-size: 15px; font-weight: 600; }
+.guia-partes p { color: var(--ink-2); font-size: 14px; line-height: 1.45; margin-top: 2px; }
+.guia-dicas { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; line-height: 1.45; }
+.guia .botao.texto { gap: 6px; padding-left: 0; }

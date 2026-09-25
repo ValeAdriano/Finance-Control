@@ -19,6 +19,7 @@
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
     { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
   ];
+  FC.ROTAS = ROTAS;
   const NO_CELULAR = ["inicio", "ativos", "agro", "aportes"];
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
@@ -190,6 +191,7 @@
           ${ROTAS.filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}
         </nav>
         <div class="acoes-topo">
+          <button class="icone-bt" id="bt-ajuda" title="Como usar esta tela" aria-label="Como usar esta tela">${icone("ajuda", 20)}</button>
           <button class="icone-bt" id="bt-privado" title="Esconder valores (modo privado)" aria-label="Esconder valores"></button>
           <button class="icone-bt" id="bt-atualizar" title="Atualizar cotações" aria-label="Atualizar cotações">${icone("atualizar", 19)}</button>
           <a class="icone-bt" href="#/ajustes" title="Ajustes" aria-label="Ajustes" data-rota="ajustes">${icone("ajustes", 19)}</a>
@@ -200,6 +202,7 @@
         ${NO_CELULAR.map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
         <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>
       </nav></div>`);
+    FC.$("#bt-ajuda").addEventListener("click", () => FC.guiaDaTela(rotaAtual().id));
     FC.$("#bt-privado").addEventListener("click", () => {
       const v = !document.body.classList.contains("privado");
       FC.local.gravar("privado", v);
