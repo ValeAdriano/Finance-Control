@@ -256,7 +256,7 @@ grant select, insert on public.log_sistema to authenticated;
 -- Todo dia às 18h10 (Brasília) o banco chama a Edge Function, que grava
 -- a foto do dia de cada usuário. O segredo que autentica a chamada fica
 -- no Vault, não no texto do job.
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron;
 
 -- O job em si é criado fora deste arquivo, porque leva um segredo:
@@ -311,3 +311,37 @@ alter table public.ganhos add column if not exists dia_regra text
   check (dia_regra is null or dia_regra in ('dia_fixo','dia_util','ultimo_dia_util'));
 alter table public.ganhos add column if not exists dia_numero integer
   check (dia_numero is null or dia_numero between 1 and 31);
+
+-- ============================================================
+--  2FA EXIGIDO PELO BANCO
+--  Com um autenticador verificado, só uma sessão que passou pelo código
+--  (aal2) enxerga ou grava qualquer linha. Sem 2FA ligado, vale a senha.
+--  Políticas RESTRITIVAS: somam-se à política "dono" (as duas precisam
+--  aceitar a linha).
+-- ============================================================
+-- fica num schema que a API REST não expõe: só as políticas a usam
+create schema if not exists privado;
+revoke all on schema privado from public, anon;
+grant usage on schema privado to authenticated;
+create or replace function privado.mfa_ok()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((auth.jwt() ->> 'aal') = 'aal2', false)
+      or not exists (select 1 from auth.mfa_factors f
+                     where f.user_id = auth.uid() and f.status = 'verified');
+$$;
+revoke all on function privado.mfa_ok() from public, anon;
+grant execute on function privado.mfa_ok() to authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['ativos','renda_fixa','aportes','preferencias','agro_movimentos','agro_custos',
+                           'agro_pesagens','patrimonio_historico','log_sistema','ganhos'] loop
+    execute format('drop policy if exists "exige 2fa" on public.%I', t);
+    execute format($p$create policy "exige 2fa" on public.%I as restrictive for all to authenticated
+                     using ((select privado.mfa_ok()))
+                     with check ((select privado.mfa_ok()))$p$, t);
+  end loop;
+end $$;
+
+drop function if exists public.painel_mfa_ok();

@@ -51,6 +51,23 @@ Todas as tabelas do usuário têm `user_id default auth.uid()` e a política
 `user_id = auth.uid()`. O gatilho `painel_um_dono_so` em `auth.users`
 recusa qualquer cadastro depois do primeiro.
 
+## Segurança
+
+- **Supabase Auth**: senha só como hash bcrypt; mínimo de 10 caracteres com
+  maiúscula, minúscula e número; o app recusa senhas que já vazaram
+  (Have I Been Pwned por k-anonimato, só o prefixo do SHA-1 sai do
+  aparelho). Trocar a senha pede a senha atual.
+- **Cadastro fechado** no Auth (`disable_signup`) e por gatilho no banco
+  (`painel_um_dono_so`).
+- **2FA (TOTP) opcional**, até 3 autenticadores (principal + reserva).
+  Com ele ligado, a política restritiva `exige 2fa` em todas as tabelas só
+  aceita sessões `aal2` — sem o código, a API devolve lista vazia e recusa
+  gravação. Remover um autenticador pede um código válido.
+- **Sessões**: token de 15 min com rotação do refresh token; "Sair dos
+  outros aparelhos" em Ajustes; o app encerra a sessão após 7 dias sem uso.
+- **Limites** de tentativas de login e de código no servidor (`rate_limit_verify`).
+- **Web**: CSP, HSTS, X-Frame-Options e demais cabeçalhos em `vercel.json`.
+
 ## Preços e acompanhamento
 
 Fontes gratuitas, sem chave de API:

@@ -9,14 +9,22 @@
   async function mfaEstado() {
     try {
       const f = await FC.auth.fatores();
-      return (f.totp || []).find((x) => x.status === "verified") || null;
-    } catch (e) { return null; }
+      return (f.totp || []).filter((x) => x.status === "verified");
+    } catch (e) { return []; }
   }
+  const nomeFator = (f) => (f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "");
 
   FC.telas.ajustes = async function (raiz) {
     const u = FC.auth.usuario;
     const prefs = FC.estado.prefs;
-    const totp = await mfaEstado();
+    const fatores = await mfaEstado();
+    const totp = fatores[0] || null;
+    let nivel = null;
+    try { nivel = await FC.auth.nivel(); } catch (e) { /* segue */ }
+    const b = FC.estado.base;
+    const contagem = [["Ativos", b.ativos.length], ["Títulos de renda fixa", b.rendaFixa.length], ["Aportes e proventos", b.aportes.length],
+      ["Movimentos do gado", b.agro.movs.length], ["Custos do agro", b.agro.custos.length], ["Pesagens", b.agro.pesagens.length],
+      ["Ganhos", (b.ganhos || []).length], ["Registros de patrimônio", (b.historico || []).length]];
     const tema = FC.local.ler("tema", "auto");
     const alvos = prefs.alocacao_alvo;
     const r = prefs.regras;
@@ -24,18 +32,42 @@
     raiz.innerHTML = String(html`<div class="estreita">
       ${C.cabecalho("Ajustes", "Conta, segurança e os critérios que o painel aplica.")}
 
-      ${grupo("Conta e segurança", "", html`<div class="lista">
+      ${grupo("Conta", "", html`<div class="lista">
         <div class="item"><span style="color:var(--acento)">${icone("cadeado", 22)}</span>
-          <div class="principal"><div class="titulo">${u.email}</div><div class="detalhe">Dono do painel · cadastro fechado para outras contas</div></div></div>
+          <div class="principal"><div class="titulo">${u.email}</div>
+            <div class="detalhe">Dono do painel desde ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
         <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
           <input class="entrada" id="aj-nome" style="max-width:200px;min-height:38px" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
-        <div class="item clicavel" id="aj-senha"><span style="color:var(--ink-2)">${icone("editar", 20)}</span><div class="principal"><div class="titulo">Trocar senha</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
-        <div class="item clicavel" id="aj-mfa"><span style="color:${totp ? "var(--verde)" : "var(--ink-2)"}">${icone("escudo", 22)}</span>
-          <div class="principal"><div class="titulo">Verificação em duas etapas</div><div class="detalhe">${totp ? "Ligada — o login pede o código do app autenticador" : "Desligada — ligue para exigir um código além da senha"}</div></div>
-          ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}<span class="chevron">${icone("chevron", 18)}</span></div>
+      </div>`)}
+
+      ${grupo("Segurança", "", html`<div class="lista">
+        <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
+          <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
+            <div class="detalhe">${totp ? "O login pede o código do app autenticador, e o banco recusa qualquer acesso sem ele." : "Opcional. Ligue para exigir um código do celular além da senha."}</div></div>
+          ${fatores.length < 3 ? html`<button class="botao ${totp ? "sec" : ""} pequeno" id="aj-mfa-add">${totp ? "Adicionar reserva" : "Ligar"}</button>` : ""}</div>
+        ${fatores.map((f) => html`<div class="item" style="padding-left:64px">
+          <div class="principal"><div class="titulo" style="font-size:14px">${nomeFator(f)}</div><div class="detalhe">cadastrado em ${FC.datas.br(f.created_at.slice(0, 10))}</div></div>
+          <button class="botao texto pequeno" data-remove-fator="${f.id}" style="color:var(--vermelho)">Remover</button></div>`)}
+        <div class="item clicavel" id="aj-senha"><span style="color:var(--ink-2)">${icone("editar", 20)}</span>
+          <div class="principal"><div class="titulo">Trocar senha</div><div class="detalhe">pede a senha atual${totp ? " (a sessão já passou pelo 2FA)" : ""}</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+        <div class="item"><span style="color:var(--ink-2)">${icone("info", 20)}</span>
+          <div class="principal"><div class="titulo">Esta sessão</div><div class="detalhe">${nivel && nivel.currentLevel === "aal2" ? "protegida pelo código do autenticador" : "entrou só com a senha"} · encerra sozinha após 7 dias sem uso</div></div>
+          <button class="botao sec pequeno" id="aj-sair-outros">Sair dos outros aparelhos</button></div>
         <div class="item clicavel" id="aj-sair"><span style="color:var(--vermelho)">${icone("sair", 20)}</span><div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair</div></div></div>
       </div>
-      <p class="texto-p mt2">${icone("cadeado", 13)} A senha é guardada pelo Supabase Auth só como hash bcrypt, e todo o tráfego é HTTPS. Cada tabela tem Row Level Security: o banco só entrega uma linha a quem é dono dela.</p>`)}
+      <details class="mt2"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Como sua conta é protegida</summary>
+        <ul class="texto-p mt1" style="padding-left:18px;line-height:1.8">
+          <li>Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.</li>
+          <li>Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).</li>
+          <li>Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.</li>
+          <li>Cadastro fechado: o Supabase recusa contas novas, e um gatilho no banco garante que só exista o dono.</li>
+          <li>Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso.</li>
+        </ul></details>`)}
+
+      ${grupo("Suas informações", "tudo isto está vinculado à sua conta", html`<div class="cartao">
+        <dl class="kpis">${contagem.map(([n, v]) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${fmt.int(v)}</dd></div>`)}</dl>
+        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda este dono, e ninguém mais consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
+      </div>`)}
 
       ${grupo("Aparência", "", html`<div class="lista">
         <div class="item"><div class="principal"><div class="titulo">Tema</div></div>
@@ -106,7 +138,13 @@
       }, 700);
     });
     FC.$("#aj-senha", raiz).addEventListener("click", trocaSenha);
-    FC.$("#aj-mfa", raiz).addEventListener("click", () => (totp ? desligaMfa(totp) : ligaMfa()));
+    FC.$("#aj-mfa-add", raiz) && FC.$("#aj-mfa-add", raiz).addEventListener("click", () => ligaMfa(fatores.length));
+    FC.$$("[data-remove-fator]", raiz).forEach((bt) => bt.addEventListener("click", () => removeFator(fatores, bt.dataset.removeFator)));
+    FC.$("#aj-sair-outros", raiz).addEventListener("click", async (e) => {
+      if (!(await FC.ui.confirma("Encerrar a sessão em todos os outros aparelhos e navegadores? Este continua conectado.", { botao: "Encerrar" }))) return;
+      try { await FC.ui.ocupado(e.target, () => FC.auth.sairDosOutros()); FC.ui.aviso("Outros aparelhos desconectados"); FC.db.log("seguranca", { acao: "sair dos outros aparelhos" }); }
+      catch (err) { FC.ui.erro(err); }
+    });
     FC.$("#aj-sair", raiz).addEventListener("click", () => FC.sair());
 
     // ---- aparência
@@ -260,6 +298,7 @@
     precos: ["Cotações atualizadas", "verde"],
     aporte: ["Aporte", "terra"],
     importacao: ["Histórico importado", "azul"],
+    seguranca: ["Segurança", "amarelo"],
     erro: ["Erro", "vermelho"],
   };
   async function carregaLog(el) {
@@ -271,6 +310,7 @@
         const texto = l.evento === "erro" ? `${det.etapa || ""}: ${det.erro || ""}`
           : l.evento === "aporte" ? `${det.destino || ""} · ${FC.fmt.brlTexto(det.valor)}`
           : l.evento === "importacao" ? `${det.meses} mês(es) · ${det.fonte || ""}`
+          : l.evento === "seguranca" ? det.acao || ""
           : [det.patrimonio != null ? "patrimônio " + FC.fmt.brlTexto(det.patrimonio) : "", det.ativos != null ? det.ativos + " ativo(s)" : "",
              det.sem_preco && det.sem_preco.length ? "sem preço: " + det.sem_preco.join(", ") : ""].filter(Boolean).join(" · ");
         return html`<div class="item"><div class="principal"><div class="titulo">${nome} ${FC.pilula(cor, l.origem === "automatico" ? "automático" : "app")}</div>
@@ -285,6 +325,7 @@
     const f = FC.ui.folha({
       titulo: "Trocar senha",
       corpo: html`<form class="form" id="f-senha">
+        <div class="campo"><label for="s-atual">Senha atual</label><input id="s-atual" type="password" autocomplete="current-password" required></div>
         <div class="campo"><label for="s-nova">Nova senha</label><input id="s-nova" type="password" autocomplete="new-password" required></div>
         <div class="campo"><label for="s-rep">Repita</label><input id="s-rep" type="password" autocomplete="new-password" required>
           <span class="dica">Mínimo de 10 caracteres, com maiúscula, minúscula e número.</span></div>
@@ -296,23 +337,34 @@
     FC.$("[data-acao=salvar]", f.el).addEventListener("click", () => form.requestSubmit());
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const a = FC.$("#s-nova", form).value, b = FC.$("#s-rep", form).value, erro = FC.$("#s-erro", form);
-      if (a !== b) { erro.textContent = "As senhas não coincidem."; erro.hidden = false; return; }
-      if (!(a.length >= 10 && /[a-z]/.test(a) && /[A-Z]/.test(a) && /\d/.test(a))) { erro.textContent = "Mínimo de 10 caracteres, com maiúscula, minúscula e número."; erro.hidden = false; return; }
-      try { await FC.ui.ocupado(FC.$("[data-acao=salvar]", f.el), () => FC.auth.trocarSenha(a)); f.fechar(); FC.ui.aviso("Senha trocada"); }
-      catch (err) { erro.textContent = FC.ui.traduzErro(err.message); erro.hidden = false; }
+      const atual = FC.$("#s-atual", form).value, a = FC.$("#s-nova", form).value, b = FC.$("#s-rep", form).value, erro = FC.$("#s-erro", form);
+      const falha = (m) => { erro.textContent = m; erro.hidden = false; };
+      if (a !== b) return falha("As senhas não coincidem.");
+      if (a === atual) return falha("A nova senha é igual à atual.");
+      if (!(a.length >= 10 && /[a-z]/.test(a) && /[A-Z]/.test(a) && /\d/.test(a))) return falha("Mínimo de 10 caracteres, com maiúscula, minúscula e número.");
+      try {
+        await FC.ui.ocupado(FC.$("[data-acao=salvar]", f.el), async () => {
+          if (!(await FC.auth.confereSenha(FC.auth.usuario.email, atual))) throw new Error("A senha atual está incorreta.");
+          const vazou = await FC.auth.senhaVazada(a);
+          if (vazou) throw new Error(`Essa senha já apareceu em ${FC.fmt.int(vazou)} vazamento(s) de dados. Escolha outra.`);
+          await FC.auth.trocarSenha(a);
+        });
+        f.fechar(); FC.ui.aviso("Senha trocada");
+        FC.db.log("seguranca", { acao: "senha trocada" });
+      } catch (err) { falha(FC.ui.traduzErro(err.message)); }
     });
   }
 
   // ---------------------------------------------------------------- 2 etapas
-  async function ligaMfa() {
+  async function ligaMfa(jaTem = 0) {
     let dados;
-    try { dados = await FC.auth.inscreverTotp(); } catch (e) { return FC.ui.erro(e); }
+    try { dados = await FC.auth.inscreverTotp(jaTem ? "Reserva" : "Principal"); } catch (e) { return FC.ui.erro(e); }
     const qr = dados.totp.qr_code;
     const qrUrl = qr.startsWith("data:") ? qr : "data:image/svg+xml;utf8," + encodeURIComponent(qr);
     const f = FC.ui.folha({
-      titulo: "Ligar verificação em duas etapas",
+      titulo: jaTem ? "Adicionar autenticador reserva" : "Ligar verificação em duas etapas",
       corpo: html`<div class="form">
+        ${jaTem ? html`<p class="texto-p">Um segundo autenticador (outro celular, ou o gerenciador de senhas) garante o acesso se você perder o primeiro.</p>` : ""}
         <p class="texto-p">1. Abra um app autenticador (Apple Senhas, Google Authenticator, 1Password, Authy) e escaneie o código.</p>
         <div class="centro"><img src="${qrUrl}" alt="QR code para o app autenticador" style="width:200px;height:200px;background:#fff;border-radius:16px;padding:10px"></div>
         <p class="texto-p centro">ou digite a chave: <code style="user-select:all;word-break:break-all">${dados.totp.secret}</code></p>
@@ -329,16 +381,43 @@
       try {
         await FC.ui.ocupado(bt, () => FC.auth.verificarTotp(dados.id, cod.value));
         f.fechar();
-        FC.ui.aviso("Verificação em duas etapas ligada");
+        FC.ui.aviso(jaTem ? "Autenticador reserva adicionado" : "Verificação em duas etapas ligada");
+        FC.db.log("seguranca", { acao: jaTem ? "autenticador reserva adicionado" : "2FA ligado" });
         FC.rerender({ suave: true });
       } catch (err) { const el = FC.$("#mfa-erro", f.el); el.textContent = /invalid/i.test(err.message) ? "Código incorreto. Confira o app e tente de novo." : FC.ui.traduzErro(err.message); el.hidden = false; }
     });
   }
 
-  async function desligaMfa(totp) {
-    if (!(await FC.ui.confirma("Desligar a verificação em duas etapas? O login volta a pedir só a senha.", { botao: "Desligar", perigo: true }))) return;
-    try { await FC.auth.removerTotp(totp.id); FC.ui.aviso("Verificação em duas etapas desligada"); FC.rerender({ suave: true }); }
-    catch (e) { FC.ui.erro(e); }
+  // remover pede um código válido: quem só tem a sessão aberta não desliga o 2FA
+  function removeFator(fatores, id) {
+    const alvo = fatores.find((f) => f.id === id);
+    const ultimo = fatores.length === 1;
+    const f = FC.ui.folha({
+      titulo: ultimo ? "Desligar a verificação em duas etapas" : "Remover autenticador",
+      corpo: html`<div class="form">
+        <p class="texto-p">${ultimo ? "Sem autenticador, o login volta a pedir só a senha e o banco deixa de exigir o código." : `Remover "${nomeFator(alvo)}". Os outros continuam valendo.`}</p>
+        ${fatores.length > 1 ? html`<div class="campo"><label for="rf-fator">Confirme com o código de</label><select id="rf-fator">${fatores.map((x) => html`<option value="${x.id}">${nomeFator(x)}</option>`)}</select></div>` : ""}
+        <div class="campo"><label for="rf-cod">Código de 6 dígitos</label><input id="rf-cod" class="codigo-mfa" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"></div>
+        <div id="rf-erro" class="mensagem erro" hidden></div></div>`,
+      rodape: html`<button class="botao sec" data-acao="cancelar">Cancelar</button><button class="botao perigo" data-acao="remover">${ultimo ? "Desligar" : "Remover"}</button>`,
+    });
+    const cod = FC.$("#rf-cod", f.el);
+    cod.addEventListener("input", () => { cod.value = cod.value.replace(/\D/g, ""); });
+    FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
+    FC.$("[data-acao=remover]", f.el).addEventListener("click", async (e) => {
+      const bt = e.currentTarget;
+      const conf = FC.$("#rf-fator", f.el) ? FC.$("#rf-fator", f.el).value : id;
+      try {
+        await FC.ui.ocupado(bt, async () => {
+          await FC.auth.verificarTotp(conf, cod.value);
+          await FC.auth.removerTotp(id);
+        });
+        f.fechar();
+        FC.ui.aviso(ultimo ? "Verificação em duas etapas desligada" : "Autenticador removido");
+        FC.db.log("seguranca", { acao: ultimo ? "2FA desligado" : "autenticador removido" });
+        FC.rerender({ suave: true });
+      } catch (err) { const el = FC.$("#rf-erro", f.el); el.textContent = /invalid|code/i.test(err.message) ? "Código incorreto." : FC.ui.traduzErro(err.message); el.hidden = false; }
+    });
   }
 
   // ---------------------------------------------------------------- apagar

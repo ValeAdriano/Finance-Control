@@ -21,6 +21,8 @@
     document.title = "Entrar · Finance Control";
     raiz.innerHTML = '<div class="tela-login"><div class="roda"></div></div>';
     let modo = etapa || "entrar";
+    let fatoresMfa = [];
+    if (modo === "mfa") { try { fatoresMfa = ((await FC.auth.fatores()).totp || []).filter((f) => f.status === "verified"); } catch (e) { /* segue */ } }
     if (!etapa) {
       const temDono = await FC.auth.temDono();
       if (!temDono) modo = "criar";
@@ -38,6 +40,7 @@
       <h1>${t}</h1><p class="sub">${sub}</p>
       <form class="form" id="f-login" novalidate>
         ${modo === "mfa" ? html`
+          ${fatoresMfa.length > 1 ? html`<div class="campo"><label for="fator">Autenticador</label><select id="fator">${fatoresMfa.map((f) => html`<option value="${f.id}">${(f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "")}</option>`)}</select></div>` : ""}
           <div class="campo"><label for="codigo" class="sr">Código</label>
             <input id="codigo" name="codigo" class="codigo-mfa" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required></div>
         ` : html`
@@ -80,10 +83,9 @@
       try {
         await FC.ui.ocupado(bt, async () => {
           if (modo === "mfa") {
-            const f = await FC.auth.fatores();
-            const totp = (f.totp || [])[0];
-            if (!totp) throw new Error("Nenhum autenticador cadastrado.");
-            await FC.auth.verificarTotp(totp.id, d.codigo);
+            const escolhido = FC.$("#fator", raiz) ? FC.$("#fator", raiz).value : (fatoresMfa[0] || {}).id;
+            if (!escolhido) throw new Error("Nenhum autenticador cadastrado.");
+            await FC.auth.verificarTotp(escolhido, d.codigo);
             return FC.entrarNoApp();
           }
           if (!d.email || !d.senha) throw new Error("Preencha e-mail e senha.");

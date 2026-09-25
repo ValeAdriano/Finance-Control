@@ -28,14 +28,39 @@
     // verificação em duas etapas (TOTP)
     async nivel() { return checa(await sb.auth.mfa.getAuthenticatorAssuranceLevel()); },
     async fatores() { return checa(await sb.auth.mfa.listFactors()); },
-    async inscreverTotp() {
+    async inscreverTotp(nome) {
       // um fator pendente de outra tentativa impede a nova inscrição
       const f = await FC.auth.fatores();
       for (const x of (f.all || []).filter((x) => x.status !== "verified")) {
         await sb.auth.mfa.unenroll({ factorId: x.id });
       }
-      return checa(await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Finance Control " + Date.now() }));
+      return checa(await sb.auth.mfa.enroll({ factorType: "totp", friendlyName: (nome || "Autenticador") + " · " + new Date().toLocaleDateString("pt-BR") + " " + Date.now().toString(36).slice(-4) }));
     },
+    // Confere a senha atual SEM trocar a sessão aberta: pede um token à
+    // parte e o revoga em seguida.
+    async confereSenha(email, senha) {
+      const base = FC.config.supabaseUrl + "/auth/v1";
+      const r = await fetch(base + "/token?grant_type=password", { method: "POST",
+        headers: { apikey: FC.config.supabaseChave, "Content-Type": "application/json" }, body: JSON.stringify({ email, password: senha }) });
+      if (r.status === 429) throw new Error("Muitas tentativas. Espere um minuto e tente de novo.");
+      if (!r.ok) return false;
+      const j = await r.json();
+      try { await fetch(base + "/logout?scope=local", { method: "POST", headers: { apikey: FC.config.supabaseChave, Authorization: "Bearer " + j.access_token } }); } catch (e) { /* expira sozinho */ }
+      return true;
+    },
+    // Senha vazada? Consulta o Have I Been Pwned por k-anonimato: só os 5
+    // primeiros caracteres do hash SHA-1 saem daqui. null = não deu para checar.
+    async senhaVazada(senha) {
+      try {
+        const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(senha));
+        const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+        const r = await fetch("https://api.pwnedpasswords.com/range/" + hex.slice(0, 5), { headers: { "Add-Padding": "true" } });
+        if (!r.ok) return null;
+        const linha = (await r.text()).split("\n").find((l) => l.startsWith(hex.slice(5)));
+        return linha ? Number(linha.split(":")[1]) || 0 : 0;
+      } catch (e) { return null; }
+    },
+    async sairDosOutros() { checa(await sb.auth.signOut({ scope: "others" })); },
     async verificarTotp(factorId, codigo) {
       const d = checa(await sb.auth.mfa.challenge({ factorId }));
       return checa(await sb.auth.mfa.verify({ factorId, challengeId: d.id, code: codigo }));
