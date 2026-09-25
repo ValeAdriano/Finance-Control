@@ -140,7 +140,7 @@
       barras.forEach((b, i) => {
         const w = Math.max(2, Math.min(larg * 0.64, 56)), x = mE + i * larg + (larg - w) / 2;
         const y0 = py(Math.max(0, b.valor)), h = Math.abs(py(b.valor) - py(0));
-        s += `<rect class="col cresce" data-i="${i}" style="--i:${i};fill:${cor}" x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, h).toFixed(1)}" rx="${Math.min(4, w / 3).toFixed(1)}"/>`;
+        s += `<rect class="col cresce" data-i="${i}" style="--i:${i};fill:${b.cor || cor}" x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0.5, h).toFixed(1)}" rx="${Math.min(4, w / 3).toFixed(1)}"/>`;
         if (i % cada === 0) s += `<text x="${(x + w / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${escapa(b.rotulo)}</text>`;
       });
       s += "</svg>";

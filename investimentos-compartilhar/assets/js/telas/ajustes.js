@@ -81,6 +81,12 @@
       ${grupo("Log do sistema", "atualizações de preço, registros diários e erros", html`<div class="lista" id="aj-log"><div class="vazio"><div class="roda" style="margin:0 auto"></div></div></div>
         <p class="texto-p mt2">O registro diário roda sozinho no Supabase todo dia às 18h10 (Brasília), mesmo com o app fechado. Com o app aberto, os preços são atualizados a cada minuto.</p>`)}
 
+      ${grupo("Histórico mensal", "totais de meses anteriores ao app (ex.: anotados no Notion)", html`<form class="cartao" id="f-hist">
+        <p class="texto-p mb2">Cole o CSV com as colunas <b>Ano</b>, <b>Mês</b> e <b>Total</b> (as outras são ignoradas). Cada mês com total vira um ponto no gráfico de crescimento, no último dia do mês. Meses já existentes são atualizados.</p>
+        <div class="campo"><textarea id="hist-csv" rows="6" spellcheck="false" placeholder="N°,Ano,Mês,Total,Fechado&#10;1,2024,Janeiro,800,false"></textarea></div>
+        <div class="flex entre mt2 quebra"><span class="fraco" id="hist-previa"></span><button class="botao" type="submit">Importar</button></div>
+      </form>`)}
+
       ${grupo("Seus dados", "", html`<div class="lista">
         <div class="item clicavel" id="aj-exportar"><span style="color:var(--acento)">${icone("exportar", 22)}</span>
           <div class="principal"><div class="titulo">Baixar backup</div><div class="detalhe">tudo em um arquivo JSON: carteira, aportes, agro e preferências</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
@@ -201,14 +207,57 @@
       arq.value = "";
     });
     FC.$("#aj-apagar", raiz).addEventListener("click", apagaTudo);
+    ligaHistorico(raiz);
     carregaLog(FC.$("#aj-log", raiz));
   };
+
+  // ---------------------------------------------------------------- histórico mensal
+  const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  function lerHistorico(texto) {
+    const linhas = FC.importador.csv(texto.trim());
+    const tira = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const col = (l, nome) => l[Object.keys(l).find((k) => tira(k) === nome)];
+    const saida = [];
+    for (const l of linhas) {
+      const ano = Number(col(l, "ano")), mesTxt = tira(col(l, "mes")), total = FC.lerNum(String(col(l, "total") || "").replace(/R\$/g, ""));
+      const m = MESES.indexOf(mesTxt) + 1 || Number(mesTxt);
+      if (!(ano > 1990 && m >= 1 && m <= 12 && total > 0)) continue;
+      const ultimo = new Date(Date.UTC(ano, m, 0)).getUTCDate();
+      saida.push({ data: `${ano}-${String(m).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`, patrimonio: total });
+    }
+    return saida.sort((a, b) => a.data.localeCompare(b.data));
+  }
+  function ligaHistorico(raiz) {
+    const form = FC.$("#f-hist", raiz), ta = FC.$("#hist-csv", raiz), pv = FC.$("#hist-previa", raiz);
+    ta.addEventListener("input", () => {
+      const l = lerHistorico(ta.value);
+      pv.textContent = l.length ? `${l.length} mês(es) com total, de ${FC.datas.br(l[0].data).slice(3)} a ${FC.datas.br(l.at(-1).data).slice(3)}` : "";
+    });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const l = lerHistorico(ta.value);
+      if (!l.length) return FC.ui.aviso("Não encontrei meses com Ano, Mês e Total.", "erro");
+      // não sobrescreve um dia que o próprio app registrou
+      const doApp = new Set(FC.estado.base.historico.filter((h) => h.origem !== "importado").map((h) => h.data));
+      const linhas = l.filter((x) => !doApp.has(x.data)).map((x) => ({ ...x, user_id: FC.auth.usuario.id, origem: "importado", por_pilar: { fonte: "importação" } }));
+      try {
+        await FC.ui.ocupado(FC.$("button[type=submit]", form), async () => {
+          const { error } = await FC.sb.from("patrimonio_historico").upsert(linhas, { onConflict: "user_id,data" });
+          if (error) throw error;
+        });
+        FC.db.log("importacao", { fonte: "CSV", meses: linhas.length });
+        ta.value = ""; pv.textContent = "";
+        await C.depoisDeMudar(`${linhas.length} mês(es) importado(s)`);
+      } catch (err) { FC.ui.erro(err); }
+    });
+  }
 
   // ---------------------------------------------------------------- log
   const EVENTOS = {
     registro_diario: ["Registro diário", "azul"],
     precos: ["Cotações atualizadas", "verde"],
     aporte: ["Aporte", "terra"],
+    importacao: ["Histórico importado", "azul"],
     erro: ["Erro", "vermelho"],
   };
   async function carregaLog(el) {
@@ -219,6 +268,7 @@
         const det = l.detalhe || {};
         const texto = l.evento === "erro" ? `${det.etapa || ""}: ${det.erro || ""}`
           : l.evento === "aporte" ? `${det.destino || ""} · ${FC.fmt.brlTexto(det.valor)}`
+          : l.evento === "importacao" ? `${det.meses} mês(es) · ${det.fonte || ""}`
           : [det.patrimonio != null ? "patrimônio " + FC.fmt.brlTexto(det.patrimonio) : "", det.ativos != null ? det.ativos + " ativo(s)" : "",
              det.sem_preco && det.sem_preco.length ? "sem preço: " + det.sem_preco.join(", ") : ""].filter(Boolean).join(" · ");
         return html`<div class="item"><div class="principal"><div class="titulo">${nome} ${FC.pilula(cor, l.origem === "automatico" ? "automático" : "app")}</div>

@@ -188,6 +188,19 @@
       guarda(k, d);
       return d;
     },
+    // dividendos/JCP/rendimentos com data com e de pagamento (cache de 6 h aqui, 12 h no servidor)
+    async proventos(itens, forcar = false) {
+      const saida = {}, faltam = [];
+      for (const it of itens) {
+        const c = !forcar && doNavegador("prov:" + it.ticker, 6 * 60 * 60 * 1000);
+        if (c) saida[it.ticker] = c; else faltam.push(it);
+      }
+      if (faltam.length) {
+        const d = (await chama({ acao: "proventos", itens: faltam })) || {};
+        for (const [t, v] of Object.entries(d)) { saida[t] = v; if (!v.erro) guarda("prov:" + t, v); }
+      }
+      return saida;
+    },
     // preço de agora: CoinGecko para cripto, Yahoo para bolsa (cache de 1 min no servidor)
     async cotacoes(itens) {
       if (!itens.length) return {};

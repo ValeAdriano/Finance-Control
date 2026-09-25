@@ -13,6 +13,8 @@
 //   {acao: "historicos", itens: [{ticker, classe}], anos?, forcar?}
 //   {acao: "benchmarks", anos?, forcar?}         CDI diário e Ibovespa
 //   {acao: "cotacoes", itens: [{ticker, classe}]} preço de agora (cache 1 min)
+//   {acao: "proventos", itens: [{ticker, classe}]} dividendos, JCP e rendimentos
+//                                                com data com e data de pagamento
 //   {acao: "registro_diario"}                    só o agendamento (x-cron-secret):
 //                                                grava a foto do dia de cada usuário
 //
@@ -370,6 +372,56 @@ async function cotacoes(itens: { ticker: string; classe: string }[]) {
   return saida;
 }
 
+// ------------------------------------------------------------------ proventos
+// O Fundamentus lista, por ação e por FII, cada provento com a data com, a
+// data de pagamento (inclusive os já anunciados e ainda não pagos) e o
+// valor. Para ETF e ativo americano só há o Yahoo, que dá a data com.
+function dataBr(t: string) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((t || "").trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+
+async function proventosFundamentus(ticker: string, fii: boolean) {
+  const url = fii
+    ? `https://www.fundamentus.com.br/fii_proventos.php?papel=${ticker}&tipo=2`
+    : `https://www.fundamentus.com.br/proventos.php?papel=${ticker}&tipo=2`;
+  const html = await baixa(url, true);
+  const corte = new Date(Date.now() - 6 * 365 * 86400000).toISOString().slice(0, 10);
+  const lista: unknown[] = [];
+  for (const c of tabela(html)) {
+    let dataCom, pagamento, valor, tipo, fator = 1;
+    if (fii) {
+      if (c.length < 4) continue;
+      [dataCom, tipo, pagamento, valor] = [dataBr(c[0]), c[1], dataBr(c[2]), numBr(c[3])];
+    } else {
+      if (c.length < 5) continue;       // a 2ª tabela da página é o resumo por ano
+      [dataCom, valor, tipo, pagamento, fator] = [dataBr(c[0]), numBr(c[1]), c[2], dataBr(c[3]), numBr(c[4]) || 1];
+    }
+    if (!dataCom || !valor || dataCom < corte) continue;
+    const t = String(tipo || "").toUpperCase();
+    lista.push({ data_com: dataCom, pagamento, valor: valor / fator,
+      tipo: t.includes("JRS") || t.includes("JUROS") ? "JCP" : t.includes("REND") ? "Rendimento" : t.includes("DIVID") ? "Dividendo" : String(tipo) });
+  }
+  return { fonte: "Fundamentus", lista };
+}
+
+async function proventos(itens: { ticker: string; classe: string }[]) {
+  const saida: Record<string, unknown> = {};
+  await emLotes(itens, 6, async (i) => {
+    const t = i.ticker.toUpperCase();
+    try {
+      if (i.classe === "acao_br" || i.classe === "fii") {
+        saida[t] = await comCache(`proventos:${t}`, 12 * HORA, false, () => proventosFundamentus(t, i.classe === "fii"));
+      } else if (i.classe !== "cripto") {
+        const s: any = await comCache(`yahoo:${simbolo(t, i.classe)}:5y`, 12 * HORA, false, () => serieYahoo(t, i.classe, 5));
+        saida[t] = { fonte: "Yahoo Finance (só data com)", lista: (s.dividendos || []).map(([d, v]: [string, number]) =>
+          ({ data_com: d, pagamento: null, valor: v, tipo: "Dividendo" })) };
+      }
+    } catch (e) { saida[t] = { erro: String(e).slice(0, 120), lista: [] }; }
+  });
+  return saida;
+}
+
 // ------------------------------------------------------------------ registro diário
 // A mesma conta do app, no servidor: posição = quantidade inicial (a não
 // ser que o extrato importado já traga a posição inteira) + aportes;
@@ -499,6 +551,13 @@ Deno.serve(async (req) => {
         ticker: String(i.ticker || "").toUpperCase().replace(/[^A-Z0-9.^-]/g, ""), classe: String(i.classe || "acao_br") }))
         .filter((i: any) => i.ticker);
       return resposta(await cotacoes(itens));
+    }
+
+    if (corpo.acao === "proventos") {
+      const itens = (corpo.itens ?? []).slice(0, 80).map((i: any) => ({
+        ticker: String(i.ticker || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), classe: String(i.classe || "acao_br") }))
+        .filter((i: any) => i.ticker);
+      return resposta(await proventos(itens));
     }
 
     if (corpo.acao === "benchmarks") {

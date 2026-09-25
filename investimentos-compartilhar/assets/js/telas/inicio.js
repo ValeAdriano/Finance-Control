@@ -109,17 +109,51 @@
 
   // ---- crescimento: uma foto por dia, gravada pelo app e pelo agendamento
   let visao = "total";
-  function variacaoDesde(regs, dias) {
-    if (regs.length < 2) return null;
-    const ultimo = regs.at(-1);
-    const limite = FC.datas.soma(ultimo.data, -dias);
-    const base = [...regs].reverse().find((r) => r.data <= limite);
-    if (!base || !base.patrimonio) return null;
-    return { abs: ultimo.patrimonio - base.patrimonio, pct: (ultimo.patrimonio / base.patrimonio - 1) * 100, desde: base.data };
+  // Dinheiro que entrou (ou saiu) no período: aportes, resgates, vendas,
+  // compras e custos do agro. Crescer porque você colocou dinheiro não é
+  // ganho — o ganho é a variação do patrimônio MENOS esse fluxo.
+  function fluxoEntre(de, ate) {
+    const b = FC.estado.base;
+    const dentro = (d) => d > de && d <= ate;
+    let f = 0;
+    for (const a of b.aportes) {
+      if (!dentro(a.data)) continue;
+      if (a.tipo === "ativo") f += a.valor;                      // venda já vem negativa
+      else if (a.tipo === "caixa" && !a.historico) f += a.valor; // resgate já vem negativo
+    }
+    for (const m of b.agro.movs) {
+      if (!dentro(m.data)) continue;
+      if (m.tipo === "compra") f += m.valor_total + m.despesas;
+      else if (m.tipo === "venda") f -= m.valor_total - m.despesas;
+      else if (m.tipo === "entrada") f += m.valor_total;
+      else if (m.tipo === "saida") f -= m.valor_total;
+    }
+    for (const c of b.agro.custos) if (dentro(c.data)) f += c.valor;
+    return f;
   }
-  function kpiVar(rot, v) {
-    return html`<div class="kpi pequeno"><dt>${rot}</dt><dd class="${v ? (v.abs >= 0 ? "pos" : "neg") : "fraco"}">${v ? fmt.delta(v.pct) + "%" : "—"}
-      <small>${v ? fmt.brl(v.abs) : "sem registro tão antigo"}</small></dd></div>`;
+
+  // Ganho entre um registro-base e agora. Os meses importados guardam só o
+  // capital investido (sem valor de mercado), então nunca servem de base.
+  function ganhoDesde(regs, base, ultimo) {
+    if (!base || !base.patrimonio || base === ultimo) return null;
+    const fluxo = fluxoEntre(base.data, ultimo.data);
+    const abs = ultimo.patrimonio - base.patrimonio - fluxo;
+    const capital = base.patrimonio + Math.max(0, fluxo);
+    return { abs, pct: capital ? (abs / capital) * 100 : null, desde: base.data, fluxo };
+  }
+  function variacaoDesde(regs, dias) {
+    const medidos = regs.filter((r) => r.origem !== "importado");
+    if (medidos.length < 2) return null;
+    const ultimo = medidos.at(-1);
+    const limite = FC.datas.soma(ultimo.data, -dias);
+    const base = [...medidos].reverse().find((r) => r.data <= limite);
+    // a base tem de estar perto do dia pedido
+    if (!base || FC.datas.dias(base.data, limite) > Math.max(3, dias / 4)) return null;
+    return ganhoDesde(medidos, base, ultimo);
+  }
+  function kpiVar(rot, v, vazio = "sem registro tão antigo") {
+    return html`<div class="kpi pequeno"><dt>${rot}</dt><dd class="${v ? (v.abs >= 0 ? "pos" : "neg") : "fraco"}">${v && FC.ok(v.pct) ? fmt.delta(v.pct) + "%" : "—"}
+      <small>${v ? html`${v.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(v.abs))}${Math.abs(v.fluxo) > 0.5 ? html` · sem os ${fmt.brl(Math.abs(v.fluxo))} ${v.fluxo > 0 ? "aportados" : "retirados"}` : ""}` : vazio}</small></dd></div>`;
   }
   function crescimento(d) {
     // os registros gravados + o valor de agora como ponto de hoje (o
@@ -134,17 +168,23 @@
     } else regs = d.registros || [];
     if (!regs.length) return "";
     const primeiro = regs[0], ultimo = regs.at(-1);
-    const total = regs.length > 1 ? { abs: ultimo.patrimonio - primeiro.patrimonio, pct: primeiro.patrimonio ? (ultimo.patrimonio / primeiro.patrimonio - 1) * 100 : null } : null;
+    const medidos = regs.filter((r) => r.origem !== "importado");
+    const total = ganhoDesde(medidos, medidos[0], medidos.at(-1));
+    const importados = regs.filter((r) => r.origem === "importado");
     const grafico = regs.length < 2
       ? html`<div class="mensagem info mt2">${icone("info", 18)}<span>O acompanhamento começou em ${FC.datas.br(primeiro.data)}. O painel guarda uma foto por dia — ao abrir o app e, com ele fechado, todo dia às 18h —, e o gráfico aparece a partir do segundo registro.</span></div>`
       : visao === "total"
-        ? html`${FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: regs.map((r) => [r.data, r.patrimonio]), classe: "l1", area: true }], altura: 260 })}`
+        ? html`${FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: regs.map((r) => [r.data, r.patrimonio]), classe: "l1", area: true }], altura: 260 })}
+          ${regs.some((r) => r.origem === "importado") ? html`<p class="texto-p mt2">Os pontos até ${FC.datas.br([...regs].reverse().find((r) => r.origem === "importado").data)} são o capital investido que você importou (sem valor de mercado); depois disso, o patrimônio calculado pelo painel. Por isso o ganho só é medido a partir dos registros do painel — e sempre sem o dinheiro que você aportou no período.</p>` : ""}`
         : (() => {
           const series = [
             { nome: "Bolsa", pontos: regs.map((r) => [r.data, r.renda_variavel]), classe: "l1", k: "k1" },
             { nome: "Cripto", pontos: regs.map((r) => [r.data, r.cripto]), classe: "l3", k: "k3" },
             { nome: "Renda fixa", pontos: regs.map((r) => [r.data, r.renda_fixa]), classe: "l2", k: "k2" },
-            { nome: "Agro", pontos: regs.map((r) => [r.data, r.agro]), classe: "l4", k: "k4" }].filter((s) => s.pontos.some((p) => p[1] > 0));
+            { nome: "Agro", pontos: regs.map((r) => [r.data, r.agro]), classe: "l4", k: "k4" }]
+            // meses importados só têm o total: ficam fora da divisão por classe
+            .map((s) => ({ ...s, pontos: s.pontos.filter((_, i) => regs[i].origem !== "importado") }))
+            .filter((s) => s.pontos.some((p) => p[1] > 0));
           return html`${FC.graficos.linhas({ series, altura: 260, zero: true })}
             <div class="legenda-g">${series.map((s) => html`<span><i class="${s.k}"></i>${s.nome.toLowerCase()}</span>`)}</div>`;
         })();
@@ -159,18 +199,35 @@
           <div class="kpi"><dt>${ultimo.ao_vivo ? "Agora" : "Último registro"}</dt><dd>${fmt.brl(ultimo.patrimonio)}<small>${ultimo.ao_vivo ? "ao vivo · registrado todo dia" : FC.datas.br(ultimo.data) + " · " + (ultimo.origem === "automatico" ? "automático" : "pelo app")}</small></dd></div>
           ${kpiVar("7 dias", variacaoDesde(regs, 7))}
           ${kpiVar("30 dias", variacaoDesde(regs, 30))}
-          <div class="kpi pequeno"><dt>Desde o início</dt><dd class="${total ? (total.abs >= 0 ? "pos" : "neg") : "fraco"}">${total && FC.ok(total.pct) ? fmt.delta(total.pct) + "%" : "—"}<small>${total ? fmt.brl(total.abs) : "a partir do 2º dia"}</small></dd></div>
+          ${kpiVar(medidos.length ? `Ganho desde ${FC.datas.br(medidos[0].data).slice(0, 5)}` : "Ganho", total, "a partir do 2º dia")}
+          ${importados.length ? html`<div class="kpi pequeno"><dt>Capital investido (histórico)</dt><dd>${fmt.brl(importados.at(-1).patrimonio)}<small>${FC.datas.mesAno(importados[0].data)} → ${FC.datas.mesAno(importados.at(-1).data)}, importado</small></dd></div>` : ""}
         </dl>
         ${grafico}
         <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Últimos registros</summary>
           <div class="lista mt2" style="box-shadow:none">${recentes.map((r, i) => {
             const ant = regs[regs.length - 2 - i];
             const dv = ant && ant.patrimonio ? (r.patrimonio / ant.patrimonio - 1) * 100 : null;
-            return html`<div class="item"><div class="principal"><div class="titulo">${FC.datas.br(r.data)} ${FC.pilula(r.origem === "automatico" ? "azul" : "cinza", r.origem === "automatico" ? "automático" : "app")}</div>
-              <div class="detalhe">${(r.ativos || []).length} ativo(s) · ${r.ao_vivo ? "valor de agora" : "gravado " + new Date(r.registrado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div></div>
+            return html`<div class="item"><div class="principal"><div class="titulo">${FC.datas.br(r.data)} ${FC.pilula(r.origem === "automatico" ? "azul" : r.origem === "importado" ? "terra" : "cinza", r.origem === "automatico" ? "automático" : r.origem === "importado" ? "importado" : "app")}</div>
+              <div class="detalhe">${r.origem === "importado" ? "total do mês informado por você" : `${(r.ativos || []).length} ativo(s) · ${r.ao_vivo ? "valor de agora" : "gravado " + new Date(r.registrado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}</div></div>
               <div class="valores"><b>${fmt.brl(r.patrimonio)}</b><small class="${dv == null ? "" : dv >= 0 ? "pos" : "neg"}">${dv == null ? "primeiro registro" : fmt.delta(dv, 2) + "% no dia"}</small></div></div>`;
           })}</div></details>
       </div></section>`;
+  }
+
+  function dividendos(d) {
+    if (!FC.estado.proventos) return "";
+    const r = FC.dividendos.analisa(d, FC.estado.base, FC.estado.proventos);
+    if (!r.porAtivo.length || !(r.resumo.mensal_estimado > 0 || r.proximos.length)) return "";
+    const prox = r.proximos.find((p) => p.pagamento) || r.proximos[0];
+    return html`<section class="secao">
+      <div class="secao-topo"><h2>Dividendos</h2><span class="sub">o que suas ações e FIIs depositam</span>
+        <div class="direita"><a class="botao texto pequeno" href="#/dividendos">Abrir ${icone("chevron", 14)}</a></div></div>
+      <a class="cartao clicavel" href="#/dividendos" style="display:block;color:inherit;text-decoration:none">
+        <dl class="kpis">
+          <div class="kpi"><dt>Por mês (estimado)</dt><dd class="pos">${fmt.brl(r.resumo.mensal_estimado)}</dd></div>
+          <div class="kpi"><dt>Próximos 30 dias</dt><dd>${fmt.brl(r.resumo.proximos_30d)}</dd></div>
+          ${prox ? html`<div class="kpi"><dt>Próximo pagamento</dt><dd>${prox.ticker} <span class="rs">${fmt.brlTexto(prox.valor)}</span><small>${prox.pagamento ? "em " + FC.datas.br(prox.pagamento) : "data com " + FC.datas.br(prox.data_com)}</small></dd></div>` : ""}
+        </dl></a></section>`;
   }
 
   function melhores(d) {
@@ -215,7 +272,7 @@
         <p class="valor"><span class="rs" data-conta="${r.patrimonio}">${fmt.brlTexto(r.patrimonio)}</span></p>
         <div class="chips">
           ${r.bolsa || !r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s1)"></span>Bolsa <b class="rs">${fmt.brlTexto(r.bolsa)}</b></span>` : ""}
-          <span class="chip"><span class="ponto" style="background:var(--s2)"></span>Renda fixa <b class="rs">${fmt.brlTexto(r.renda_fixa)}</b></span>
+          ${r.renda_fixa ? html`<span class="chip"><span class="ponto" style="background:var(--s2)"></span>Renda fixa <b class="rs">${fmt.brlTexto(r.renda_fixa)}</b></span>` : ""}
           ${r.agro ? html`<span class="chip"><span class="ponto" style="background:var(--s5)"></span>Agro <b class="rs">${fmt.brlTexto(r.agro)}</b></span>` : ""}
           ${r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s3)"></span>Cripto <b class="rs">${fmt.brlTexto(r.cripto)}</b></span>` : ""}
           ${r.tem_preco_medio ? html`<span class="chip">Resultado nas posições <b class="${r.resultado >= 0 ? "pos" : "neg"}">${fmt.delta(r.variacao)}%</b></span>` : ""}
@@ -227,6 +284,7 @@
       ${C.resumoInvestido(d, { compacto: true })}
       ${alocacao(d)}
       ${crescimento(d)}
+      ${dividendos(d)}
       ${agroResumo(d.agro)}
       ${melhores(d)}
       ${evolucao(d.historico)}

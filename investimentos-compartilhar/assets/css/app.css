@@ -320,6 +320,7 @@ dl { margin: 0; }
 .tabela td { padding: 13px 14px; border-top: 1px solid var(--linha); vertical-align: middle; }
 .tabela tr:first-child td { border-top: 0; }
 .tabela th.n, .tabela td.n { text-align: right; }
+.tabela td.n { white-space: nowrap; }
 .tabela tbody tr { transition: background .2s var(--curva); }
 .tabela tbody tr.clicavel { cursor: pointer; }
 .tabela tbody tr.clicavel:hover { background: var(--bg-3); }

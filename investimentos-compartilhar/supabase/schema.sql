@@ -211,7 +211,7 @@ create table if not exists public.patrimonio_historico (
   user_id        uuid not null default auth.uid() references auth.users on delete cascade,
   data           date not null,
   registrado_em  timestamptz not null default now(),
-  origem         text not null default 'app' check (origem in ('app','automatico')),
+  origem         text not null default 'app' check (origem in ('app','automatico','importado')),
   patrimonio     numeric not null,
   renda_variavel numeric not null default 0,
   cripto         numeric not null default 0,
@@ -269,3 +269,8 @@ create extension if not exists pg_cron;
 --       body := '{"acao":"registro_diario"}'::jsonb, timeout_milliseconds := 120000);
 --   $$);
 -- e o mesmo valor vai como segredo CRON_SECRET da Edge Function.
+
+-- registros mensais importados (ex.: histórico anotado no Notion)
+alter table public.patrimonio_historico drop constraint if exists patrimonio_historico_origem_check;
+alter table public.patrimonio_historico add constraint patrimonio_historico_origem_check
+  check (origem in ('app','automatico','importado'));

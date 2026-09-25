@@ -12,6 +12,7 @@
     { id: "ativos", nome: "Investimentos", icone: "ativos" },
     { id: "agro", nome: "Agro", icone: "agro" },
     { id: "aportes", nome: "Aportes", icone: "aportes" },
+    { id: "dividendos", nome: "Dividendos", icone: "moeda" },
     { id: "renda", nome: "Renda", icone: "renda" },
     { id: "simular", nome: "Simular", icone: "simular" },
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
@@ -20,7 +21,21 @@
   const NO_CELULAR = ["inicio", "ativos", "agro", "aportes"];
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
-    carregandoMercado: false, erroMercado: null, spotEm: null });
+    carregandoMercado: false, erroMercado: null, spotEm: null, proventos: null, proventosEm: null });
+
+  // proventos dos ativos que pagam dividendo (carteira e o que já teve aporte)
+  FC.carregaProventos = async function (forcar = false) {
+    if (!estado.base) return null;
+    const itens = estado.base.ativos.filter((a) => a.classe !== "cripto").map((a) => ({ ticker: a.ticker, classe: a.classe }));
+    if (!itens.length) { estado.proventos = {}; return estado.proventos; }
+    if (!forcar && estado.proventos && Date.now() - estado.proventosEm < 30 * 60 * 1000
+        && itens.every((i) => estado.proventos[i.ticker])) return estado.proventos;
+    try {
+      estado.proventos = { ...(estado.proventos || {}), ...(await FC.mercado.proventos(itens, forcar)) };
+      estado.proventosEm = Date.now();
+    } catch (e) { console.error(e); estado.proventos = estado.proventos || {}; }
+    return estado.proventos;
+  };
 
   // ---------------------------------------------------------------- preferências
   FC.montaPrefs = function (brutas) {
@@ -72,6 +87,7 @@
       FC.recalcula();
       estado.erroMercado = null;
       await gravaRegistroDoDia();
+      FC.carregaProventos(forcar);
     } catch (e) {
       estado.erroMercado = e.message || String(e);
       console.error(e);
