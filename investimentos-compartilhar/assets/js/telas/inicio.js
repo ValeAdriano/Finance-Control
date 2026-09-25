@@ -108,7 +108,17 @@
   }
 
   // ---- crescimento: uma foto por dia, gravada pelo app e pelo agendamento
-  let visao = "total";
+  // período do gráfico de crescimento e o que ele mostra
+  // padrão: todo o histórico, em patrimônio; volta a ele sempre que você
+  // chega ao Início vindo de outra tela
+  const CRESC_PADRAO = { periodo: "tudo", vista: "patrimonio", de: null, ate: null };
+  const cresc = { ...CRESC_PADRAO };
+  let rotaAnterior = location.hash;
+  window.addEventListener("hashchange", () => {
+    const eInicio = (h) => !h || h === "#" || h.startsWith("#/inicio");
+    if (eInicio(location.hash) && !eInicio(rotaAnterior)) Object.assign(cresc, CRESC_PADRAO);
+    rotaAnterior = location.hash;
+  });
   // Dinheiro que entrou (ou saiu) no período: aportes, resgates, vendas,
   // compras e custos do agro. Crescer porque você colocou dinheiro não é
   // ganho — o ganho é a variação do patrimônio MENOS esse fluxo.
@@ -141,76 +151,74 @@
     const capital = base.patrimonio + Math.max(0, fluxo);
     return { abs, pct: capital ? (abs / capital) * 100 : null, desde: base.data, fluxo };
   }
-  function variacaoDesde(regs, dias) {
-    const medidos = regs.filter((r) => r.origem !== "importado");
-    if (medidos.length < 2) return null;
-    const ultimo = medidos.at(-1);
-    const limite = FC.datas.soma(ultimo.data, -dias);
-    const base = [...medidos].reverse().find((r) => r.data <= limite);
-    // a base tem de estar perto do dia pedido
-    if (!base || FC.datas.dias(base.data, limite) > Math.max(3, dias / 4)) return null;
-    return ganhoDesde(medidos, base, ultimo);
+  // registros do período: o valor no início (último registro antes dele)
+  // e tudo o que caiu dentro
+  function recorte(regs, de, ate) {
+    const antes = [...regs].reverse().find((r) => r.data < de);
+    const dentro = regs.filter((r) => r.data >= de && r.data <= ate);
+    return antes ? [antes, ...dentro] : dentro;
   }
-  function kpiVar(rot, v, vazio = "sem registro tão antigo") {
-    return html`<div class="kpi pequeno"><dt>${rot}</dt><dd class="${v ? (v.abs >= 0 ? "pos" : "neg") : "fraco"}">${v && FC.ok(v.pct) ? fmt.delta(v.pct) + "%" : "—"}
-      <small>${v ? html`${v.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(v.abs))}${Math.abs(v.fluxo) > 0.5 ? html` · sem os ${fmt.brl(Math.abs(v.fluxo))} ${v.fluxo > 0 ? "aportados" : "retirados"}` : ""}` : vazio}</small></dd></div>`;
-  }
+
   function crescimento(d) {
-    // os registros gravados + o valor de agora como ponto de hoje (o
-    // registro de hoje pode ainda não ter sido gravado, ou estar velho)
+    // registros gravados + o valor de agora como ponto de hoje
     const hoje = FC.datas.hoje();
     const r0 = d.resumo;
     let regs = (d.registros || []).filter((r) => r.data !== hoje);
     if (FC.estado.mercado.universo && r0.patrimonio > 0) {
-      regs = regs.concat([{ data: hoje, origem: "app", registrado_em: new Date().toISOString(), patrimonio: r0.patrimonio,
-        renda_variavel: r0.bolsa, cripto: r0.cripto, renda_fixa: r0.renda_fixa, agro: r0.agro, ao_vivo: true,
-        ativos: d.ativos.filter((a) => a.posicao) }]);
-    } else regs = d.registros || [];
+      regs = regs.concat([{ data: hoje, origem: "app", patrimonio: r0.patrimonio, renda_variavel: r0.bolsa, cripto: r0.cripto,
+        renda_fixa: r0.renda_fixa, agro: r0.agro, ao_vivo: true }]);
+    }
     if (!regs.length) return "";
-    const primeiro = regs[0], ultimo = regs.at(-1);
-    const medidos = regs.filter((r) => r.origem !== "importado");
-    const total = ganhoDesde(medidos, medidos[0], medidos.at(-1));
-    const importados = regs.filter((r) => r.origem === "importado");
-    const grafico = regs.length < 2
-      ? html`<div class="mensagem info mt2">${icone("info", 18)}<span>O acompanhamento começou em ${FC.datas.br(primeiro.data)}. O painel guarda uma foto por dia — ao abrir o app e, com ele fechado, todo dia às 18h —, e o gráfico aparece a partir do segundo registro.</span></div>`
-      : visao === "total"
-        ? html`${FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: regs.map((r) => [r.data, r.patrimonio]), classe: "l1", area: true }], altura: 260 })}
-          ${regs.some((r) => r.origem === "importado") ? html`<p class="texto-p mt2">Os pontos até ${FC.datas.br([...regs].reverse().find((r) => r.origem === "importado").data)} são o capital investido que você importou (sem valor de mercado); depois disso, o patrimônio calculado pelo painel. Por isso o ganho só é medido a partir dos registros do painel — e sempre sem o dinheiro que você aportou no período.</p>` : ""}`
-        : (() => {
-          const series = [
-            { nome: "Bolsa", pontos: regs.map((r) => [r.data, r.renda_variavel]), classe: "l1", k: "k1" },
-            { nome: "Cripto", pontos: regs.map((r) => [r.data, r.cripto]), classe: "l3", k: "k3" },
-            { nome: "Renda fixa", pontos: regs.map((r) => [r.data, r.renda_fixa]), classe: "l2", k: "k2" },
-            { nome: "Agro", pontos: regs.map((r) => [r.data, r.agro]), classe: "l4", k: "k4" }]
-            // meses importados só têm o total: ficam fora da divisão por classe
-            .map((s) => ({ ...s, pontos: s.pontos.filter((_, i) => regs[i].origem !== "importado") }))
-            .filter((s) => s.pontos.some((p) => p[1] > 0));
-          return html`${FC.graficos.linhas({ series, altura: 260, zero: true })}
-            <div class="legenda-g">${series.map((s) => html`<span><i class="${s.k}"></i>${s.nome.toLowerCase()}</span>`)}</div>`;
-        })();
-    const recentes = [...regs].reverse().slice(0, 7);
+
+    const primeiroDia = regs[0].data;
+    const periodos = { semana: [FC.datas.soma(hoje, -7), hoje], mes: [FC.datas.soma(hoje, -30), hoje], tudo: [primeiroDia, hoje],
+      custom: [cresc.de || FC.datas.soma(hoje, -90), cresc.ate || hoje] };
+    const [de, ate] = periodos[cresc.periodo];
+    const trecho = recorte(regs, de, ate);
+
+    // rendimento só se mede entre registros do painel (com valor de mercado)
+    const medidos = trecho.filter((r) => r.origem !== "importado");
+    let rend = null, serieRend = [];
+    if (medidos.length >= 2) {
+      const base = medidos[0];
+      serieRend = medidos.map((r) => [r.data, r.patrimonio - base.patrimonio - fluxoEntre(base.data, r.data)]);
+      rend = ganhoDesde(medidos, base, medidos.at(-1));
+    }
+    const fimPer = trecho.at(-1);
+    const fluxoPer = trecho.length ? fluxoEntre(trecho[0].data, fimPer.data) : 0;
+
+    const seletor = html`<div class="flex quebra mb3" style="gap:10px">
+      <div class="segmentado" role="group" id="seg-periodo" aria-label="Período">
+        ${[["tudo", "Tudo"], ["semana", "Semana"], ["mes", "Mês"], ["custom", "Personalizado"]].map(([k, v]) => html`<button type="button" data-p="${k}" aria-pressed="${cresc.periodo === k}">${v}</button>`)}</div>
+      ${cresc.periodo === "custom" ? html`<div class="flex" style="gap:8px">
+        <input class="entrada" type="date" id="per-de" value="${de}" min="${primeiroDia}" max="${hoje}" style="max-width:170px;min-height:36px;font-size:14px" aria-label="De">
+        <span class="fraco">até</span>
+        <input class="entrada" type="date" id="per-ate" value="${ate}" min="${primeiroDia}" max="${hoje}" style="max-width:170px;min-height:36px;font-size:14px" aria-label="Até"></div>` : ""}
+      <div class="segmentado" role="group" id="seg-vista" aria-label="O que mostrar" style="margin-left:auto">
+        <button type="button" data-v="patrimonio" aria-pressed="${cresc.vista === "patrimonio"}">Patrimônio</button>
+        <button type="button" data-v="rendimento" aria-pressed="${cresc.vista === "rendimento"}">Rendimento</button></div>
+    </div>`;
+
+    const grafico = cresc.vista === "rendimento"
+      ? (serieRend.length >= 2
+        ? html`${FC.graficos.linhas({ series: [{ nome: "Rendimento", pontos: serieRend, classe: "l2", area: false }], altura: 240, zero: true })}
+          <p class="texto-p mt2">Quanto o patrimônio rendeu no período, já sem o dinheiro que você aportou ou retirou.</p>`
+        : html`<div class="mensagem info">${icone("info", 18)}<span>Ainda não há registros diários suficientes neste período para medir o rendimento. O painel grava um por dia — escolha um período maior ou volte em alguns dias.</span></div>`)
+      : (trecho.length >= 2
+        ? FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: trecho.map((r) => [r.data, r.patrimonio]), classe: "l1", area: true }], altura: 240 })
+        : html`<div class="mensagem info">${icone("info", 18)}<span>Só há um registro neste período.</span></div>`);
+
     return html`<section class="secao" id="crescimento">
-      <div class="secao-topo"><h2>Crescimento do patrimônio</h2><span class="sub">${regs.length} registro${regs.length === 1 ? "" : "s"} diário${regs.length === 1 ? "" : "s"} desde ${FC.datas.br(primeiro.data)}</span>
-        ${regs.length > 1 ? html`<div class="direita"><div class="segmentado" role="group" id="seg-visao">
-          <button type="button" data-v="total" aria-pressed="${visao === "total"}">Total</button>
-          <button type="button" data-v="classe" aria-pressed="${visao === "classe"}">Por classe</button></div></div>` : ""}</div>
+      <div class="secao-topo"><h2>Crescimento do patrimônio</h2><span class="sub">${cresc.periodo === "tudo" ? "desde " + FC.datas.mesAno(primeiroDia) : FC.datas.br(de) + " a " + FC.datas.br(ate)}</span></div>
       <div class="cartao">
+        ${seletor}
         <dl class="kpis mb3">
-          <div class="kpi"><dt>${ultimo.ao_vivo ? "Agora" : "Último registro"}</dt><dd>${fmt.brl(ultimo.patrimonio)}<small>${ultimo.ao_vivo ? "ao vivo · registrado todo dia" : FC.datas.br(ultimo.data) + " · " + (ultimo.origem === "automatico" ? "automático" : "pelo app")}</small></dd></div>
-          ${kpiVar("7 dias", variacaoDesde(regs, 7))}
-          ${kpiVar("30 dias", variacaoDesde(regs, 30))}
-          ${kpiVar(medidos.length ? `Ganho desde ${FC.datas.br(medidos[0].data).slice(0, 5)}` : "Ganho", total, "a partir do 2º dia")}
-          ${importados.length ? html`<div class="kpi pequeno"><dt>Capital investido (histórico)</dt><dd>${fmt.brl(importados.at(-1).patrimonio)}<small>${FC.datas.mesAno(importados[0].data)} → ${FC.datas.mesAno(importados.at(-1).data)}, importado</small></dd></div>` : ""}
+          <div class="kpi"><dt>Rendimento no período</dt><dd class="${rend ? (rend.abs >= 0 ? "pos" : "neg") : "fraco"}">${rend ? html`${rend.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(rend.abs))}` : "—"}
+            <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" : "sem registros suficientes"}</small></dd></div>
+          <div class="kpi pequeno"><dt>Aportes no período</dt><dd>${Math.abs(fluxoPer) > 0.005 ? html`${fluxoPer >= 0 ? "+" : "−"}${fmt.brl(Math.abs(fluxoPer))}` : fmt.brl(0)}<small>${fluxoPer < 0 ? "saiu mais do que entrou" : "dinheiro novo que entrou"}</small></dd></div>
+          <div class="kpi pequeno"><dt>Patrimônio ${fimPer && fimPer.ao_vivo ? "agora" : "no fim"}</dt><dd>${fmt.brl(fimPer ? fimPer.patrimonio : 0)}<small>${trecho.length >= 2 ? (() => { const v = fimPer.patrimonio - trecho[0].patrimonio; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>
         </dl>
         ${grafico}
-        <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Últimos registros</summary>
-          <div class="lista mt2" style="box-shadow:none">${recentes.map((r, i) => {
-            const ant = regs[regs.length - 2 - i];
-            const dv = ant && ant.patrimonio ? (r.patrimonio / ant.patrimonio - 1) * 100 : null;
-            return html`<div class="item"><div class="principal"><div class="titulo">${FC.datas.br(r.data)} ${FC.pilula(r.origem === "automatico" ? "azul" : r.origem === "importado" ? "terra" : "cinza", r.origem === "automatico" ? "automático" : r.origem === "importado" ? "importado" : "app")}</div>
-              <div class="detalhe">${r.origem === "importado" ? "total do mês informado por você" : `${(r.ativos || []).length} ativo(s) · ${r.ao_vivo ? "valor de agora" : "gravado " + new Date(r.registrado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}</div></div>
-              <div class="valores"><b>${fmt.brl(r.patrimonio)}</b><small class="${dv == null ? "" : dv >= 0 ? "pos" : "neg"}">${dv == null ? "primeiro registro" : fmt.delta(dv, 2) + "% no dia"}</small></div></div>`;
-          })}</div></details>
       </div></section>`;
   }
 
@@ -308,7 +316,17 @@
       el.addEventListener("click", () => C.abreAtivo(el.dataset.abre));
       el.addEventListener("keydown", (e) => { if (e.key === "Enter") C.abreAtivo(el.dataset.abre); });
     });
-    FC.$$("#seg-visao button", raiz).forEach((b) => b.addEventListener("click", () => { visao = b.dataset.v; setTimeout(() => FC.rerender({ suave: true }), 200); }));
+    const repinta = () => setTimeout(() => FC.rerender({ suave: true }), 200);
+    FC.$$("#seg-periodo button", raiz).forEach((b) => b.addEventListener("click", () => { cresc.periodo = b.dataset.p; repinta(); }));
+    FC.$$("#seg-vista button", raiz).forEach((b) => b.addEventListener("click", () => { cresc.vista = b.dataset.v; repinta(); }));
+    ["#per-de", "#per-ate"].forEach((sel) => {
+      const el = FC.$(sel, raiz);
+      if (el) el.addEventListener("change", () => {
+        cresc.de = FC.$("#per-de", raiz).value || null; cresc.ate = FC.$("#per-ate", raiz).value || null;
+        if (cresc.de && cresc.ate && cresc.de > cresc.ate) [cresc.de, cresc.ate] = [cresc.ate, cresc.de];
+        FC.rerender({ suave: true, semAnimacao: true });
+      });
+    });
     FC.$$("[data-comeca]", raiz).forEach((el) => el.addEventListener("click", () => (el.dataset.comeca === "ativo" ? C.formAtivo() : C.formRendaFixa())));
   };
 })();
