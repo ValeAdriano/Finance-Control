@@ -13,6 +13,7 @@
     const d = FC.dadosDoForm(form);
     const n = (k) => FC.lerNum(d[k]);
     return FC.mescla(base, {
+      usar_plano: !!d.usar_plano,
       aporte_mensal: n("aporte_mensal") ?? base.aporte_mensal,
       horizonte_anos: Math.max(1, Math.min(60, Math.round(n("horizonte_anos") || base.horizonte_anos))),
       distribuicao_aporte: d.distribuicao_aporte,
@@ -74,19 +75,30 @@
   FC.telas.projecoes = async function (raiz) {
     const prefs = FC.estado.prefs;
     const d = FC.estado.dados;
-    const prem = rascunho || prefs.premissas;
+    const pp = FC.salario.paraProjecao(prefs.plano, FC.estado.base.ganhos || [], FC.estado.base);
+    const temPlano = !!(pp && pp.aporte_mensal > 0);
+    // o plano vale por padrão; só fica de fora se você desligar e salvar
+    const prem = { ...(rascunho || prefs.premissas) };
+    if (prem.usar_plano == null) prem.usar_plano = temPlano;
+    if (!rascunho && !prefs.premissas_salvas) prem.reinvestir_proventos = prefs.plano.reinvestir_dividendos !== false;
+    const usando = temPlano && prem.usar_plano;
+    const dadosProj = { ...d, plano_projecao: pp };
     const m = d.macro;
 
     raiz.innerHTML = String(html`
       ${C.cabecalho("Projeções", "Projeção não é previsão: é a aritmética das premissas, em moeda de hoje.")}
       <form class="cartao" id="f-prem">
+        ${temPlano ? html`<label class="check mb2" style="min-height:0"><span class="interruptor"><input type="checkbox" name="usar_plano" id="usar-plano" ${usando ? "checked" : ""}><span></span></span>
+          <span>Usar meu plano do <a href="#/salario">Salário</a>: <b class="rs">${fmt.brlTexto(pp.aporte_mensal)}</b> por mês, divididos como no plano</span></label>`
+          : html`<p class="texto-p mb2">${icone("info", 14)} Monte um plano em <a href="#/salario">Salário</a> para a projeção usar a sua renda e a divisão dos aportes.</p>`}
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-          ${campo("aporte_mensal", "Aporte mensal (R$)", prem.aporte_mensal)}
+          ${campo("aporte_mensal", "Aporte mensal (R$)", usando ? Number(pp.aporte_mensal.toFixed(2)) : prem.aporte_mensal, usando ? "vem do plano" : "", usando ? "disabled" : "")}
           ${campo("horizonte_anos", "Horizonte (anos)", prem.horizonte_anos)}
-          <div class="campo"><label for="distribuicao_aporte">Destino do aporte</label><select id="distribuicao_aporte" name="distribuicao_aporte">
+          <div class="campo"><label for="distribuicao_aporte">Destino do aporte</label><select id="distribuicao_aporte" name="distribuicao_aporte" ${usando ? "disabled" : ""}>
+            ${usando ? html`<option>Conforme o plano</option>` : html`
             <option value="rebalancear" ${prem.distribuicao_aporte === "rebalancear" ? "selected" : ""}>Pilar mais defasado</option>
-            <option value="proporcional" ${prem.distribuicao_aporte === "proporcional" ? "selected" : ""}>Proporcional à meta</option></select></div>
-          <label class="check" style="align-self:end"><span class="interruptor"><input type="checkbox" name="reinvestir_proventos" ${prem.reinvestir_proventos ? "checked" : ""}><span></span></span>Reinvestir proventos</label>
+            <option value="proporcional" ${prem.distribuicao_aporte === "proporcional" ? "selected" : ""}>Proporcional à meta</option>`}</select></div>
+          <label class="check" style="align-self:end"><span class="interruptor"><input type="checkbox" name="reinvestir_proventos" ${prem.reinvestir_proventos ? "checked" : ""}><span></span></span>Reinvestir dividendos</label>
         </div>
         <p class="rot fraco mt3 mb2" style="font-size:13px;font-weight:500">Valorização real ao ano, sem contar proventos (%)</p>
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
@@ -105,7 +117,7 @@
             <button class="botao" type="button" id="bt-salvar">Salvar como padrão</button></div>
         </div>
       </form>
-      <div id="resultado">${resultado(FC.projecao.projeta(d, prem))}</div>
+      <div id="resultado">${resultado(FC.projecao.projeta(dadosProj, prem))}</div>
     `);
 
     const form = FC.$("#f-prem", raiz);
@@ -115,12 +127,16 @@
       espera = setTimeout(() => {
         rascunho = premissasDoForm(form, prefs.premissas);
         const alvo = FC.$("#resultado", raiz);
-        alvo.innerHTML = String(resultado(FC.projecao.projeta(FC.estado.dados, rascunho)));
+        alvo.innerHTML = String(resultado(FC.projecao.projeta(dadosProj, rascunho)));
         FC.$("#marca-sim", raiz).textContent = "Simulação não salva — os números usam os valores acima.";
         FC.animar(alvo);
       }, 350);
     });
-    form.addEventListener("change", () => form.dispatchEvent(new Event("input")));
+    form.addEventListener("change", (e) => {
+      // ligar/desligar o plano muda quais campos valem: redesenha a tela
+      if (e.target.id === "usar-plano") { rascunho = premissasDoForm(form, prefs.premissas); return FC.rerender({ suave: true, semAnimacao: true }); }
+      form.dispatchEvent(new Event("input"));
+    });
     FC.$("#bt-salvar", raiz).addEventListener("click", async (e) => {
       const p = premissasDoForm(form, prefs.premissas);
       try {

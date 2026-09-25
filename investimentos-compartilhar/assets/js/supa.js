@@ -70,17 +70,18 @@
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
-        tudo("patrimonio_historico", "data"),
+        tudo("patrimonio_historico", "data"), tudo("ganhos", "inicio"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
         rendaFixa: rendaFixa.map(normRF),
         aportes: aportes.map(normAporte),
         prefsBrutas: prefs || {},
+        ganhos: ganhos.map((g) => ({ ...g, valor: num(g.valor) })),
         historico: historico.map((h) => ({ ...h, patrimonio: num(h.patrimonio), renda_variavel: num(h.renda_variavel) || 0,
           cripto: num(h.cripto) || 0, renda_fixa: num(h.renda_fixa) || 0, agro: num(h.agro) || 0, investido: num(h.investido) })),
         agro: { movs: movs.map(normMov), custos: custos.map((c) => ({ ...c, valor: num(c.valor) })),
@@ -122,7 +123,7 @@
 
     async apagaConta() {
       // apaga os dados de todas as tabelas; a conta continua existindo
-      for (const t of ["aportes", "ativos", "renda_fixa", "agro_movimentos", "agro_custos", "agro_pesagens", "preferencias", "patrimonio_historico"]) {
+      for (const t of ["aportes", "ativos", "renda_fixa", "agro_movimentos", "agro_custos", "agro_pesagens", "preferencias", "patrimonio_historico", "ganhos"]) {
         checa(await sb.from(t).delete().not("user_id", "is", null));
       }
     },

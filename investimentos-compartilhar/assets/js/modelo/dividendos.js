@@ -124,5 +124,87 @@
     };
   }
 
-  FC.dividendos = { analisa, COM_DIVIDENDO, IR_JCP };
+  // ---------------------------------------------------------------- análise de pagadora
+  // Para um ativo qualquer (não precisa estar na carteira): com que
+  // frequência paga, em que meses, quanto do preço devolve por ano, há
+  // quantos anos paga sem falhar, se o dividendo cresce e se cabe no lucro.
+  const NOMES_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+  function analisaPagadora({ ticker, classe, lista, preco, fund }) {
+    const hoje = FC.datas.hoje();
+    const anoAtual = Number(hoje.slice(0, 4));
+    const ha12 = FC.datas.soma(hoje, -365);
+    const provs = (lista || []).filter((p) => p.data_com <= hoje);
+    const ult12 = provs.filter((p) => p.data_com > ha12);
+    const soma12 = FC.soma(ult12, (p) => p.valor);
+    const eventos12 = new Set(ult12.map((p) => p.data_com)).size;
+
+    // por ano (pela data com), nos 5 anos fechados
+    const anos = [];
+    for (let a = anoAtual - 5; a <= anoAtual - 1; a++) {
+      const doAno = provs.filter((p) => p.data_com.startsWith(String(a)));
+      anos.push({ ano: a, valor: FC.soma(doAno, (p) => p.valor), eventos: new Set(doAno.map((p) => p.data_com)).size });
+    }
+    const anosComPagamento = anos.filter((x) => x.valor > 0).length;
+    const valoresAnos = anos.map((x) => x.valor).filter((v) => v > 0);
+    const mediaAnual = valoresAnos.length ? FC.soma(valoresAnos, (v) => v) / anos.length : 0;
+    // estabilidade: quanto os anos variam entre si (1 = sempre o mesmo valor)
+    let estabilidade = null;
+    if (valoresAnos.length >= 3) {
+      const m = valoresAnos.reduce((a, b) => a + b, 0) / valoresAnos.length;
+      const dp = Math.sqrt(valoresAnos.reduce((s, v) => s + (v - m) ** 2, 0) / valoresAnos.length);
+      estabilidade = Math.max(0, 1 - dp / m);
+    }
+    // crescimento: 12 meses de hoje contra os 12 meses de 3 anos atrás
+    const ini3 = FC.datas.soma(hoje, -4 * 365), fim3 = FC.datas.soma(hoje, -3 * 365);
+    const soma3 = FC.soma(provs.filter((p) => p.data_com > ini3 && p.data_com <= fim3), (p) => p.valor);
+    const crescimento = soma3 > 0 && soma12 > 0 ? (Math.pow(soma12 / soma3, 1 / 3) - 1) * 100 : null;
+
+    // meses em que costuma pagar (pela data de pagamento, 3 últimos anos)
+    const meses = Array(12).fill(0);
+    const ha3 = FC.datas.soma(hoje, -3 * 365);
+    for (const p of provs.filter((x) => x.data_com > ha3)) {
+      const d = p.pagamento || p.data_com;
+      meses[Number(d.slice(5, 7)) - 1]++;
+    }
+    const mesesQuePaga = meses.map((n, i) => (n >= 2 ? NOMES_MES[i] : null)).filter(Boolean);
+
+    const frequencia = eventos12 >= 10 ? "mensal" : eventos12 >= 5 ? "bimestral" : eventos12 >= 3 ? "trimestral"
+      : eventos12 >= 2 ? "semestral" : eventos12 >= 1 ? "anual" : "não pagou em 12 meses";
+    // quem paga mais de uma vez no mês (JCP mensal + extras) paga "todo mês"
+    const intervaloMeses = eventos12 ? Math.max(1, 12 / eventos12) : null;
+    const dy12 = preco ? (soma12 / preco) * 100 : null;
+    const dyMedio5 = preco ? (mediaAnual / preco) * 100 : null;
+    const pctJcp = soma12 ? (FC.soma(ult12.filter((p) => p.tipo === "JCP"), (p) => p.valor) / soma12) * 100 : 0;
+    const payout = fund && ok(fund.dy) && ok(fund.pl) && fund.pl > 0 ? fund.dy * fund.pl : null;
+    const proximo = (lista || []).filter((p) => (p.pagamento || p.data_com) > hoje).sort((a, b) => (a.pagamento || a.data_com).localeCompare(b.pagamento || b.data_com))[0] || null;
+    const ultimo = [...provs].sort((a, b) => (b.pagamento || b.data_com).localeCompare(a.pagamento || a.data_com))[0] || null;
+
+    // ---- nota de 0 a 100
+    const fii = classe === "fii";
+    const alvoDy = fii ? 11 : 7;
+    const nDy = dy12 == null ? 0 : Math.min(100, (dy12 / alvoDy) * 100);
+    const nConsist = (anosComPagamento / 5) * 100;
+    const nFreq = { mensal: 100, bimestral: 85, trimestral: 70, semestral: 50, anual: 30 }[frequencia] || 0;
+    const nEstab = estabilidade == null ? 40 : estabilidade * 100;
+    const nCresc = crescimento == null ? 50 : Math.max(0, Math.min(100, 50 + crescimento * 5));
+    const nPayout = payout == null ? 60 : payout <= 80 ? 100 : payout <= 100 ? 70 : payout <= 150 ? 30 : 0;
+    const nota = soma12 ? 0.3 * nDy + 0.2 * nConsist + 0.15 * nFreq + 0.15 * nEstab + 0.1 * nCresc + 0.1 * nPayout : 0;
+    const classe_div = !soma12 ? ["Não paga", "cinza"] : nota >= 75 ? ["Excelente pagadora", "verde"] : nota >= 55 ? ["Boa pagadora", "azul"]
+      : nota >= 40 ? ["Pagadora irregular", "amarelo"] : ["Fraca", "vermelho"];
+
+    const alertas = [];
+    if (payout != null && payout > 100) alertas.push(`Payout de ${FC.fmt.num(payout, 0)}%: pagou mais do que lucrou — pode não se repetir.`);
+    if (dy12 != null && dy12 > (fii ? 16 : 14)) alertas.push("DY muito acima do normal: pode ser pagamento extraordinário ou preço que caiu por um motivo.");
+    if (anosComPagamento < 5 && anosComPagamento > 0) alertas.push(`Pagou em ${anosComPagamento} dos últimos 5 anos.`);
+    if (crescimento != null && crescimento < -10) alertas.push("Os proventos vêm caindo nos últimos 3 anos.");
+    if (pctJcp > 50) alertas.push(`${FC.fmt.num(pctJcp, 0)}% vem de JCP, que tem 15% de IR na fonte.`);
+
+    return { ticker, classe, preco, soma12, eventos12, frequencia, intervalo_meses: intervaloMeses, dy12, dy_medio5: dyMedio5,
+      anos, anos_com_pagamento: anosComPagamento, estabilidade, crescimento, meses, meses_que_paga: mesesQuePaga,
+      pct_jcp: pctJcp, payout, proximo, ultimo, nota, classificacao: classe_div[0], cor: classe_div[1], alertas,
+      notas: { dy: nDy, consistencia: nConsist, frequencia: nFreq, estabilidade: nEstab, crescimento: nCresc, payout: nPayout } };
+  }
+
+  FC.dividendos = { analisa, analisaPagadora, COM_DIVIDENDO, IR_JCP, NOMES_MES };
 })();

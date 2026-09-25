@@ -141,6 +141,46 @@
       return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
     },
   };
+  // ---- dias úteis: sem fim de semana e sem feriado bancário nacional
+  const cacheFeriados = {};
+  function pascoa(ano) {           // algoritmo de Meeus/Jones/Butcher
+    const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4;
+    const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+    return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  }
+  datas.feriados = function (ano) {
+    if (cacheFeriados[ano]) return cacheFeriados[ano];
+    const p = pascoa(ano);
+    const fixos = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "12-25"].map((d) => `${ano}-${d}`);
+    if (ano >= 2024) fixos.push(`${ano}-11-20`);          // Consciência Negra, feriado nacional desde 2024
+    const moveis = [datas.soma(p, -48), datas.soma(p, -47), datas.soma(p, -2), datas.soma(p, 60)]; // Carnaval, Sexta Santa, Corpus Christi
+    return (cacheFeriados[ano] = new Set([...fixos, ...moveis]));
+  };
+  datas.ehUtil = function (iso) {
+    const dow = new Date(iso + "T12:00:00Z").getUTCDay();
+    return dow !== 0 && dow !== 6 && !datas.feriados(Number(iso.slice(0, 4))).has(iso);
+  };
+  datas.ultimoDiaDoMes = (mes) => { const [a, m] = mes.split("-").map(Number); return new Date(Date.UTC(a, m, 0)).getUTCDate(); };
+  // n-ésimo dia útil do mês (AAAA-MM); se o mês tiver menos, o último
+  datas.diaUtil = function (mes, n) {
+    let achados = 0, ultimo = null;
+    for (let d = 1; d <= datas.ultimoDiaDoMes(mes); d++) {
+      const iso = `${mes}-${String(d).padStart(2, "0")}`;
+      if (!datas.ehUtil(iso)) continue;
+      ultimo = iso;
+      if (++achados === n) return iso;
+    }
+    return ultimo;
+  };
+  datas.ultimoDiaUtil = function (mes) {
+    for (let d = datas.ultimoDiaDoMes(mes); d >= 1; d--) {
+      const iso = `${mes}-${String(d).padStart(2, "0")}`;
+      if (datas.ehUtil(iso)) return iso;
+    }
+    return `${mes}-01`;
+  };
   FC.datas = datas;
 
   // ---------------------------------------------------------------- ícones
@@ -171,6 +211,7 @@
     importar: '<path d="M12 3v12M7 10l5 5 5-5M4 19h16"/>',
     exportar: '<path d="M12 15V3M7 8l5-5 5 5M4 19h16"/>',
     boi: '<path d="M4 8c-1-2 0-4 0-4s2 1 3 3h10c1-2 3-3 3-3s1 2 0 4"/><path d="M6 8c0 6 2 11 6 11s6-5 6-11"/><circle cx="9.5" cy="12" r=".6"/><circle cx="14.5" cy="12" r=".6"/><path d="M10 16h4"/>',
+    carteira: '<path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1.2"/>',
     balanca: '<path d="M12 3v18M5 21h14M6 7h12M6 7l-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z"/>',
     moeda: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c0-1.1-1.1-2-2.5-2s-2.5.9-2.5 2 1.1 1.7 2.5 2 2.5.9 2.5 2-1.1 2-2.5 2-2.5-.9-2.5-2M12 6v1.5M12 16.5V18"/>',
   };

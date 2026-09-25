@@ -42,8 +42,13 @@
     return pilares;
   }
 
-  function destino(saldos, alvos, modo) {
+  function destino(saldos, alvos, modo, pesosPlano) {
     const ks = Object.keys(saldos);
+    // o plano do Salário diz a fatia de cada pilar, todo mês
+    if (modo === "plano" && pesosPlano) {
+      const s = ks.reduce((t, k) => t + (pesosPlano[k] || 0), 0) || 1;
+      return Object.fromEntries(ks.map((k) => [k, (pesosPlano[k] || 0) / s]));
+    }
     const total = ks.reduce((s, k) => s + saldos[k], 0);
     const somaAlvos = ks.reduce((s, k) => s + (Number(alvos[k]) || 0), 0);
     const proporcional = () => Object.fromEntries(ks.map((k) => [k, (Number(alvos[k]) || 0) / somaAlvos]));
@@ -66,6 +71,8 @@
     const dy = Object.fromEntries(Object.entries(pilares).map(([k, p]) => [k, p.dy || 0]));
     // se não há nenhum pilar (carteira vazia), o aporte cria os pilares da meta
     if (!Object.keys(saldos).length) for (const k of Object.keys(alvos)) if (Number(alvos[k]) > 0) { saldos[k] = 0; dy[k] = 0; }
+    // pilar que o plano manda aportar e que você ainda não tem: começa do zero
+    if (modo === "plano" && prem._pesos_plano) for (const k of Object.keys(prem._pesos_plano)) if (!(k in saldos)) { saldos[k] = 0; dy[k] = 0; }
     const fator = Object.fromEntries(Object.keys(saldos).map((k) => [k,
       k === "caixa" ? mensal((pilares.caixa || {}).taxa_real || 0) : mensal((Number(val[k]) || 0) + ajuste)]));
 
@@ -78,7 +85,7 @@
       prov += rendaMes;
       const entrada = aporte + (reinveste ? rendaMes : 0);
       aportado += aporte;
-      const pesos = destino(saldos, alvos, modo);
+      const pesos = destino(saldos, alvos, modo, prem._pesos_plano);
       for (const [k, w] of Object.entries(pesos)) saldos[k] += entrada * w;
       if (m % 3 === 0 || m === meses) {
         pat.push([m / MESES, Object.values(saldos).reduce((a, b) => a + b, 0)]);
@@ -95,6 +102,10 @@
   }
 
   function projeta(dados, prem) {
+    // com o plano do Salário ligado, o aporte e a divisão vêm dele
+    const pp = dados.plano_projecao;
+    const usandoPlano = !!(prem.usar_plano && pp && pp.aporte_mensal > 0);
+    if (usandoPlano) prem = { ...prem, aporte_mensal: pp.aporte_mensal, distribuicao_aporte: "plano", _pesos_plano: pp.pesos };
     const macro = dados.macro || {};
     const lp = prem.macro_longo_prazo || {};
     const cdi = lp.cdi != null ? lp.cdi : macro.cdi || 10;
@@ -115,6 +126,7 @@
     const caixa = resumo.find((l) => l.chave === "caixa");
     const rv = resumo.filter((l) => l.chave !== "caixa" && l.valor > 0).map((l) => l.total);
     return {
+      usando_plano: usandoPlano,
       base, pessimista: pess, otimista: otim, pilares: resumo, macro_lp: macroLp,
       usando_macro_de_hoje: lp.cdi == null, premissas: prem,
       alerta_caixa: !!caixa && caixa.valor > 0 && rv.length > 0 && caixa.total > Math.max(...rv),

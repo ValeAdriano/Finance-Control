@@ -13,6 +13,7 @@
     { id: "agro", nome: "Agro", icone: "agro" },
     { id: "aportes", nome: "Aportes", icone: "aportes" },
     { id: "dividendos", nome: "Dividendos", icone: "moeda" },
+    { id: "salario", nome: "Salário", icone: "carteira" },
     { id: "renda", nome: "Renda", icone: "renda" },
     { id: "simular", nome: "Simular", icone: "simular" },
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
@@ -46,6 +47,7 @@
       regras: brutas.regras ? FC.mescla(FC.PADRAO_REGRAS, brutas.regras) : JSON.parse(JSON.stringify(FC.PADRAO_REGRAS)),
       renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
       agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),
+      plano: FC.mescla(FC.PADRAO_PLANO, brutas.plano),
     };
   };
 

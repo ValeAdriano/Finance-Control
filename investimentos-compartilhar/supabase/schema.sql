@@ -274,3 +274,40 @@ create extension if not exists pg_cron;
 alter table public.patrimonio_historico drop constraint if exists patrimonio_historico_origem_check;
 alter table public.patrimonio_historico add constraint patrimonio_historico_origem_check
   check (origem in ('app','automatico','importado'));
+
+-- ============================================================
+--  SALÁRIO E PLANO DE INVESTIMENTO
+-- ============================================================
+-- Ganhos: os fixos (salário, aluguel…) valem todo mês entre início e
+-- fim; os avulsos (bônus, freela, 13º…) valem só no mês da data.
+create table if not exists public.ganhos (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null default auth.uid() references auth.users on delete cascade,
+  nome       text not null check (length(nome) between 1 and 80),
+  categoria  text not null default 'salario' check (categoria in
+             ('salario','extra','bonus','decimo_terceiro','ferias','aluguel','pro_labore','outros')),
+  tipo       text not null check (tipo in ('recorrente','avulso')),
+  valor      numeric not null check (valor > 0),      -- líquido, o que cai na conta
+  inicio     date not null,                          -- avulso: a data do recebimento
+  fim        date,                                   -- recorrente: último mês (vazio = sem fim)
+  observacao text not null default '' check (length(observacao) <= 160),
+  criado_em  timestamptz not null default now(),
+  check (fim is null or fim >= inicio)
+);
+create index if not exists ganhos_user_idx on public.ganhos (user_id, inicio);
+
+alter table public.ganhos enable row level security;
+drop policy if exists "dono" on public.ganhos;
+create policy "dono" on public.ganhos for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+revoke all on public.ganhos from anon;
+grant select, insert, update, delete on public.ganhos to authenticated;
+
+-- o plano mora nas preferências: {modo, percentual, valor, destinos[], reinvestir_dividendos}
+alter table public.preferencias add column if not exists plano jsonb;
+
+-- quando o ganho fixo cai: dia fixo do mês, N-ésimo dia útil ou último dia útil
+alter table public.ganhos add column if not exists dia_regra text
+  check (dia_regra is null or dia_regra in ('dia_fixo','dia_util','ultimo_dia_util'));
+alter table public.ganhos add column if not exists dia_numero integer
+  check (dia_numero is null or dia_numero between 1 and 31);

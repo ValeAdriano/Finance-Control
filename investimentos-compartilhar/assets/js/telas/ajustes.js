@@ -89,7 +89,7 @@
 
       ${grupo("Seus dados", "", html`<div class="lista">
         <div class="item clicavel" id="aj-exportar"><span style="color:var(--acento)">${icone("exportar", 22)}</span>
-          <div class="principal"><div class="titulo">Baixar backup</div><div class="detalhe">tudo em um arquivo JSON: carteira, aportes, agro e preferências</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+          <div class="principal"><div class="titulo">Baixar backup</div><div class="detalhe">tudo em um arquivo JSON: carteira, aportes, agro, ganhos e preferências</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
         <div class="item clicavel" id="aj-restaurar"><span style="color:var(--acento)">${icone("importar", 22)}</span>
           <div class="principal"><div class="titulo">Restaurar backup</div><div class="detalhe">acrescenta o conteúdo de um backup; o que já existe fica</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
         <div class="item clicavel" id="aj-apagar"><span style="color:var(--vermelho)">${icone("lixo", 22)}</span>
@@ -179,6 +179,7 @@
       const backup = { app: "finance-control", versao: 1, gerado: new Date().toISOString(),
         ativos: limpa(b.ativos), renda_fixa: limpa(b.rendaFixa), aportes: limpa(b.aportes),
         agro_movimentos: limpa(b.agro.movs), agro_custos: limpa(b.agro.custos), agro_pesagens: limpa(b.agro.pesagens),
+        ganhos: limpa(b.ganhos || []),
         preferencias: (({ user_id, ...x }) => x)(b.prefsBrutas || {}) };
       FC.baixar(`finance-control-${FC.datas.hoje()}.json`, JSON.stringify(backup, null, 2));
       FC.ui.aviso("Backup baixado");
@@ -201,6 +202,7 @@
         await FC.db.inserirVarios("agro_movimentos", sem(b.agro_movimentos));
         await FC.db.inserirVarios("agro_custos", sem(b.agro_custos));
         await FC.db.inserirVarios("agro_pesagens", sem(b.agro_pesagens));
+        if (b.ganhos) await FC.db.inserirVarios("ganhos", sem(b.ganhos));
         if (b.preferencias) { const { atualizado_em, ...p } = b.preferencias; await FC.db.gravaPrefs(p); }
         await C.depoisDeMudar("Backup restaurado", true);
       } catch (err) { FC.ui.erro(err); }

@@ -47,8 +47,9 @@
   }
 
   // Interface simplificada: valor e quantidade, e pronto.
-  function repetir(g) {
-    const u = g.ultimo;
+  // sugestao: valor em R$ para já vir preenchido (ex.: o que falta no plano do mês)
+  function repetir(g, sugestao) {
+    const u = sugestao ? { ...(g.ultimo || {}), valor: sugestao, quantidade: null, data: (g.ultimo || {}).data } : g.ultimo;
     if (g.tipo === "caixa") {
       const t = FC.estado.base.rendaFixa.find((r) => r.nome === g.nome);
       const saldo = (t ? t.valor_aplicado : 0) + C.aportadoRf(g.nome);
@@ -114,6 +115,12 @@
         data: FC.$("#rp-data", form).value || FC.datas.hoje(), observacao: "" }, `${fmt.qtd(q)} ${unid} por ${fmt.brlTexto(v)} adicionado`, f);
     });
   }
+
+  // atalho usado por outras telas (guia do mês do Salário)
+  FC.aportarRapido = function ({ tipo, nome, valor }) {
+    const g = recorrentes().find((x) => x.k === (tipo === "ativo" ? "a:" : "c:") + nome) || { k: (tipo === "ativo" ? "a:" : "c:") + nome, tipo, nome, n: 0, ultimo: null };
+    repetir(g, valor > 0 ? Number(valor.toFixed(2)) : null);
+  };
 
   // ---------------------------------------------------------------- novo aporte
   function sugestoesAtivos() {
