@@ -352,6 +352,8 @@
     }
     casca();
     await FC.rerender();
+    // primeiro acesso da conta: a apresentação por passos
+    if (FC.onboarding.precisa()) FC.onboarding.abre();
     FC.carregaMercado(false);
     ligaAtualizacaoAutomatica();
   };

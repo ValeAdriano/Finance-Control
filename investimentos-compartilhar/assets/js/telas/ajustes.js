@@ -38,6 +38,8 @@
             <div class="detalhe">Conta criada em ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
         <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
           <input class="entrada" id="aj-nome" style="max-width:200px;min-height:38px" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
+        <div class="item clicavel" id="aj-apresentacao"><span style="color:var(--acento)">${icone("info", 20)}</span>
+          <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
       </div>`)}
 
       ${grupo("Segurança", "", html`<div class="lista">
@@ -137,6 +139,7 @@
       }, 700);
     });
     FC.$("#aj-senha", raiz).addEventListener("click", trocaSenha);
+    FC.$("#aj-apresentacao", raiz).addEventListener("click", () => FC.onboarding.abre());
     FC.$("#aj-mfa-add", raiz) && FC.$("#aj-mfa-add", raiz).addEventListener("click", () => ligaMfa(fatores.length));
     FC.$$("[data-remove-fator]", raiz).forEach((bt) => bt.addEventListener("click", () => removeFator(fatores, bt.dataset.removeFator)));
     FC.$("#aj-sair-outros", raiz).addEventListener("click", async (e) => {
