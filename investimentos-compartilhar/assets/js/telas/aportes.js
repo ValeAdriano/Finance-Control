@@ -143,7 +143,7 @@
         <div id="nv-novo" hidden class="cartao" style="background:var(--bg-3);box-shadow:none;padding:14px 18px">
           <p class="texto-p mb2"><b id="nv-nome"></b> ainda não está na sua carteira — vai ser adicionado junto com este aporte.</p>
           <div class="linha2">
-            <div class="campo"><label for="nv-classe">Tipo</label><select id="nv-classe" name="classe">${Object.entries(FC.CLASSES).map(([k, v]) => html`<option value="${k}">${v}</option>`)}</select></div>
+            <div class="campo"><label for="nv-classe">Tipo</label><select id="nv-classe" name="classe">${FC.classesLigadas().map(([k, v]) => html`<option value="${k}">${v}</option>`)}</select></div>
             <div class="campo"><label for="nv-pilar">Pilar</label><select id="nv-pilar" name="pilar">${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}">${p.nome}</option>`)}</select></div>
           </div></div>
         <div class="linha2">

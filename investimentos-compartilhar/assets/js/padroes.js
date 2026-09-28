@@ -13,6 +13,38 @@
   ];
   FC.PILAR_NOME = Object.fromEntries(FC.PILARES.map((p) => [p.chave, p.nome]));
 
+  // ------------------------------------------------------------------ módulos
+  // O que nem todo mundo usa fica desligado até a pessoa ligar em Ajustes.
+  // Desligar só esconde: os dados continuam guardados e somando no patrimônio.
+  FC.MODULOS = [
+    { chave: "agro", nome: "Agronegócio", icone: "agro", desc: "rebanho: compras, vendas, custos e pesagens do gado", rotas: ["agro"] },
+    { chave: "cripto", nome: "Criptomoedas", icone: "moeda", desc: "BTC, ETH e outras, com cotação em reais", classes: ["cripto"] },
+    { chave: "exterior", nome: "Bolsa dos EUA", icone: "ativos", desc: "ações e ETFs negociados nos Estados Unidos", classes: ["acao_us", "etf_us"] },
+    { chave: "renda", nome: "Análise de setores", icone: "renda", desc: "aba Renda: empresas de setores perenes pelos seus critérios de dividendo", rotas: ["renda"] },
+    { chave: "simular", nome: "Simulador de compras", icone: "simular", desc: "aba Simular: o efeito de uma cesta na alocação antes de comprar", rotas: ["simular"] },
+  ];
+  // sem escolha salva, liga o que a conta já usa
+  FC.resolveModulos = function (salvos, base) {
+    if (salvos) return Object.fromEntries(FC.MODULOS.map((m) => [m.chave, !!salvos[m.chave]]));
+    const ativos = (base && base.ativos) || [];
+    const ag = (base && base.agro) || {};
+    return {
+      agro: !!((ag.movs || []).length || (ag.custos || []).length),
+      cripto: ativos.some((a) => a.classe === "cripto"),
+      exterior: ativos.some((a) => a.classe === "acao_us" || a.classe === "etf_us"),
+      renda: false,
+      simular: false,
+    };
+  };
+  const mods = () => (FC.estado && FC.estado.prefs && FC.estado.prefs.modulos) || {};
+  FC.modulo = (chave) => !!mods()[chave];
+  // rota pertence a um módulo desligado?
+  FC.rotaLigada = (id) => !FC.MODULOS.some((m) => (m.rotas || []).includes(id) && !FC.modulo(m.chave));
+  // classes de ativo à mostrar nos formulários (mantém a atual, mesmo desligada)
+  FC.classesLigadas = (atual) => Object.entries(FC.CLASSES).filter(([k]) =>
+    k === atual || !FC.MODULOS.some((m) => (m.classes || []).includes(k) && !FC.modulo(m.chave)));
+  FC.pilaresLigados = () => FC.PILARES.filter((p) => p.chave !== "agro" || FC.modulo("agro"));
+
   FC.CLASSES = {
     acao_br: "Ação brasileira",
     etf_br: "ETF na B3",

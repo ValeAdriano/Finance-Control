@@ -49,6 +49,7 @@
           dl_ebitda: semEbitda ? null : dividaSobreEbitda(d),
           sem_ebitda: semEbitda, dy: dy || null, pl: pl || null, pvp: d.pvp, roe: d.roe,
           liquidez: liq, liquido: liq >= liqMin,
+          graham: FC.graham(cot, d.pl, d.pvp),
         });
       }
     }

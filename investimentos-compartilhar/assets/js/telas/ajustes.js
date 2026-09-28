@@ -42,6 +42,13 @@
           <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
       </div>`)}
 
+      ${grupo("Módulos", "ligue só o que você usa; o resto sai dos menus", html`<div class="lista" id="aj-modulos">
+        ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
+          <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
+          <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
+      </div>
+      <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
+
       ${grupo("Segurança", "", html`<div class="lista">
         <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
           <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
@@ -80,7 +87,8 @@
 
       ${grupo("Metas de alocação", "em % do patrimônio; a soma precisa dar 100", html`<form class="cartao" id="f-metas">
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
-          ${FC.PILARES.map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
+          ${FC.PILARES.filter((p) => !FC.pilaresLigados().includes(p)).map((p) => html`<input type="hidden" name="${p.chave}" value="${alvos[p.chave] ?? 0}">`)}
+          ${FC.pilaresLigados().map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
             <input id="meta-${p.chave}" name="${p.chave}" inputmode="decimal" value="${alvos[p.chave] ?? 0}"></div>`)}
         </div>
         <div class="flex entre mt2"><span id="soma-metas" class="fraco"></span><button class="botao" type="submit">Salvar metas</button></div>
@@ -148,6 +156,20 @@
       catch (err) { FC.ui.erro(err); }
     });
     FC.$("#aj-sair", raiz).addEventListener("click", () => FC.sair());
+
+    // ---- módulos
+    FC.$$("[data-modulo]", raiz).forEach((cx) => cx.addEventListener("change", async () => {
+      const m = FC.MODULOS.find((x) => x.chave === cx.dataset.modulo);
+      const modulos = { ...FC.estado.prefs.modulos, [m.chave]: cx.checked };
+      try {
+        await FC.db.gravaPrefs({ modulos });
+        FC.estado.prefs.modulos = modulos;
+        FC.estado.base.prefsBrutas.modulos = modulos;
+        FC.atualizaNavegacao();
+        FC.ui.aviso(`${m.nome} ${cx.checked ? "ligado" : "desligado"}`);
+        FC.rerender({ suave: true, semAnimacao: true });
+      } catch (err) { cx.checked = !cx.checked; FC.ui.erro(err); }
+    }));
 
     // ---- aparência
     FC.$$("#aj-tema button", raiz).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));

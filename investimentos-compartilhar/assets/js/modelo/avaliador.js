@@ -201,6 +201,26 @@
     return base;
   }
 
+  // ---------------------------------------------------------------- Graham
+  // Preço justo de Benjamin Graham: √(22,5 × LPA × VPA). O 22,5 vem dos
+  // tetos dele para ação defensiva: P/L até 15 e P/VP até 1,5 (15 × 1,5).
+  // LPA e VPA saem da cotação e dos múltiplos (LPA = preço ÷ P/L,
+  // VPA = preço ÷ P/VP). Não vale com prejuízo ou patrimônio negativo.
+  FC.graham = function (cotacao, pl, pvp) {
+    if (!ok(cotacao) || cotacao <= 0) return null;
+    if (!ok(pl) || !ok(pvp) || pl === 0 || pvp === 0) return { valor: null, motivo: "sem P/L ou P/VP na fonte" };
+    if (pl < 0) return { valor: null, motivo: "a empresa teve prejuízo nos últimos 12 meses — a fórmula não se aplica" };
+    if (pvp < 0) return { valor: null, motivo: "patrimônio líquido negativo — a fórmula não se aplica" };
+    const lpa = cotacao / pl, vpa = cotacao / pvp;
+    const valor = Math.sqrt(22.5 * lpa * vpa);
+    const margem = (valor / cotacao - 1) * 100;       // > 0: cotação abaixo do justo
+    const cor = margem >= 15 ? "verde" : margem >= -10 ? "amarelo" : "vermelho";
+    const leitura = margem >= 15 ? `${FC.fmt.num(margem, 0)}% abaixo do justo`
+      : margem >= 0 ? "perto do justo"
+      : margem >= -10 ? "um pouco acima do justo" : `${FC.fmt.num(-margem, 0)}% acima do justo`;
+    return { valor, lpa, vpa, margem, cor, leitura };
+  };
+
   // ---------------------------------------------------------------- avaliação
   // `agora`: preço ao vivo {preco}. Com ele, os múltiplos que dependem do
   // preço (DY, P/L, P/VP) são recalculados — lucro, dividendo e patrimônio
@@ -306,6 +326,8 @@
       serie_preco: h ? h.precos : [],
       cambio: h ? h.cambio : null,
       tipo_rotulo: FC.CLASSE_ROTULO[perfil] || FC.CLASSE_ROTULO[classe] || classe,
+      // Graham só faz sentido para ação brasileira (lucro e patrimônio contábeis)
+      graham: classe === "acao_br" ? FC.graham(valores.cotacao, valores.pl, valores.pvp) : null,
     };
   }
 

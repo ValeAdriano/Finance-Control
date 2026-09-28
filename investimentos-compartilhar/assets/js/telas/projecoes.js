@@ -18,7 +18,7 @@
       horizonte_anos: Math.max(1, Math.min(60, Math.round(n("horizonte_anos") || base.horizonte_anos))),
       distribuicao_aporte: d.distribuicao_aporte,
       reinvestir_proventos: !!d.reinvestir_proventos,
-      valorizacao_real_anual: Object.fromEntries(FC.PILARES.filter((p) => p.chave !== "caixa").map((p) => [p.chave, n("val_" + p.chave) ?? 0])),
+      valorizacao_real_anual: Object.fromEntries(FC.PILARES.filter((p) => p.chave !== "caixa").map((p) => [p.chave, n("val_" + p.chave) ?? (base.valorizacao_real_anual || {})[p.chave] ?? 0])),
       cenarios: { pessimista: n("cen_pessimista") ?? -4, otimista: n("cen_otimista") ?? 3 },
       macro_longo_prazo: { cdi: n("cdi_lp"), ipca: n("ipca_lp") },
     });
@@ -102,7 +102,7 @@
         </div>
         <p class="rot fraco mt3 mb2" style="font-size:13px;font-weight:500">Valorização real ao ano, sem contar proventos (%)</p>
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
-          ${FC.PILARES.filter((p) => p.chave !== "caixa").map((p) => campo("val_" + p.chave, p.nome, (prem.valorizacao_real_anual || {})[p.chave] ?? 0))}
+          ${FC.pilaresLigados().filter((p) => p.chave !== "caixa").map((p) => campo("val_" + p.chave, p.nome, (prem.valorizacao_real_anual || {})[p.chave] ?? 0))}
           ${campo("cen_pessimista", "Pessimista (p.p.)", prem.cenarios.pessimista)}
           ${campo("cen_otimista", "Otimista (p.p.)", prem.cenarios.otimista)}
         </div>

@@ -15,15 +15,20 @@
         <div class="principal"><div class="titulo">${a.ticker}</div><div class="detalhe">${a.erro}</div></div>
         <span class="chevron">${icone("chevron", 18)}</span></div>`;
     }
-    const p = a.posicao;
+    const p = a.posicao, g = a.graham;
     return html`<div class="item clicavel" data-abre="${a.ticker}" role="button" tabindex="0">
       ${FC.anel(a.score, a.cor)}
       <div class="principal">
         <div class="titulo">${a.ticker} ${a.na_carteira ? "" : FC.pilula("cinza", "watchlist")}</div>
         <div class="detalhe">${a.tipo_rotulo}${a.segmento ? " · " + a.segmento : ""} · ${FC.PILAR_NOME[a.pilar] || ""}</div>
+        ${g && g.valor != null ? html`<div class="so-mob graham-mini">Graham ${fmt.preco(g.valor)} · <span class="${g.margem >= 0 ? "pos" : "neg"}">${fmt.delta(g.margem, 0)}%</span></div>` : ""}
       </div>
       <div class="esconde-mob" style="flex:1.2;min-width:0">${C.indicadores(a)}</div>
       <div class="valores" style="min-width:92px"><b>${fmt.preco(a.preco)}</b><small class="${FC.ok(a.variacao_dia) ? (a.variacao_dia >= 0 ? "pos" : "neg") : ""}">${FC.ok(a.variacao_dia) ? fmt.delta(a.variacao_dia, 2) + "% hoje" : "preço"}</small></div>
+      <div class="valores esconde-mob graham-col" title="Preço justo de Graham e a margem de segurança">
+        ${g && g.valor != null ? html`<b>${fmt.preco(g.valor)}</b><small class="${g.margem >= 0 ? "pos" : "neg"}">${fmt.delta(g.margem, 0)}% Graham</small>`
+          : g ? html`<small class="muito-fraco" title="${g.motivo}">Graham n/a</small>` : html`<small class="muito-fraco">—</small>`}
+      </div>
       <div class="valores esconde-mob" style="min-width:120px">
         ${p ? html`<b>${fmt.brl(p.atual)}</b><small>${fmt.qtd(p.quantidade)} ${FC.unidade(a, p.quantidade)}${ok(p.variacao) ? html` · <span class="${p.variacao >= 0 ? "pos" : "neg"}">${fmt.delta(p.variacao)}%</span>` : ""}</small>`
             : html`<small class="muito-fraco">sem posição</small>`}
@@ -236,7 +241,7 @@
           <div class="cresce" style="min-width:180px"><label class="sr" for="an-ticker">Código para analisar</label>
             <input class="entrada" id="an-ticker" list="an-lista" placeholder="Analisar qualquer código: PETR4, HGLG11, BOVA11, BTC…" autocomplete="off" style="text-transform:uppercase"></div>
           <select class="entrada" id="an-classe" style="max-width:190px" aria-label="Tipo">
-            <option value="auto">Tipo automático</option>${Object.entries(FC.CLASSES).map(([k, v]) => html`<option value="${k}">${v}</option>`)}</select>
+            <option value="auto">Tipo automático</option>${FC.classesLigadas().map(([k, v]) => html`<option value="${k}">${v}</option>`)}</select>
           <button class="botao" type="submit">Analisar</button>
         </div>
         <datalist id="an-lista"></datalist>

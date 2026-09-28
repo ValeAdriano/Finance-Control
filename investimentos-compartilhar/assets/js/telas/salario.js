@@ -110,7 +110,7 @@
   // ---------------------------------------------------------------- plano
   function opcoesAlvo(tipo, sel) {
     const b = FC.estado.base;
-    if (tipo === "pilar") return FC.PILARES.map((p) => html`<option value="${p.chave}" ${sel === p.chave ? "selected" : ""}>${p.nome}</option>`);
+    if (tipo === "pilar") return FC.PILARES.filter((p) => FC.pilaresLigados().includes(p) || p.chave === sel).map((p) => html`<option value="${p.chave}" ${sel === p.chave ? "selected" : ""}>${p.nome}</option>`);
     if (tipo === "ativo") {
       const lista = [...new Set(b.ativos.map((a) => a.ticker))].sort();
       if (sel && !lista.includes(sel)) lista.unshift(sel);
@@ -320,7 +320,7 @@
     FC.$("#pl-add", form).addEventListener("click", () => {
       const ds = lerDestinos();
       const usados = new Set(ds.filter((d) => d.tipo === "pilar").map((d) => d.alvo));
-      const livre = FC.PILARES.find((p) => !usados.has(p.chave));
+      const livre = FC.pilaresLigados().find((p) => !usados.has(p.chave));
       ds.push({ tipo: "pilar", alvo: livre ? livre.chave : "acoes", pct: Math.max(0, 100 - FC.soma(ds, (d) => d.pct)) });
       redesenhaDestinos(ds);
     });

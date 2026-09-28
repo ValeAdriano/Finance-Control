@@ -94,7 +94,7 @@
   }
 
   function agroResumo(ag) {
-    if (!ag.tem_dados) return "";
+    if (!ag.tem_dados || !FC.modulo("agro")) return "";
     return html`<section class="secao">
       <div class="secao-topo"><h2>Agronegócio</h2><span class="sub">rebanho e resultado da atividade</span>
         <div class="direita"><a class="botao texto pequeno" href="#/agro">Abrir ${icone("chevron", 14)}</a></div></div>
@@ -256,13 +256,13 @@
   function comecar() {
     return html`<section class="secao">
       <div class="secao-topo"><h2>Comece por aqui</h2><span class="sub">cadastre o que você tem; o resto o painel calcula</span></div>
-      <div class="grade g3">
+      <div class="grade ${FC.modulo("agro") ? "g3" : "g2"}">
         <div class="cartao clicavel" data-comeca="ativo"><div style="color:var(--acento)">${icone("ativos", 28)}</div>
-          <h3 class="mt2">Ações, FIIs, ETFs e cripto</h3><p class="sub">Adicione o que você tem ou acompanha. O painel busca cotações e avalia cada um.</p></div>
+          <h3 class="mt2">Ações, FIIs e ETFs${FC.modulo("cripto") ? " e cripto" : ""}</h3><p class="sub">Adicione o que você tem ou acompanha. O painel busca cotações e avalia cada um.</p></div>
         <div class="cartao clicavel" data-comeca="rf"><div style="color:var(--verde)">${icone("moeda", 28)}</div>
           <h3 class="mt2">Renda fixa</h3><p class="sub">CDBs, Tesouro e caixa, comparados com o CDI do dia.</p></div>
-        <a class="cartao clicavel" href="#/agro" style="color:inherit;text-decoration:none"><div style="color:var(--terra)">${icone("boi", 28)}</div>
-          <h3 class="mt2">Rebanho</h3><p class="sub">Compras, vendas, custos e pesagens do gado.</p></a>
+        ${FC.modulo("agro") ? html`<a class="cartao clicavel" href="#/agro" style="color:inherit;text-decoration:none"><div style="color:var(--terra)">${icone("boi", 28)}</div>
+          <h3 class="mt2">Rebanho</h3><p class="sub">Compras, vendas, custos e pesagens do gado.</p></a>` : ""}
       </div></section>`;
   }
 
@@ -287,6 +287,10 @@
           ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
         </div>
       </div>
+      <a class="cartao clicavel recap-entrada mt3" href="#/retrospectiva">
+        <span class="recap-entrada-ic">${icone("play", 22)}</span>
+        <span><b>Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}</b><small>seu mês contado em etapas · prévia com dados de exemplo</small></span>
+        <span class="chevron">${icone("chevron", 18)}</span></a>
       <div class="mt3">${macro(d.macro)}</div>
       ${vazio ? comecar() : ""}
       ${C.resumoInvestido(d, { compacto: true })}

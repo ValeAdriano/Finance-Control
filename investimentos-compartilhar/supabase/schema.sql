@@ -284,6 +284,8 @@ grant select, insert, update, delete on public.ganhos to authenticated;
 
 -- o plano mora nas preferências: {modo, percentual, valor, destinos[], reinvestir_dividendos}
 alter table public.preferencias add column if not exists plano jsonb;
+-- módulos opcionais ligados em Ajustes (agro, cripto, exterior, renda, simular)
+alter table public.preferencias add column if not exists modulos jsonb;
 
 -- quando o ganho fixo cai: dia fixo do mês, N-ésimo dia útil ou último dia útil
 alter table public.ganhos add column if not exists dia_regra text

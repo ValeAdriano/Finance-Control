@@ -99,9 +99,20 @@
       ],
       dicas: ["Com “Usar meu plano do Salário” ligado, o aporte mensal e a divisão vêm do plano."],
     },
+    retrospectiva: {
+      resumo: "Seu mês contado em etapas, no estilo das retrospectivas de fim de ano, montado a partir dos seus números. Por enquanto, com dados de exemplo.",
+      partes: [
+        ["play", "Etapas", "Como stories: toque à direita avança, à esquerda volta e segurar pausa. No teclado, as setas, o espaço e Esc para sair."],
+        ["som", "Som", "Trilha e efeitos gerados na hora. O botão de som liga e desliga sem parar o vídeo."],
+        ["olho", "Modo privado", "Esconde os valores em reais e mostra só percentuais — bom para compartilhar."],
+        ["exportar", "Exportar", "Grava o vídeo com o som em MP4 ou WebM. Leva o tempo do vídeo; mantenha a aba aberta."],
+      ],
+      dicas: ["Com o movimento reduzido ligado no sistema, as transições viram fades suaves."],
+    },
     ajustes: {
       resumo: "Conta, segurança e os critérios que o painel usa.",
       partes: [
+        ["simular", "Módulos", "Liga e desliga o que nem todo mundo usa: agronegócio, cripto, bolsa dos EUA, análise de setores e simulador. Desligar só tira dos menus; os dados ficam."],
         ["cadeado", "Conta e segurança", "Nome, verificação em duas etapas, troca de senha e sair dos outros aparelhos."],
         ["olho", "Aparência", "Tema claro, escuro ou automático e o modo privado."],
         ["ativos", "Metas e regras", "Metas de alocação por pilar, o peso de cada lente e as faixas de cada indicador."],

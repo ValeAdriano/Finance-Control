@@ -109,6 +109,9 @@
             <div class="campo"><label for="ob-nome">Como quer ser chamado?</label><input id="ob-nome" class="entrada" maxlength="40" value="${nomeAtual}" placeholder="seu nome" autocomplete="given-name"></div>
             <div class="campo"><label>Tema</label><div class="segmentado" role="group" id="ob-tema">
               ${[["auto", "Automático"], ["claro", "Claro"], ["escuro", "Escuro"]].map(([t, n]) => html`<button type="button" data-tema="${t}" aria-pressed="${FC.local.ler("tema", "auto") === t}">${n}</button>`)}</div></div>
+            <div class="campo"><label>Você também investe em…</label><div class="ob-chips">
+              ${FC.MODULOS.filter((m) => ["agro", "cripto", "exterior"].includes(m.chave)).map((m) => html`<button type="button" class="ob-chip" data-mod="${m.chave}" aria-pressed="${FC.modulo(m.chave)}">${icone(m.icone, 16)} ${m.nome}</button>`)}
+              </div><span class="dica">Outras ferramentas se ligam em Ajustes → Módulos.</span></div>
             <div class="campo"><label>Por onde começar?</label><div class="ob-opcoes" role="radiogroup">
               ${COMECOS.map(([id, ic, t, d], n) => html`<button type="button" role="radio" class="ob-opcao" data-comeco="${id}" aria-checked="${n === 0}">
                 <span class="ob-opcao-ic">${icone(ic, 20)}</span><span><b>${t}</b><small>${d}</small></span><span class="ob-marca">${icone("check", 14)}</span></button>`)}
@@ -160,6 +163,17 @@
       fundo.classList.add("saindo");
       document.removeEventListener("keydown", tecla);
       setTimeout(() => { fundo.remove(); document.documentElement.classList.remove("ob-aberto"); aberto = null; if (anterior && anterior.focus) anterior.focus(); }, 280);
+      if (concluiu) {
+        const escolhidos = Object.fromEntries(FC.$$("[data-mod]", fundo).map((b) => [b.dataset.mod, b.getAttribute("aria-pressed") === "true"]));
+        const modulos = { ...FC.estado.prefs.modulos, ...escolhidos };
+        if (JSON.stringify(modulos) !== JSON.stringify(FC.estado.prefs.modulos)) {
+          try {
+            await FC.db.gravaPrefs({ modulos });
+            FC.estado.prefs.modulos = modulos; FC.estado.base.prefsBrutas.modulos = modulos;
+            FC.atualizaNavegacao();
+          } catch (e) { console.error(e); }
+        }
+      }
       const dados = { onboarding_visto: new Date().toISOString() };
       if (concluiu && nome !== nomeAtual) dados.nome = nome;
       try {
@@ -201,6 +215,7 @@
 
     // passo final: tema aplica na hora; escolha de começo
     FC.$$("#ob-tema button", fundo).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));
+    FC.$$("[data-mod]", fundo).forEach((b) => b.addEventListener("click", () => b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"))));
     FC.$$("[data-comeco]", fundo).forEach((b) => b.addEventListener("click", () => {
       comeco = b.dataset.comeco;
       FC.$$("[data-comeco]", fundo).forEach((x) => x.setAttribute("aria-checked", String(x === b)));

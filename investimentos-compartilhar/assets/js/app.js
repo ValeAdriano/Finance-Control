@@ -18,9 +18,13 @@
     { id: "simular", nome: "Simular", icone: "simular" },
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
     { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
+    { id: "retrospectiva", nome: "Retrospectiva", icone: "play", oculta: true },
   ];
   FC.ROTAS = ROTAS;
-  const NO_CELULAR = ["inicio", "ativos", "agro", "aportes"];
+  // barra de baixo do celular: as 4 primeiras destas que estiverem ligadas
+  const PREFERIDAS_CELULAR = ["inicio", "ativos", "agro", "aportes", "dividendos", "salario"];
+  const rotasLigadas = () => ROTAS.filter((x) => FC.rotaLigada(x.id));
+  const noCelular = () => PREFERIDAS_CELULAR.filter(FC.rotaLigada).slice(0, 4);
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
     carregandoMercado: false, erroMercado: null, spotEm: null, proventos: null, proventosEm: null });
@@ -60,6 +64,7 @@
   FC.recarregaBase = async function () {
     estado.base = await FC.db.carregaTudo();
     estado.prefs = FC.montaPrefs(estado.base.prefsBrutas);
+    estado.prefs.modulos = FC.resolveModulos(estado.base.prefsBrutas.modulos, estado.base);
     FC.recalcula();
   };
 
@@ -187,9 +192,7 @@
     r.innerHTML = String(html`
       <header class="topo"><div class="topo-in">
         <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span>Finance Control</a>
-        <nav class="abas" aria-label="Seções">
-          ${ROTAS.filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}
-        </nav>
+        <nav class="abas" aria-label="Seções">${navTopo()}</nav>
         <div class="acoes-topo">
           <button class="icone-bt" id="bt-ajuda" title="Como usar esta tela" aria-label="Como usar esta tela">${icone("ajuda", 20)}</button>
           <button class="icone-bt" id="bt-privado" title="Esconder valores (modo privado)" aria-label="Esconder valores"></button>
@@ -198,10 +201,7 @@
         </div>
       </div></header>
       <main id="conteudo" tabindex="-1"></main>
-      <div class="barra-abas"><nav aria-label="Seções">
-        ${NO_CELULAR.map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
-        <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>
-      </nav></div>`);
+      <div class="barra-abas"><nav aria-label="Seções">${navCelular()}</nav></div>`);
     FC.$("#bt-ajuda").addEventListener("click", () => FC.guiaDaTela(rotaAtual().id));
     FC.$("#bt-privado").addEventListener("click", () => {
       const v = !document.body.classList.contains("privado");
@@ -220,9 +220,25 @@
         FC.db.log("erro", { etapa: "atualizar cotações", erro: estado.erroMercado });
       }
     });
-    FC.$("#bt-mais").addEventListener("click", abreMais);
+    ligaMais();
     aplicaPrivado();
   }
+
+  function navTopo() {
+    return html`${rotasLigadas().filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}`;
+  }
+  function navCelular() {
+    return html`${noCelular().map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
+      <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>`;
+  }
+  function ligaMais() { FC.$("#bt-mais").addEventListener("click", abreMais); }
+  // módulo ligado ou desligado em Ajustes: refaz só os menus
+  FC.atualizaNavegacao = function () {
+    const topo = FC.$(".topo .abas"), baixo = FC.$(".barra-abas nav");
+    if (topo) topo.innerHTML = String(navTopo());
+    if (baixo) { baixo.innerHTML = String(navCelular()); ligaMais(); }
+    marcaRotaAtual();
+  };
 
   FC.aplicaPrivado = aplicaPrivado;
   function aplicaPrivado() {
@@ -242,7 +258,7 @@
   }
 
   function abreMais() {
-    const extras = ROTAS.filter((x) => !NO_CELULAR.includes(x.id));
+    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id));
     const f = FC.ui.folha({
       titulo: "Mais",
       corpo: html`<div class="lista">
@@ -270,8 +286,17 @@
   // ---------------------------------------------------------------- rotas
   function rotaAtual() {
     const partes = (location.hash || "#/inicio").replace(/^#\/?/, "").split("/");
-    const id = ROTAS.some((r) => r.id === partes[0]) ? partes[0] : "inicio";
+    const id = ROTAS.some((r) => r.id === partes[0]) && FC.rotaLigada(partes[0]) ? partes[0] : "inicio";
     return { id, params: partes.slice(1).map(decodeURIComponent) };
+  }
+
+  function marcaRotaAtual() {
+    const { id } = rotaAtual();
+    const cel = noCelular();
+    FC.$$("[data-rota]").forEach((a) => {
+      const atual = a.dataset.rota === id || (a.dataset.rota === "mais" && !cel.includes(id));
+      if (atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
   }
 
   let ultimaRota = null;
@@ -279,10 +304,7 @@
     const main = FC.$("#conteudo");
     if (!main || !estado.base) return;
     const { id, params } = rotaAtual();
-    FC.$$("[data-rota]").forEach((a) => {
-      const atual = a.dataset.rota === id || (a.dataset.rota === "mais" && !NO_CELULAR.includes(id));
-      if (atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
-    });
+    marcaRotaAtual();
     const mudouDeTela = ultimaRota !== id;
     ultimaRota = id;
     const rolagem = window.scrollY;

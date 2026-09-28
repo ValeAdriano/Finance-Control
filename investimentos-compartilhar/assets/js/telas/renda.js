@@ -43,19 +43,20 @@
         ${b.mediana_fina ? html`<span class="pilula amarelo">mediana de só ${b.n_dy} empresa${b.n_dy === 1 ? "" : "s"} — referência frágil</span>` : ""}
       </div>
       <div class="cartao sem-pad rolagem"><table class="tabela">
-        <thead><tr><th>Empresa</th><th class="n">Cotação</th><th class="n">L/P</th><th class="n">Preço justo</th><th class="n">DL/EBITDA</th>
+        <thead><tr><th>Empresa</th><th class="n">Cotação</th><th class="n">L/P</th><th class="n">Preço justo</th><th class="n" title="√(22,5 × LPA × VPA)">Graham</th><th class="n">DL/EBITDA</th>
           <th class="n">Payout</th><th class="n">DY</th><th class="n">ROE</th><th class="n">P/VP</th><th></th></tr></thead>
         <tbody>
           <tr class="mediana"><td>Mediana do setor</td><td class="n">—</td><td class="n">${pct(med.lucro_preco)}</td><td class="n">—</td>
             <td class="n">${b.sem_ebitda ? "n/a" : ok(med.dl_ebitda) ? fmt.num(med.dl_ebitda, 1) + "x" : "—"}</td>
             <td class="n">${pct(med.payout, 0)}</td><td class="n"><b>${pct(med.dy)}</b></td><td class="n">${pct(med.roe, 0)}</td><td class="n">${ok(med.pvp) ? fmt.num(med.pvp) : "—"}</td><td></td></tr>
           ${b.linhas.filter((l) => !soAprovados || l.passa).map((l) => l.ausente
-            ? html`<tr class="apagado"><td><b>${l.nome}</b><span class="leg">${l.ticker}</span></td><td colspan="9" class="fraco">não encontrado no Fundamentus — confira o código em Ajustes → Universo de renda</td></tr>`
+            ? html`<tr class="apagado"><td><b>${l.nome}</b><span class="leg">${l.ticker}</span></td><td colspan="10" class="fraco">não encontrado no Fundamentus — confira o código em Ajustes → Universo de renda</td></tr>`
             : html`<tr class="clicavel ${l.passa ? "" : "apagado"} ${l.tenho ? "meu" : ""}" data-renda="${l.ticker}">
               <td><b>${l.nome}</b><span class="leg">${l.ticker}${l.tenho ? " · na carteira" : ""}</span></td>
               <td class="n">${fmt.num(l.cotacao)}${ok(l.variacao_dia) ? html`<span class="leg ${l.variacao_dia >= 0 ? "pos" : "neg"}">${fmt.delta(l.variacao_dia, 2)}% hoje</span>` : ""}</td>
               <td class="n">${pct(l.lucro_preco)}</td>
               <td class="n">${ok(l.preco_justo) ? html`<b>${fmt.num(l.preco_justo)}</b><span class="leg">${Math.abs(l.desconto) < 0.5 ? "na cota" : l.desconto > 0 ? fmt.num(l.desconto, 0) + "% acima da cota" : fmt.num(-l.desconto, 0) + "% abaixo"}</span>` : "—"}</td>
+              <td class="n">${l.graham && l.graham.valor != null ? html`<b>${fmt.num(l.graham.valor)}</b><span class="leg ${l.graham.margem >= 0 ? "pos" : "neg"}">${fmt.delta(l.graham.margem, 0)}% margem</span>` : html`<span class="leg" title="${l.graham ? l.graham.motivo : ""}">n/a</span>`}</td>
               <td class="n ${l.testes.divida === false ? "neg" : ""}">${l.sem_ebitda ? html`<span class="muito-fraco">n/a</span>` : ok(l.dl_ebitda) ? fmt.num(l.dl_ebitda, 1) + "x" : "—"}</td>
               <td class="n"><span class="${l.testes.payout === false ? "neg" : ""}">${pct(l.payout, 0)}</span>${ok(l.payout_vs_setor) ? html`<span class="leg">${fmt.delta(l.payout_vs_setor, 0)} p.p.</span>` : ""}</td>
               <td class="n"><b>${pct(l.dy)}</b>${ok(l.dy_vs_setor) ? html`<span class="leg">${fmt.delta(l.dy_vs_setor)} p.p. vs setor</span>` : ""}</td>
@@ -172,6 +173,7 @@
           ${ok(r.com_dividendos) && ok(r.so_preco) ? html`<div class="mensagem info mt3"><span>Em ${fmt.num(c.anos, 1)} anos e ${(s.dividendos || []).length} pagamentos, a cota ${r.so_preco >= 0 ? "subiu" : "caiu"} <b>${fmt.num(Math.abs(r.so_preco), 1)}%</b>
             e quem reinvestiu terminou com <b>${fmt.delta(r.com_dividendos)}%</b> — <b>${fmt.num(r.com_dividendos - r.so_preco, 1)} p.p.</b> vieram do dividendo.
             ${ok(r.cdi) ? (r.com_dividendos > r.cdi ? ` No mesmo período o CDI rendeu ${fmt.num(r.cdi, 1)}%.` : ` No mesmo período o CDI rendeu ${fmt.num(r.cdi, 1)}%, mais que a ação — sem oscilação nem risco de empresa.`) : ""}</span></div>` : ""}
+          ${l && !l.ausente ? html`<div class="mt3">${FC.comum.blocoGraham(l.graham, l.cotacao)}</div>` : ""}
           ${l && !l.ausente ? html`<h3 style="font-size:17px;margin-top:28px">Os critérios hoje</h3>
             <div class="lista mt2">
               ${[["Payout", "dividendo ÷ lucro", pct(l.payout, 0), l.payout == null ? "sem dado" : l.payout > 100 ? "distribui mais do que lucra" : "cabe dentro do lucro", l.testes.payout],

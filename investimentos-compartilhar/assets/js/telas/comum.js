@@ -65,6 +65,34 @@
 
   C.acharAtivo = (ticker) => (FC.estado.dados.ativos || []).find((a) => a.ticker === ticker);
 
+  // ---------------------------------------------------------------- Graham
+  // bloco de destaque: preço justo, margem de segurança e a conta
+  C.blocoGraham = function (g, preco) {
+    if (!g) return "";
+    if (g.valor == null) {
+      return html`<section class="graham vazio"><div class="graham-topo"><div><span class="rot">Preço justo de Graham</span><b>não se aplica</b></div></div>
+        <p class="graham-conta">${g.motivo}.</p></section>`;
+    }
+    const topo = Math.max(preco, g.valor) * 1.18;
+    const pP = (preco / topo) * 100, pJ = (g.valor / topo) * 100;
+    const [ini, fim] = pP < pJ ? [pP, pJ] : [pJ, pP];
+    return html`<section class="graham">
+      <div class="graham-topo">
+        <div><span class="rot">Preço justo de Graham</span><b>${fmt.preco(g.valor)}</b></div>
+        ${FC.pilula(g.cor, g.leitura)}
+      </div>
+      <div class="graham-regua ${Math.abs(pP - pJ) < 22 ? (pP <= pJ ? "perto cota-antes" : "perto justo-antes") : ""}" aria-hidden="true">
+        <div class="graham-trilho"><span class="graham-vao ${g.margem >= 0 ? "pos" : "neg"}" style="left:${ini}%;width:${fim - ini}%"></span></div>
+        <span class="graham-marca cota" style="left:${pP}%"><i></i><small>cotação<br><b>${fmt.preco(preco)}</b></small></span>
+        <span class="graham-marca justo" style="left:${pJ}%"><i></i><small>justo<br><b>${fmt.preco(g.valor)}</b></small></span>
+      </div>
+      <p class="graham-conta">√(22,5 × LPA ${fmt.preco(g.lpa)} × VPA ${fmt.preco(g.vpa)}) · margem de segurança <b class="${g.margem >= 0 ? "pos" : "neg"}">${fmt.delta(g.margem, 0)}%</b></p>
+      <details class="graham-sobre"><summary>Como ler</summary>
+        <p class="texto-p">Benjamin Graham, mentor de Warren Buffett, estimava o valor de uma ação pelo lucro (LPA) e pelo patrimônio (VPA) por ação. O 22,5 vem dos limites dele para uma ação defensiva: P/L até 15 e P/VP até 1,5. Cotação abaixo do preço justo sugere desconto — Graham pedia uma <b>margem de segurança</b> antes de comprar. Funciona melhor em empresas maduras e lucrativas; em empresas de crescimento, ciclo de commodity ou lucro extraordinário, a fórmula tende a errar.</p>
+      </details>
+    </section>`;
+  };
+
   // ---------------------------------------------------------------- detalhe do ativo
   C.detalheAtivo = function (a) {
     if (a.erro) return html`<div class="mensagem alerta">${icone("alerta", 18)}<span>${a.erro}</span></div>`;
@@ -87,6 +115,7 @@
           ${ok(pos.variacao) ? html`<div class="kpi pequeno"><dt>Resultado</dt><dd class="${pos.resultado >= 0 ? "pos" : "neg"}">${fmt.delta(pos.variacao)}%<small>${fmt.brl(pos.resultado)}</small></dd></div>` : ""}
         ` : ""}
       </dl>
+      ${C.blocoGraham(a.graham, a.preco)}
       ${evolucaoPosicao(a)}
       ${a.avisos.map((av) => html`<div class="mensagem alerta mb2" style="font-size:13px">${icone("info", 16)}<span>${av}</span></div>`)}
       <h3 style="font-size:17px;margin:20px 0 4px">Indicadores</h3>
@@ -154,7 +183,7 @@
         </div>
         <div class="linha2">
           <div class="campo"><label for="a-classe">Classe</label>
-            <select id="a-classe" name="classe">${Object.entries(FC.CLASSES).map(([k, v]) => html`<option value="${k}" ${item.classe === k ? "selected" : ""}>${v}</option>`)}</select></div>
+            <select id="a-classe" name="classe">${FC.classesLigadas(item.classe).map(([k, v]) => html`<option value="${k}" ${item.classe === k ? "selected" : ""}>${v}</option>`)}</select></div>
           <div class="campo"><label for="a-pilar">Pilar</label>
             <select id="a-pilar" name="pilar">${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}" ${item.pilar === p.chave ? "selected" : ""}>${p.nome}</option>`)}</select></div>
         </div>
