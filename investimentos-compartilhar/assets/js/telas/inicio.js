@@ -159,6 +159,24 @@
     return antes ? [antes, ...dentro] : dentro;
   }
 
+  // Espaçamento do gráfico conforme o tamanho do período: com anos de
+  // histórico, um ponto por mês; em meses, um por semana; no curto
+  // prazo, um por dia. Fica sempre o primeiro e o último ponto (hoje).
+  function granularidade(de, ate) {
+    const dias = FC.datas.dias(de, ate);
+    return dias > 400 ? "mes" : dias > 75 ? "semana" : "dia";
+  }
+  function espaca(pontos, grao) {
+    if (grao === "dia" || pontos.length < 3) return pontos;
+    const chave = grao === "mes" ? (d) => d.slice(0, 7) : (d) => Math.floor(FC.datas.dias(pontos[0][0], d) / 7);
+    const saida = [pontos[0]];
+    for (let i = 1; i < pontos.length; i++) {
+      const fimDoGrupo = i === pontos.length - 1 || chave(pontos[i + 1][0]) !== chave(pontos[i][0]);
+      if (fimDoGrupo) saida.push(pontos[i]);           // o último valor de cada mês/semana
+    }
+    return saida;
+  }
+
   function crescimento(d) {
     // registros gravados + o valor de agora como ponto de hoje
     const hoje = FC.datas.hoje();
@@ -171,10 +189,11 @@
     if (!regs.length) return "";
 
     const primeiroDia = regs[0].data;
-    const periodos = { semana: [FC.datas.soma(hoje, -7), hoje], mes: [FC.datas.soma(hoje, -30), hoje], tudo: [primeiroDia, hoje],
+    const periodos = { ano: [FC.datas.soma(hoje, -365), hoje], mes: [FC.datas.soma(hoje, -30), hoje], tudo: [primeiroDia, hoje],
       custom: [cresc.de || FC.datas.soma(hoje, -90), cresc.ate || hoje] };
-    const [de, ate] = periodos[cresc.periodo];
+    const [de, ate] = periodos[cresc.periodo] || periodos.tudo;
     const trecho = recorte(regs, de, ate);
+    const grao = granularidade(trecho.length ? trecho[0].data : de, ate);
 
     // rendimento só se mede entre registros do painel (com valor de mercado)
     const medidos = trecho.filter((r) => r.origem !== "importado");
@@ -189,7 +208,7 @@
 
     const seletor = html`<div class="flex quebra mb3" style="gap:10px">
       <div class="segmentado" role="group" id="seg-periodo" aria-label="Período">
-        ${[["tudo", "Tudo"], ["semana", "Semana"], ["mes", "Mês"], ["custom", "Personalizado"]].map(([k, v]) => html`<button type="button" data-p="${k}" aria-pressed="${cresc.periodo === k}">${v}</button>`)}</div>
+        ${[["tudo", "Tudo"], ["ano", "Ano"], ["mes", "Mês"], ["custom", "Personalizado"]].map(([k, v]) => html`<button type="button" data-p="${k}" aria-pressed="${cresc.periodo === k}">${v}</button>`)}</div>
       ${cresc.periodo === "custom" ? html`<div class="flex" style="gap:8px">
         <input class="entrada" type="date" id="per-de" value="${de}" min="${primeiroDia}" max="${hoje}" style="max-width:170px;min-height:36px;font-size:14px" aria-label="De">
         <span class="fraco">até</span>
@@ -201,15 +220,15 @@
 
     const grafico = cresc.vista === "rendimento"
       ? (serieRend.length >= 2
-        ? html`${FC.graficos.linhas({ series: [{ nome: "Rendimento", pontos: serieRend, classe: "l2", area: false }], altura: 240, zero: true })}
+        ? html`${FC.graficos.linhas({ series: [{ nome: "Rendimento", pontos: espaca(serieRend, grao), classe: "l2", area: false }], altura: 240, zero: true })}
           <p class="texto-p mt2">Quanto o patrimônio rendeu no período, já sem o dinheiro que você aportou ou retirou.</p>`
         : html`<div class="mensagem info">${icone("info", 18)}<span>Ainda não há registros diários suficientes neste período para medir o rendimento. O painel grava um por dia — escolha um período maior ou volte em alguns dias.</span></div>`)
       : (trecho.length >= 2
-        ? FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: trecho.map((r) => [r.data, r.patrimonio]), classe: "l1", area: true }], altura: 240 })
+        ? FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: espaca(trecho.map((r) => [r.data, r.patrimonio]), grao), classe: "l1", area: true }], altura: 240 })
         : html`<div class="mensagem info">${icone("info", 18)}<span>Só há um registro neste período.</span></div>`);
 
     return html`<section class="secao" id="crescimento">
-      <div class="secao-topo"><h2>Crescimento do patrimônio</h2><span class="sub">${cresc.periodo === "tudo" ? "desde " + FC.datas.mesAno(primeiroDia) : FC.datas.br(de) + " a " + FC.datas.br(ate)}</span></div>
+      <div class="secao-topo"><h2>Crescimento do patrimônio</h2><span class="sub">${cresc.periodo === "tudo" ? "desde " + FC.datas.mesAno(primeiroDia) : cresc.periodo === "ano" ? "últimos 12 meses" : FC.datas.br(de) + " a " + FC.datas.br(ate)} · um ponto por ${grao === "mes" ? "mês" : grao}</span></div>
       <div class="cartao">
         ${seletor}
         <dl class="kpis mb3">
@@ -253,6 +272,18 @@
         <span class="chevron">${icone("chevron", 18)}</span></div>`)}</div></section>`;
   }
 
+  // os cartões das retrospectivas só aparecem no fim do período:
+  // últimos 5 dias do mês e de 27 a 31 de dezembro (em Ajustes, sempre)
+  function retrospectivas() {
+    const itens = [];
+    if (FC.recap.naJanela("ano")) itens.push(["ano", `Seu ${FC.RECAP_ANO_MOCK.rotulo} em retrospectiva`, "o ano inteiro contado em etapas"]);
+    if (FC.recap.naJanela("mes")) itens.push(["mes", `Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}`, "seu mês contado em etapas"]);
+    return html`${itens.map(([tipo, t, s]) => html`<a class="cartao clicavel recap-entrada mt3 ${tipo === "ano" ? "ano" : ""}" href="#/retrospectiva/${tipo}">
+      <span class="recap-entrada-ic">${icone("play", 22)}</span>
+      <span><b>${t}</b><small>${s} · prévia com dados de exemplo</small></span>
+      <span class="chevron">${icone("chevron", 18)}</span></a>`)}`;
+  }
+
   function comecar() {
     return html`<section class="secao">
       <div class="secao-topo"><h2>Comece por aqui</h2><span class="sub">cadastre o que você tem; o resto o painel calcula</span></div>
@@ -287,10 +318,7 @@
           ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
         </div>
       </div>
-      <a class="cartao clicavel recap-entrada mt3" href="#/retrospectiva">
-        <span class="recap-entrada-ic">${icone("play", 22)}</span>
-        <span><b>Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}</b><small>seu mês contado em etapas · prévia com dados de exemplo</small></span>
-        <span class="chevron">${icone("chevron", 18)}</span></a>
+      ${retrospectivas()}
       <div class="mt3">${macro(d.macro)}</div>
       ${vazio ? comecar() : ""}
       ${C.resumoInvestido(d, { compacto: true })}

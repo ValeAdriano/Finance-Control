@@ -1,4 +1,4 @@
-/* Retrospectiva do mês — contrato de dados e mock.
+/* Retrospectivas do mês e do ano — contrato de dados e mocks.
  *
  * O vídeo é uma função pura dos dados: render(ctx, t, MonthRecap).
  * Tudo que é opcional (?) pode faltar; a cena correspondente some ou
@@ -15,8 +15,9 @@
 
   /**
    * @typedef {Object} MonthRecap
-   * @property {string} mes                      "2026-09"
-   * @property {string} rotulo                   "Setembro de 2026"
+   * @property {"mes"|"ano"} [tipo]              padrão "mes"; "ano" usa o mesmo contrato para o ano inteiro
+   * @property {string} mes                      "2026-09" (no ano: "2026")
+   * @property {string} rotulo                   "Setembro de 2026" (no ano: "2026")
    * @property {number} seed                     derivada do mês; toda aleatoriedade do vídeo sai dela
    *
    * @property {Object}  patrimonio
@@ -62,6 +63,9 @@
    *
    * @property {?{cabecas: number, variacao_cabecas: number, valor: number}} agro
    * @property {?{darf: number, vencimento: string, descricao: string}} ir   o app ainda não calcula: hoje null
+   *
+   * @property {Array<{mes: string, rotulo: string, variacao_pct: number}>} [meses]
+   *           só no ano: a variação de cada mês (rendimento, sem aportes) — vira a etapa "mês a mês"
    */
 
   // semente estável por mês: mesmo mês, mesmo vídeo
@@ -119,6 +123,46 @@
     ir: null,
   };
 
+  // o ano: patrimônio no fim de cada mês e o rendimento de cada um
+  const ANO = "2026", seedAno = seedDoMes(ANO);
+  const VARS = [2.1, 1.4, -1.2, 3.3, 0.8, -0.6, 2.7, 1.9, 4.2, 1.1, -0.4, 2.3];
+  const NOMES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const serieAno = [];
+  let pa = 101240;
+  VARS.forEach((v, i) => { pa = pa * (1 + v / 100) + 2200; serieAno.push([`${ANO}-${String(i + 1).padStart(2, "0")}-28`, Math.round(pa * 100) / 100]); });
+  FC.RECAP_ANO_MOCK = {
+    tipo: "ano", mes: ANO, rotulo: ANO, seed: seedAno,
+    patrimonio: {
+      inicial: 101240, final: serieAno.at(-1)[1], variacao: serieAno.at(-1)[1] - 101240,
+      variacao_pct: ((serieAno.at(-1)[1] / 101240) - 1) * 100,
+      rendimento: serieAno.at(-1)[1] - 101240 - 26400, rendimento_pct: ((serieAno.at(-1)[1] - 101240 - 26400) / 101240) * 100,
+      serie: [[`${ANO}-01-01`, 101240], ...serieAno],
+    },
+    aportes: {
+      total: 26400, quantidade: 58,
+      por_destino: [{ rotulo: "ITSA4", valor: 9600 }, { rotulo: "Tesouro Selic", valor: 7800 }, { rotulo: "BTC", valor: 4200 }],
+      plano: { planejado: 28800, cumprido_pct: 92 },
+    },
+    receitas: { total: 104000, por_categoria: [{ categoria: "salario", rotulo: "Salário", valor: 96000 }, { categoria: "decimo_terceiro", rotulo: "13º salário", valor: 8000 }], taxa_investida_pct: 25 },
+    despesas: null,
+    dividendos: { total: 3480.6, pagamentos: 41, maior: { ticker: "TAEE11", valor: 1620.3 } },
+    alocacao: FC.RECAP_MOCK.alocacao,
+    destaques: { alta: { ticker: "SOL", pct: 142.3 }, queda: { ticker: "HGLG11", pct: -8.1 } },
+    metas: [],
+    agro: { cabecas: 6, variacao_cabecas: 6, valor: 14830 },
+    ir: null,
+    meses: VARS.map((v, i) => ({ mes: `${ANO}-${String(i + 1).padStart(2, "0")}`, rotulo: NOMES[i], variacao_pct: v })),
+  };
+
+  const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  // palavras que mudam entre a retrospectiva do mês e a do ano
+  function periodo(d) {
+    const ano = d.tipo === "ano";
+    return ano
+      ? { ano: true, nome: d.rotulo, o: "o ano", O: "O ano", do: "do ano", no: "no ano", Periodo: "Ano", primeiro: "Seu primeiro ano no painel" }
+      : { ano: false, nome: d.rotulo.split(" ")[0], o: "o mês", O: "O mês", do: "do mês", no: "no mês", Periodo: "Mês", primeiro: "Seu primeiro mês no painel" };
+  }
+
   // ---------------------------------------------------------------- formatos
   const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
   const nf1 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -141,7 +185,7 @@
   // ---------------------------------------------------------------- linha do tempo
   // Uma etapa por cena (formato stories). Etapas sem dado somem. Cada uma
   // tem o tempo de leitura dela; a troca é uma "cortina" de 0,55 s.
-  const DURACAO = { abertura: 5.5, resultado: 5.5, aportes: 5, renda: 5, dividendos: 5, destaques: 5.5, alocacao: 6, extra: 4.5, final: 4.5 };
+  const DURACAO = { abertura: 5.5, resultado: 5.5, meses: 6, aportes: 5, renda: 5, dividendos: 5, destaques: 5.5, alocacao: 6, extra: 4.5, final: 4.5 };
   const TROCA = 0.55;
   // contador principal de cada etapa: [atraso depois da entrada, duração]
   const CONTADOR = { abertura: [2.0, 1.9], resultado: [0.7, 1.5], aportes: [0.9, 1.5], renda: [0.8, 1.5], dividendos: [0.9, 1.5], extra: [0.8, 1.2] };
@@ -150,6 +194,7 @@
     const P = d.patrimonio, A = d.aportes, R = d.receitas, D = d.dividendos, X = d.destaques || {};
     const c = [{ id: "abertura" }];
     if (P.inicial != null && P.inicial > 0) c.push({ id: "resultado" });
+    if (d.tipo === "ano" && (d.meses || []).filter((m) => m.variacao_pct != null).length >= 2) c.push({ id: "meses" });
     if (A.total > 0 || (A.plano && A.plano.planejado > 0)) c.push({ id: "aportes" });
     if (R.total > 0 && !(opts.privado && R.taxa_investida_pct == null)) c.push({ id: "renda" });
     if (D.total > 0) c.push({ id: "dividendos" });
@@ -173,16 +218,16 @@
   // Templates determinísticos. Mês positivo celebra; negativo é honesto.
   function textos(d, opts = {}) {
     const pv = !!opts.privado, P = d.patrimonio, A = d.aportes, R = d.receitas, D = d.dividendos, X = d.destaques || {};
-    const t = {};
+    const t = {}, pe = periodo(d);
     const primeiro = P.inicial == null || !(P.inicial > 0);
-    t.abertura = { rotulo: d.rotulo, sub: primeiro ? "Seu primeiro mês no painel" : "Seu patrimônio" };
+    t.abertura = { rotulo: d.rotulo, sub: primeiro ? pe.primeiro : "Seu patrimônio" };
 
     if (!primeiro) {
       const v = P.variacao_pct || 0, rend = P.rendimento;
       let frase;
-      if (Math.abs(v) < 0.05) frase = "Mês estável: o patrimônio ficou onde estava.";
+      if (Math.abs(v) < 0.05) frase = `${pe.Periodo} estável: o patrimônio ficou onde estava.`;
       else if (v > 0) {
-        frase = `Mês de alta: ${pct(v)}.`;
+        frase = `${pe.Periodo} de alta: ${pct(v)}.`;
         if (rend != null && rend > 0 && A.total > 0) frase += pv ? ` Rendimento de ${pct(P.rendimento_pct || 0, false)}, fora os aportes.` : ` Rendimento de ${brl(rend)}, fora os aportes.`;
         else if (rend != null && rend <= 0 && A.total > 0) frase += " A alta veio dos seus aportes; o mercado ficou de lado.";
       } else {
@@ -190,7 +235,7 @@
         if (A.total > 0) frase += pv ? " Você seguiu aportando — é assim que se compra mais barato." : ` Você seguiu aportando ${brl(A.total)} — é assim que se compra mais barato.`;
         else frase += " Queda de mercado faz parte; o que conta é o prazo.";
       }
-      t.resultado = { rotulo: "O mês em uma linha", frase, positivo: v >= 0 };
+      t.resultado = { rotulo: `${pe.O} em uma linha`, frase, positivo: v >= 0 };
     }
 
     if (A.total > 0) {
@@ -199,13 +244,13 @@
       if (A.plano && A.plano.planejado > 0) frase += A.plano.cumprido_pct >= 100 ? " 100% do plano cumprido." : ` ${nf0.format(A.plano.cumprido_pct)}% do plano cumprido.`;
       t.aportes = { rotulo: "Você investiu", frase, pausa: false };
     } else if (A.plano && A.plano.planejado > 0) {
-      t.aportes = { rotulo: "Aportes", frase: pv ? "Mês de pausa nos aportes — o plano segue de pé." : `Mês de pausa — o plano pedia ${brl(A.plano.planejado)}.`, pausa: true };
+      t.aportes = { rotulo: "Aportes", frase: pv ? `${pe.Periodo} de pausa nos aportes — o plano segue de pé.` : `${pe.Periodo} de pausa — o plano pedia ${brl(A.plano.planejado)}.`, pausa: true };
     }
 
     if (R.total > 0) {
       const tx = R.taxa_investida_pct;
       t.renda = { rotulo: "Da sua renda",
-        frase: tx != null ? (pv ? `${nf0.format(tx)}% de tudo que você recebeu virou investimento.` : `De ${brl(R.total)} recebidos, ${nf0.format(tx)}% ${tx === 1 ? "virou" : "viraram"} investimento.`) : `${brl(R.total, pv)} recebidos no mês.` };
+        frase: tx != null ? (pv ? `${nf0.format(tx)}% de tudo que você recebeu virou investimento.` : `De ${brl(R.total)} recebidos, ${nf0.format(tx)}% ${tx === 1 ? "virou" : "viraram"} investimento.`) : `${brl(R.total, pv)} recebidos ${pe.no}.` };
     }
 
     if (D.total > 0) {
@@ -220,7 +265,7 @@
       if (alta) partes.push(`${alta.ticker} subiu ${pct(alta.pct, false)}.`);
       if (queda) partes.push(`${queda.ticker} caiu ${pct(Math.abs(queda.pct), false)}.`);
       else partes.push("Nenhum ativo da carteira caiu.");
-      t.destaques = { rotulo: "Os extremos do mês", frase: partes.join(" "), alta, queda };
+      t.destaques = { rotulo: `Os extremos ${pe.do}`, frase: partes.join(" "), alta, queda };
     }
 
     const al = (d.alocacao || []).filter((a) => a.pct > 0 || a.meta_pct > 0);
@@ -240,7 +285,7 @@
     const ex = escolheExtra(d);
     if (ex === "agro") {
       const g = d.agro, dv = g.variacao_cabecas;
-      t.extra = { rotulo: "No pasto", frase: `${g.cabecas} ${g.cabecas === 1 ? "cabeça" : "cabeças"} no pasto${pv ? "" : `, ${brl(g.valor, pv)} em rebanho`}.${dv > 0 ? ` +${dv} no mês.` : dv < 0 ? ` ${dv} no mês.` : ""}` };
+      t.extra = { rotulo: "No pasto", frase: `${g.cabecas} ${g.cabecas === 1 ? "cabeça" : "cabeças"} no pasto${pv ? "" : `, ${brl(g.valor, pv)} em rebanho`}.${dv > 0 ? ` +${dv} ${pe.no}.` : dv < 0 ? ` ${dv} ${pe.no}.` : ""}` };
     } else if (ex === "despesas") {
       const c = d.despesas.campea, n = (d.despesas.orcamentos_estourados || []).length;
       t.extra = { rotulo: "Onde mais foi dinheiro", frase: `${c.rotulo} liderou os gastos${pv ? "" : `: ${brl(c.valor, pv)}`}.${n ? ` ${n} ${n === 1 ? "orçamento estourou" : "orçamentos estouraram"}.` : " Nenhum orçamento estourado."}` };
@@ -251,7 +296,16 @@
       const m = d.metas.filter((x) => x.alvo > 0).sort((a, b) => b.pct - a.pct)[0];
       t.extra = { rotulo: "Sua meta", frase: `${m.nome}: ${nf0.format(Math.min(100, m.pct))}% do caminho.` };
     }
-    t.final = { rotulo: d.rotulo };
+    // só no ano: mês a mês
+    const ms = (d.meses || []).filter((m) => m.variacao_pct != null);
+    if (pe.ano && ms.length >= 2) {
+      const melhor = ms.reduce((a, b) => (b.variacao_pct > a.variacao_pct ? b : a));
+      const pior = ms.reduce((a, b) => (b.variacao_pct < a.variacao_pct ? b : a));
+      const azul = ms.filter((m) => m.variacao_pct > 0).length;
+      t.meses = { rotulo: "Mês a mês", melhor, pior, azul, total: ms.length,
+        frase: azul === ms.length ? `Todos os ${ms.length} meses no azul.` : `${azul} de ${ms.length} meses no azul. ${pior.variacao_pct < 0 ? `O pior foi ${MES_LONGO[Number(pior.mes.slice(5, 7)) - 1]}, e o ano seguiu.` : ""}`.trim() };
+    }
+    t.final = { rotulo: d.rotulo, periodo: pe };
     return t;
   }
 
@@ -286,6 +340,18 @@
     void userId; void mes;
     return FC.RECAP_MOCK;
   }
+  // mesmo contrato, com tipo "ano" e a lista de meses
+  async function getYearRecap(userId, ano) {
+    void userId; void ano;
+    return FC.RECAP_ANO_MOCK;
+  }
 
-  FC.recap = { seedDoMes, plano, textos, eventos, getMonthRecap, brl, pct };
+  // quando o cartão aparece no Início: últimos 5 dias do mês / do ano
+  function naJanela(tipo, hoje = FC.datas.hoje()) {
+    if (tipo === "ano") return hoje.slice(5) >= "12-27";
+    const mes = hoje.slice(0, 7), ultimo = FC.datas.ultimoDiaDoMes(mes);
+    return Number(hoje.slice(8)) > ultimo - 5;
+  }
+
+  FC.recap = { seedDoMes, plano, textos, eventos, getMonthRecap, getYearRecap, naJanela, periodo, brl, pct };
 })();

@@ -258,7 +258,7 @@
   }
 
   function abreMais() {
-    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id));
+    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva");
     const f = FC.ui.folha({
       titulo: "Mais",
       corpo: html`<div class="lista">

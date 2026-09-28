@@ -11,7 +11,7 @@
       resumo: "O retrato do seu dinheiro hoje: quanto você tem, como cresceu e onde está.",
       partes: [
         ["inicio", "Patrimônio", "Soma de tudo — bolsa, cripto, renda fixa e rebanho — com o preço de mercado de agora. Abaixo, a variação do dia e desde o início."],
-        ["projecoes", "Crescimento do patrimônio", "Uma foto por dia do seu total. Escolha o período (tudo, semana, mês ou personalizado) e a vista: o patrimônio ou só o rendimento, sem contar o dinheiro que você aportou."],
+        ["projecoes", "Crescimento do patrimônio", "Uma foto por dia do seu total. Escolha o período (tudo, ano, mês ou personalizado) e a vista: o patrimônio ou só o rendimento, sem contar o dinheiro que você aportou. Em períodos longos o gráfico fica mais espaçado: um ponto por mês ou por semana."],
         ["ativos", "Alocação por pilar", "Quanto do total está em cada pilar comparado com a sua meta. A meta se ajusta em Ajustes → Metas de alocação."],
         ["moeda", "Dividendos", "Quanto você recebeu, a média mensal e os próximos pagamentos anunciados."],
         ["agro", "Agronegócio", "Cabeças no rebanho e o valor estimado do gado, quando você usa o Agro."],
@@ -106,6 +106,7 @@
         ["som", "Som", "Trilha e efeitos gerados na hora. O botão de som liga e desliga sem parar o vídeo."],
         ["olho", "Modo privado", "Esconde os valores em reais e mostra só percentuais — bom para compartilhar."],
         ["exportar", "Exportar", "Grava o vídeo com o som em MP4 ou WebM. Leva o tempo do vídeo; mantenha a aba aberta."],
+        ["calendario", "Quando aparece", "No Início, a do mês surge nos últimos 5 dias de cada mês e a do ano de 27 a 31 de dezembro. Em Ajustes → Retrospectivas, as duas ficam sempre à mão."],
       ],
       dicas: ["Com o movimento reduzido ligado no sistema, as transições viram fades suaves."],
     },

@@ -970,3 +970,5 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 /* legendas muito próximas: a da esquerda vai para a esquerda, a outra para a direita */
 .graham-regua.perto.cota-antes .cota small, .graham-regua.perto.justo-antes .justo small { transform: translateX(-42%); }
 .graham-regua.perto.cota-antes .justo small, .graham-regua.perto.justo-antes .cota small { transform: translateX(42%); }
+.recap-entrada.ano { background: linear-gradient(135deg, rgba(255,225,77,.35), rgba(42,27,255,.18)), var(--bg-2); }
+.recap-entrada.ano .recap-entrada-ic, .modulo-ic.ano { background: #2a1bff; color: #ffe14d; }

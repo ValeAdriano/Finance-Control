@@ -9,20 +9,26 @@
   const { html, icone } = FC;
   const { W, H, BOTAO_FINAL } = FC.recapRender;
 
-  let aberto = null;
+  let aberto = null, abertoChave = null;
 
-  FC.telas.retrospectiva = async function (raiz) {
+  // #/retrospectiva/mes ou #/retrospectiva/ano; um terceiro pedaço
+  // ("ajustes") diz para onde voltar ao fechar
+  FC.telas.retrospectiva = async function (raiz, params = []) {
     raiz.innerHTML = "";
-    if (aberto) return;
-    const data = await FC.recap.getMonthRecap(FC.auth.usuario.id, FC.RECAP_MOCK.mes);
+    const tipo = params[0] === "ano" ? "ano" : "mes", volta = params[1] === "ajustes" ? "#/ajustes" : "#/inicio";
+    const chave = tipo + volta;
+    if (aberto && abertoChave === chave) return;
+    if (aberto) { aberto.destroi(); aberto = null; }
+    const uid = FC.auth.usuario.id, hoje = FC.datas.hoje();
+    const data = tipo === "ano" ? await FC.recap.getYearRecap(uid, hoje.slice(0, 4)) : await FC.recap.getMonthRecap(uid, hoje.slice(0, 7));
     if (!location.hash.startsWith("#/retrospectiva")) return;
-    aberto = monta(data);
+    aberto = monta(data, volta); abertoChave = chave;
   };
   window.addEventListener("hashchange", () => {
     if (aberto && !location.hash.startsWith("#/retrospectiva")) { aberto.destroi(); aberto = null; }
   });
 
-  function monta(data) {
+  function monta(data, volta = "#/inicio") {
     const reduzido = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let privado = !!FC.local.ler("privado", false);
     const opts = () => ({ privado, reduzido });
@@ -39,7 +45,7 @@
           <div class="historia-barras"></div>
           <div class="historia-cab">
             <span class="historia-marca">${FC.logo(14)}</span>
-            <span class="historia-nome"><b>Retrospectiva</b><small>dados de exemplo</small></span>
+            <span class="historia-nome"><b>Retrospectiva ${data.tipo === "ano" ? "do ano" : "do mês"}</b><small>dados de exemplo</small></span>
             <button type="button" class="historia-bt" data-c="mudo"></button>
             <button type="button" class="historia-bt" data-c="privado"></button>
             <button type="button" class="historia-bt" data-c="exportar" aria-label="Exportar vídeo" title="Exportar vídeo">${icone("exportar", 20)}</button>
@@ -50,7 +56,7 @@
         <div class="historia-gravando" hidden><span class="ponto-rec"></span><span data-rec>Gravando…</span></div>
         <button type="button" class="historia-comecar">
           <span class="historia-comecar-ic">${icone("play", 34)}</span>
-          <b>Sua retrospectiva de ${data.rotulo.split(" ")[0].toLowerCase()}</b>
+          <b>${data.tipo === "ano" ? `Seu ${data.rotulo}` : `Sua retrospectiva de ${data.rotulo.split(" ")[0].toLowerCase()}`}</b>
           <small>toque para começar · use o som</small>
         </button>
       </div>
@@ -127,7 +133,7 @@
       vaiPara(t - e.ini > 1.2 || i === 0 ? e.ini + 0.001 : etapas[i - 1].ini + 0.001);
       if (!tocando) toca();
     }
-    function fecha() { location.hash = "#/inicio"; }
+    function fecha() { location.hash = volta; }
 
     // área de desenho real do canvas (object-fit: contain)
     function noQuadro(e) {

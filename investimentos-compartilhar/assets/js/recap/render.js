@@ -25,6 +25,7 @@
     destaques:  { fundo: "#00c2ff", tinta: "#001b26", destaque: "#001b26", forma: "#4dd6ff" },
     alocacao:   { fundo: "#0c0c0f", tinta: "#ffffff", destaque: "#ffe14d", forma: "#26262e" },
     extra:      { fundo: "#e8c07d", tinta: "#2a1800", destaque: "#2a1800", forma: "#f0d29f" },
+    meses:      { fundo: "#ffe14d", tinta: "#1b0030", destaque: "#2a1bff", forma: "#ffea80" },
     final:      { fundo: "#2a1bff", tinta: "#ffffff", destaque: "#ffe14d", forma: "#4a3dff" },
   };
 
@@ -198,7 +199,7 @@
         const x = r() * W, y = r() * H, raio = 120 + r() * 220, f = r() * 6, m = red ? 0 : 1;
         ctx.beginPath(); ctx.arc(x + Math.sin(lt * 0.8 + f) * 40 * m, y + Math.cos(lt * 0.6 + f) * 50 * m, raio, 0, 6.283); ctx.fill();
       }
-    } else if (id === "renda" || id === "extra") {
+    } else if (id === "renda" || id === "extra" || id === "meses") {
       // faixas diagonais correndo
       ctx.translate(CX, H / 2); ctx.rotate(-0.5);
       for (let i = -7; i <= 7; i++) ctx.fillRect(-1600, i * 300 + ((red ? 0 : lt * 40) % 300), 3200, 110);
@@ -231,14 +232,13 @@
   // ---------------------------------------------------------------- etapas
   const ETAPAS = {
     abertura(ctx, t, lt, c, d, tx, o) {
-      const p = PALETA.abertura, P = d.patrimonio;
-      const [mes, , ano] = tx.abertura.rotulo.split(" ");
-      letreiro(ctx, `${mes.toUpperCase()} ${ano}`, 1720, lt, { cor: p.forma, tam: 170, vel: 120, reduzido: o.reduzido });
-      rotulo(ctx, "SUA RETROSPECTIVA", p.destaque, lt);
-      titulo(ctx, [mes + ",", "foi assim."], SAFE, 520, lt, 0.2, { tam: 150, cor: p.tinta, reduzido: o.reduzido });
+      const p = PALETA.abertura, P = d.patrimonio, pe = R().periodo(d);
+      letreiro(ctx, pe.ano ? `${pe.nome}  •  SEU ANO` : tx.abertura.rotulo.toUpperCase().replace(" DE ", " "), 1720, lt, { cor: p.forma, tam: 170, vel: 120, reduzido: o.reduzido });
+      rotulo(ctx, pe.ano ? "SUA RETROSPECTIVA DO ANO" : "SUA RETROSPECTIVA", p.destaque, lt);
+      titulo(ctx, [pe.nome + ",", "foi assim."], SAFE, 520, lt, 0.2, { tam: pe.ano ? 190 : 150, cor: p.tinta, reduzido: o.reduzido });
       const de = P.inicial != null && P.inicial > 0 ? P.inicial : 0;
       const q = eOut((lt - 1.6) / 0.5);
-      texto(ctx, tx.abertura.sub === "Seu patrimônio" ? "Seu patrimônio fechou o mês em" : "Seu primeiro mês no painel. Patrimônio:", SAFE, 1030, { tam: 44, peso: 700, cor: p.tinta, alpha: q });
+      texto(ctx, tx.abertura.sub === "Seu patrimônio" ? `Seu patrimônio fechou ${pe.o} em` : `${pe.primeiro}. Patrimônio:`, SAFE, 1030, { tam: 44, peso: 700, cor: p.tinta, alpha: q });
       if (q > 0) {
         ctx.save(); ctx.globalAlpha = q;
         numeroGrande(ctx, R().brl(conta(c.contador, t, de, P.final), o.privado), SAFE, 1250, { tam: 190, cor: p.destaque });
@@ -250,7 +250,7 @@
     resultado(ctx, t, lt, c, d, tx, o) {
       const P = d.patrimonio, pos = tx.resultado.positivo, v = P.variacao_pct || 0;
       const cor = Math.abs(v) < 0.05 ? "#ffffff" : pos ? GANHO : PERDA;
-      rotulo(ctx, "O MÊS EM UMA LINHA", "rgba(255,255,255,0.6)", lt);
+      rotulo(ctx, tx.resultado.rotulo.toUpperCase(), "rgba(255,255,255,0.6)", lt);
       // a linha do mês, grande, desenhando
       const serie = (P.serie || []).map((x) => x[1]);
       if (serie.length > 1) {
@@ -281,9 +281,10 @@
 
     aportes(ctx, t, lt, c, d, tx, o) {
       const p = PALETA.aportes, A = d.aportes, info = tx.aportes;
-      rotulo(ctx, "APORTES DO MÊS", p.tinta, lt);
+      const pe = R().periodo(d);
+      rotulo(ctx, "APORTES " + pe.do.toUpperCase(), p.tinta, lt);
       if (info.pausa) {
-        titulo(ctx, ["Mês de", "pausa."], SAFE, 560, lt, 0.2, { tam: 190, cor: p.tinta, reduzido: o.reduzido });
+        titulo(ctx, [pe.Periodo + " de", "pausa."], SAFE, 560, lt, 0.2, { tam: 190, cor: p.tinta, reduzido: o.reduzido });
         frase(ctx, info.frase, SAFE, 1000, lt, 0.9, { tam: 52, cor: p.tinta, reduzido: o.reduzido });
         return;
       }
@@ -295,7 +296,7 @@
       ctx.save(); ctx.globalAlpha = eOut((lt - 0.8) / 0.3);
       numeroGrande(ctx, s, SAFE, 1010, { tam: 230, cor: p.destaque });
       ctx.restore();
-      if (o.privado) texto(ctx, cumprido != null ? "do plano do mês" : "aportes no mês", SAFE, 1085, { tam: 46, peso: 800, cor: p.tinta, alpha: eOut((lt - 1) / 0.4) });
+      if (o.privado) texto(ctx, cumprido != null ? "do plano " + pe.do : "aportes " + pe.no, SAFE, 1085, { tam: 46, peso: 800, cor: p.tinta, alpha: eOut((lt - 1) / 0.4) });
       // adesivos: os destinos e o plano cumprido
       const chips = (A.por_destino || []).slice(0, 3), rr = rng(d.seed ^ 0xa11);
       chips.forEach((ch, i) => {
@@ -355,7 +356,7 @@
 
     destaques(ctx, t, lt, c, d, tx, o) {
       const p = PALETA.destaques, info = tx.destaques;
-      rotulo(ctx, "OS EXTREMOS DO MÊS", p.tinta, lt);
+      rotulo(ctx, info.rotulo.toUpperCase(), p.tinta, lt);
       titulo(ctx, ["Quem subiu", "e quem caiu"], SAFE, 510, lt, 0.2, { tam: 130, cor: p.tinta, reduzido: o.reduzido });
       const linha = (item, y, atraso, rot, cor, n) => {
         const q = eOut((lt - atraso) / (o.reduzido ? 0.4 : 0.55));
@@ -381,6 +382,36 @@
       if (info.alta) linha(info.alta, 960, 0.8, "MAIOR ALTA", "#0f8a3c", "#1");
       if (info.queda) linha(info.queda, 1260, 1.25, "MAIOR QUEDA", "#d42a2d", "#2");
       frase(ctx, info.queda ? "Oscilar faz parte. O que importa é a carteira inteira." : info.frase, SAFE, 1600, lt, 2.0, { tam: 46, cor: p.tinta, reduzido: o.reduzido });
+    },
+
+    // só no ano: a variação de cada mês em barras, do zero para cima ou para baixo
+    meses(ctx, t, lt, c, d, tx, o) {
+      const p = PALETA.meses, info = tx.meses, ms = d.meses.filter((m) => m.variacao_pct != null);
+      rotulo(ctx, "SEU ANO", p.tinta, lt);
+      titulo(ctx, ["Mês", "a mês"], SAFE, 510, lt, 0.2, { tam: 170, cor: p.tinta, reduzido: o.reduzido });
+      const x0 = SAFE, larg = W - SAFE * 2, y0 = 1140, alt = 270;
+      const max = Math.max(...ms.map((m) => Math.abs(m.variacao_pct)), 0.5);
+      const passo = larg / ms.length, bw = passo * 0.62;
+      ctx.save();
+      ctx.fillStyle = "rgba(27,0,48,0.25)"; ctx.fillRect(x0, y0 - 2, larg, 4);
+      ms.forEach((m, i) => {
+        const q = o.reduzido ? eOut((lt - 0.8) / 0.5) : mola((lt - 0.8 - i * 0.07) / 0.7);
+        const h = (m.variacao_pct / max) * alt * Math.max(0, q);
+        const x = x0 + i * passo + (passo - bw) / 2;
+        const destaque = m === info.melhor || m === info.pior;
+        ctx.fillStyle = m.variacao_pct >= 0 ? (destaque ? "#0a7a34" : "#1b9e4b") : (destaque ? "#c0262a" : "#e0484b");
+        ctx.beginPath();
+        if (h >= 0) ctx.roundRect(x, y0 - h, bw, Math.max(2, h), [12, 12, 2, 2]);
+        else ctx.roundRect(x, y0, bw, Math.max(2, -h), [2, 2, 12, 12]);
+        ctx.fill();
+        texto(ctx, m.rotulo, x + bw / 2, y0 + alt + 60, { tam: 30, peso: 800, cor: p.tinta, alinha: "center", alpha: eOut((lt - 0.6 - i * 0.05) / 0.4) });
+      });
+      ctx.restore();
+      const qa = o.reduzido ? eOut((lt - 2) / 0.4) : mola((lt - 2) / 0.8);
+      const posDe = (m) => x0 + ms.indexOf(m) * passo + passo / 2;
+      adesivo(ctx, `melhor: ${info.melhor.rotulo} ${R().pct(info.melhor.variacao_pct)}`, Math.min(W - SAFE - 200, Math.max(SAFE + 200, posDe(info.melhor))), y0 - alt - 60, { fundo: p.tinta, cor: "#fff", tam: 40, giro: -0.05, q: qa });
+      if (info.pior.variacao_pct < 0) adesivo(ctx, `pior: ${info.pior.rotulo} ${R().pct(info.pior.variacao_pct)}`, Math.min(W - SAFE - 190, Math.max(SAFE + 190, posDe(info.pior))), y0 + alt + 150, { fundo: "#fff", cor: p.tinta, tam: 40, giro: 0.05, q: o.reduzido ? eOut((lt - 2.3) / 0.4) : mola((lt - 2.3) / 0.8) });
+      frase(ctx, info.frase, SAFE, 1700, lt, 2.6, { tam: 46, cor: p.tinta, reduzido: o.reduzido });
     },
 
     alocacao(ctx, t, lt, c, d, tx, o) {
@@ -432,9 +463,8 @@
     },
 
     final(ctx, t, lt, c, d, tx, o) {
-      const p = PALETA.final, P = d.patrimonio;
-      const [mes] = tx.final.rotulo.split(" ");
-      rotulo(ctx, "RESUMO DE " + mes.toUpperCase(), p.destaque, lt);
+      const p = PALETA.final, P = d.patrimonio, pe = tx.final.periodo;
+      rotulo(ctx, "RESUMO DE " + pe.nome.toUpperCase(), p.destaque, lt);
       // cartão-resumo, o "card de compartilhar"
       const q = o.reduzido ? eOut(lt / 0.5) : mola(lt / 0.9);
       ctx.save();
@@ -448,7 +478,7 @@
       texto(ctx, tx.final.rotulo, SAFE + 200, 580, { tam: 34, peso: 700, cor: "rgba(27,0,48,0.6)" });
       const v = P.variacao_pct, stats = [
         ["Patrimônio", R().brl(P.final, o.privado)],
-        ["No mês", v != null ? R().pct(v) : "—"],
+        [pe.ano ? "No ano" : "No mês", v != null ? R().pct(v) : "—"],
         ["Aportes", d.aportes.total > 0 ? R().brl(d.aportes.total, o.privado) : "—"],
         ["Dividendos", d.dividendos.total > 0 ? R().brl(d.dividendos.total, o.privado) : "—"],
       ];
@@ -457,7 +487,7 @@
         const x = SAFE + 60 + col * 420, y = 760 + lin * 300;
         const qa = eOut((lt - 0.5 - i * 0.12) / 0.4);
         texto(ctx, rot.toUpperCase(), x, y, { tam: 30, peso: 800, cor: "rgba(27,0,48,0.55)", esp: 2, alpha: qa });
-        const corVal = rot === "No mês" && v != null && Math.abs(v) >= 0.05 ? (v > 0 ? "#0f8a3c" : "#d42a2d") : "#1b0030";
+        const corVal = (rot === "No mês" || rot === "No ano") && v != null && Math.abs(v) >= 0.05 ? (v > 0 ? "#0f8a3c" : "#d42a2d") : "#1b0030";
         ctx.save(); ctx.globalAlpha *= qa; fonte(ctx, 900, 72, -3);
         const k = Math.min(1, 380 / ctx.measureText(val).width);
         ctx.translate(x, y + 90); ctx.scale(k, k); ctx.fillStyle = corVal; ctx.textAlign = "left"; ctx.fillText(val, 0, 0);
@@ -471,7 +501,7 @@
         ctx.save(); ctx.globalAlpha = clamp(qb);
         ctx.translate(CX, b.y + b.h / 2); ctx.scale(lerp(0.85, 1, qb), lerp(0.85, 1, qb)); ctx.translate(-CX, -(b.y + b.h / 2));
         ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, b.h / 2); ctx.fillStyle = "#ffffff"; ctx.fill();
-        texto(ctx, "Ver detalhes do mês  →", CX, b.y + b.h / 2 + 16, { tam: 46, peso: 900, cor: "#2a1bff", alinha: "center", esp: -1 });
+        texto(ctx, `Ver detalhes ${pe.do}  →`, CX, b.y + b.h / 2 + 16, { tam: 46, peso: 900, cor: "#2a1bff", alinha: "center", esp: -1 });
         ctx.restore();
       }
     },

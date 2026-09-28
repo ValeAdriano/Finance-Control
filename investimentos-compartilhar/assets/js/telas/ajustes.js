@@ -49,6 +49,17 @@
       </div>
       <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
 
+      ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
+        <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
+          <span class="modulo-ic">${icone("play", 18)}</span>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+        <a class="item clicavel" href="#/retrospectiva/ano/ajustes" style="color:inherit;text-decoration:none">
+          <span class="modulo-ic ano">${icone("play", 18)}</span>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.RECAP_ANO_MOCK.rotulo}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+      </div><p class="texto-p mt2">Por enquanto as duas usam dados de exemplo; a ligação com os seus números vem a seguir.</p>`)}
+
       ${grupo("Segurança", "", html`<div class="lista">
         <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
           <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
