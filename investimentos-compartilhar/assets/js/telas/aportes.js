@@ -51,8 +51,8 @@
   function repetir(g, sugestao) {
     const u = sugestao ? { ...(g.ultimo || {}), valor: sugestao, quantidade: null, data: (g.ultimo || {}).data } : g.ultimo;
     if (g.tipo === "caixa") {
-      const t = FC.estado.base.rendaFixa.find((r) => r.nome === g.nome);
-      const saldo = (t ? t.valor_aplicado : 0) + C.aportadoRf(g.nome);
+      const tv = (FC.estado.dados.rendaFixa || []).find((r) => r.nome === g.nome);
+      const saldo = tv ? tv.valor_aplicado : C.aportadoRf(g.nome);
       const f = FC.ui.folha({
         titulo: `Aportar em ${g.nome}`,
         corpo: html`<form class="form" id="f-rep">
@@ -168,7 +168,7 @@
           <p class="texto-p mb2"><b id="cx-nome"></b> é um título novo — ele é criado com saldo zero e este aporte vira o saldo.</p>
           <div class="linha3">
             <div class="campo"><label for="cx-tipo">Indexador</label><select id="cx-tipo" name="tipo_rf">
-              <option value="cdi">% do CDI</option><option value="ipca">IPCA + taxa</option><option value="prefixado">Prefixado</option></select></div>
+              <option value="cdi">% do CDI</option><option value="selic">% da Selic</option><option value="ipca">IPCA + taxa</option><option value="prefixado">Prefixado</option></select></div>
             <div class="campo"><label for="cx-taxa">Taxa</label><input id="cx-taxa" name="taxa" inputmode="decimal" placeholder="100"><span class="dica" id="cx-dica-taxa">100 = 100% do CDI</span></div>
             <div class="campo"><label for="cx-venc">Vencimento</label><input id="cx-venc" name="vencimento" type="date"></div>
           </div></div>
@@ -176,6 +176,13 @@
           <div class="campo"><label for="cx-data">Data</label><input id="cx-data" name="data" type="date" value="${FC.datas.hoje()}"></div>
           <div class="campo"><label for="cx-obs">Observação</label><input id="cx-obs" name="observacao" maxlength="120"></div>
         </div>
+        <details id="cx-propria" class="cx-propria" hidden><summary>Este aporte tem uma taxa diferente da do título</summary>
+          <div class="linha2 mt2">
+            <div class="campo"><label for="cx-ind">Indexador deste aporte</label><select id="cx-ind" name="indexador_aporte">
+              <option value="">o do título</option><option value="cdi">% do CDI</option><option value="selic">% da Selic</option><option value="ipca">IPCA + taxa</option><option value="prefixado">Prefixado</option></select></div>
+            <div class="campo"><label for="cx-tx">Taxa deste aporte</label><input id="cx-tx" name="taxa_aporte" inputmode="decimal" placeholder="ex.: 105">
+              <span class="dica">ex.: o mesmo CDB comprado a 105% do CDI em outro mês</span></div>
+          </div></details>
         <p class="texto-p" id="cx-saldo"></p>
         <div class="flex" style="justify-content:flex-end"><button class="botao" type="submit">Registrar</button></div>
       </form>`;
@@ -353,16 +360,17 @@
       if (tipo === "caixa") {
         const ti = FC.$("#cx-titulo", form);
         let op = "aporte";
-        FC.$$("#cx-op button", form).forEach((b) => b.addEventListener("click", () => { op = b.dataset.op; }));
-        const dicaTaxa = () => { FC.$("#cx-dica-taxa", form).textContent = { cdi: "100 = 100% do CDI", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#cx-tipo", form).value]; };
+        FC.$$("#cx-op button", form).forEach((b) => b.addEventListener("click", () => { op = b.dataset.op; atualiza(); }));
+        const dicaTaxa = () => { FC.$("#cx-dica-taxa", form).textContent = { cdi: "100 = 100% do CDI", selic: "100 = Tesouro Selic", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#cx-tipo", form).value]; };
         FC.$("#cx-tipo", form).addEventListener("change", dicaTaxa);
         const atualiza = () => {
           const nome = ti.value.trim();
           const t = FC.estado.base.rendaFixa.find((r) => r.nome.toLowerCase() === nome.toLowerCase());
           FC.$("#cx-novo", form).hidden = !nome || !!t;
+          FC.$("#cx-propria", form).hidden = !t || op === "resgate";
           FC.$("#cx-nome", form).textContent = nome;
-          const ap = t ? C.aportadoRf(t.nome) : 0;
-          FC.$("#cx-saldo", form).innerHTML = t ? String(html`Saldo atual de <b>${t.nome}</b>: ${fmt.brl(t.valor_aplicado + ap)}. Este lançamento soma a ele.`) : "";
+          const tv = t && (FC.estado.dados.rendaFixa || []).find((r) => r.id === t.id);
+          FC.$("#cx-saldo", form).innerHTML = t ? String(html`Saldo de hoje em <b>${t.nome}</b>: ${fmt.brl(tv ? tv.valor_aplicado : 0)}${tv && tv.rent ? ` (${tv.base})` : ""}. Este lançamento soma a ele.`) : "";
         };
         ti.addEventListener("input", atualiza);
         atualiza(); dicaTaxa();
@@ -382,7 +390,10 @@
               await FC.ui.ocupado(botao, () => FC.db.inserir("renda_fixa", { nome, tipo: f.tipo_rf, taxa: FC.lerNum(f.taxa), vencimento: f.vencimento || null, valor_aplicado: 0, pilar: "caixa" }));
             }
           } catch (err) { return FC.ui.erro(err); }
-          await grava(botao, { tipo: "caixa", titulo: t ? t.nome : nome, valor: op === "resgate" ? -vv : vv, data: f.data || FC.datas.hoje(), observacao: f.observacao || "" },
+          // taxa própria do aporte (só quando informada; vazio = a do título)
+          const propria = t && op === "aporte" && (f.indexador_aporte || FC.lerNum(f.taxa_aporte) != null)
+            ? { indexador: f.indexador_aporte || t.tipo, taxa: FC.lerNum(f.taxa_aporte) ?? t.taxa } : {};
+          await grava(botao, { tipo: "caixa", titulo: t ? t.nome : nome, valor: op === "resgate" ? -vv : vv, data: f.data || FC.datas.hoje(), observacao: f.observacao || "", ...propria },
             op === "resgate" ? "Resgate registrado" : "Aporte registrado");
         });
         return;

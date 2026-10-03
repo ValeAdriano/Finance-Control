@@ -972,3 +972,10 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 .graham-regua.perto.cota-antes .justo small, .graham-regua.perto.justo-antes .cota small { transform: translateX(42%); }
 .recap-entrada.ano { background: linear-gradient(135deg, rgba(255,225,77,.35), rgba(42,27,255,.18)), var(--bg-2); }
 .recap-entrada.ano .recap-entrada-ic, .modulo-ic.ano { background: #2a1bff; color: #ffe14d; }
+
+/* ------------------------------------------------------------ rentabilidade por aporte */
+.tabela-rola { overflow-x: auto; margin: 0 -4px; }
+.tabela.lotes td .leg { display: block; font-size: 11.5px; color: var(--ink-3); }
+.tabela.lotes td.pos .leg, .tabela.lotes td.neg .leg { color: inherit; opacity: .8; }
+.cx-propria summary { cursor: pointer; color: var(--acento); font-size: 14px; }
+.rentab-kpis { gap: 10px 24px; }

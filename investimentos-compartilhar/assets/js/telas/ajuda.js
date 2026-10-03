@@ -11,7 +11,7 @@
       resumo: "O retrato do seu dinheiro hoje: quanto você tem, como cresceu e onde está.",
       partes: [
         ["inicio", "Patrimônio", "Soma de tudo — bolsa, cripto, renda fixa e rebanho — com o preço de mercado de agora. Abaixo, a variação do dia e desde o início."],
-        ["projecoes", "Crescimento do patrimônio", "Uma foto por dia do seu total. Escolha o período (tudo, ano, mês ou personalizado) e a vista: o patrimônio ou só o rendimento, sem contar o dinheiro que você aportou. Em períodos longos o gráfico fica mais espaçado: um ponto por mês ou por semana."],
+        ["projecoes", "Crescimento do patrimônio", "O patrimônio reconstruído dia a dia: posições × preço de cada dia, renda fixa rendendo aporte a aporte e o rebanho. A linha tracejada é o total que você anotava à parte. O TWR compara com o CDI do mesmo período."],
         ["ativos", "Alocação por pilar", "Quanto do total está em cada pilar comparado com a sua meta. A meta se ajusta em Ajustes → Metas de alocação."],
         ["moeda", "Dividendos", "Quanto você recebeu, a média mensal e os próximos pagamentos anunciados."],
         ["agro", "Agronegócio", "Cabeças no rebanho e o valor estimado do gado, quando você usa o Agro."],
@@ -26,7 +26,7 @@
         ["info", "Detalhe do ativo", "Toque em um ativo para ver indicadores, evolução da posição e como a nota é formada nas quatro lentes: histórico do próprio ativo, seu alvo, os pares do setor e a renda fixa."],
         ["moeda", "Pagadoras de dividendos", "Ranking de quem paga: frequência, meses em que paga, quanto do preço devolve por ano e há quantos anos paga sem falhar."],
         ["renda", "Renda fixa", "Seus títulos com taxa, vencimento e rendimento real (descontada a inflação). “+ Título” cadastra um novo."],
-        ["carteira", "Seu dinheiro investido", "Quanto você colocou, quanto vale hoje e o ganho em reais e em %."],
+        ["carteira", "Seu dinheiro investido", "Quanto você colocou, quanto vale e o ganho. O % é do período, com cada aporte na sua data (não é valor de hoje ÷ total aportado), e a TIR mostra a taxa ao ano."],
       ],
       dicas: ["O campo “Analisar qualquer código” avalia um ticker sem cadastrar; se gostar, toque em Adicionar.", "Cripto usa a cotação em reais do CoinGecko; ações e FIIs, a da B3."],
     },

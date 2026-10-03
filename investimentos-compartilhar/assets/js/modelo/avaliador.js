@@ -338,8 +338,10 @@
     }
     const tipo = item.tipo, taxa = Number(item.taxa);
     const cdi = macro.cdi, ipca = macro.ipca_12m;
-    let nominal = null, base = tipo;
+    // sem o macro do Banco Central, o rótulo sai da própria taxa
+    let nominal = null, base = FC.rentab ? FC.rentab.rotuloTaxa(tipo, taxa) : tipo;
     if (tipo === "cdi" && cdi) { nominal = (cdi * taxa) / 100; base = `${FC.fmt.num(taxa, 0)}% do CDI`; }
+    else if (tipo === "selic" && (macro.selic_meta || cdi)) { nominal = ((macro.selic_meta || cdi) * taxa) / 100; base = `${FC.fmt.num(taxa, 0)}% da Selic`; }
     else if (tipo === "ipca" && ipca) { nominal = ((1 + ipca / 100) * (1 + taxa / 100) - 1) * 100; base = `IPCA + ${FC.fmt.num(taxa)}%`; }
     else if (tipo === "prefixado") { nominal = taxa; base = `prefixado ${FC.fmt.num(taxa)}%`; }
     const real = nominal && ipca ? ((1 + nominal / 100) / (1 + ipca / 100) - 1) * 100 : null;

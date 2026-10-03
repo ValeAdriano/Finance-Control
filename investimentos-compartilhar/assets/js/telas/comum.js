@@ -35,35 +35,95 @@
   // ---------------------------------------------------------------- dinheiro investido
   // Quanto você colocou em cada classe, quanto vale agora (quantidade ×
   // preço de agora) e o resultado. Mostra de onde veio o preço e quando.
+  // Quanto foi colocado, quanto vale e quanto rendeu — por classe e no total.
+  // O retorno não é "valor de hoje ÷ total aportado": cada aporte conta com a
+  // sua data (retorno no período, Modified Dietz) e a TIR anualiza isso.
+  const NOMES_CLASSE = [["bolsa", "Ações, FIIs e ETFs", "var(--s1)"], ["cripto", "Cripto", "var(--s3)"],
+    ["renda_fixa", "Renda fixa", "var(--s2)"], ["agro", "Agronegócio", "var(--s5)"]];
   C.resumoInvestido = function (d, { compacto = false } = {}) {
+    const rt = d.rentab;
+    if (!rt || !rt.total) return "";
+    const classes = NOMES_CLASSE.filter(([k]) => rt.classes[k] && (k !== "agro" || FC.modulo("agro")));
+    const t = rt.total, e = FC.estado;
     const pc = d.resumo.por_classe || {};
-    const classes = [["bolsa", "Ações, FIIs e ETFs", "var(--s1)"], ["cripto", "Cripto", "var(--s3)"]].filter(([k]) => pc[k]);
-    if (!classes.length) return "";
-    const tot = classes.reduce((t, [k]) => ({ inv: t.inv + pc[k].investido, atu: t.atu + pc[k].atual_com_custo, todo: t.todo + pc[k].atual }), { inv: 0, atu: 0, todo: 0 });
-    const res = tot.atu - tot.inv, varp = tot.inv ? (tot.atu / tot.inv - 1) * 100 : null;
-    const e = FC.estado;
-    const fontes = [pc.cripto ? "cripto pelo CoinGecko" : "", pc.bolsa ? "bolsa pelo Yahoo Finance (atraso de ~15 min)" : ""].filter(Boolean).join(", ");
+    const fontes = [pc.cripto ? "cripto pelo CoinGecko" : "", pc.bolsa ? "bolsa pelo Yahoo Finance (atraso de ~15 min)" : "", rt.classes.renda_fixa ? "renda fixa pelo CDI/IPCA do Banco Central" : ""].filter(Boolean).join(", ");
+    const pctTxt = (v) => (ok(v) ? `${fmt.delta(v, 2)}%` : "—");
     return html`<section class="secao">
       <div class="secao-topo"><h2>Seu dinheiro investido</h2>
-        <span class="sub">${e.spotEm ? `preços de ${FC.datas.ha(e.spotEm)}` : "buscando preços…"} · ${fontes}</span></div>
+        <span class="sub">${e.spotEm ? `preços de ${FC.datas.ha(e.spotEm)}` : "buscando preços…"}${fontes ? " · " + fontes : ""}</span></div>
       <div class="cartao">
         <dl class="kpis">
-          <div class="kpi"><dt>Você colocou</dt><dd>${fmt.brl(tot.inv)}<small>soma do preço médio × quantidade</small></dd></div>
-          <div class="kpi"><dt>Vale agora</dt><dd>${fmt.brl(tot.atu)}<small>quantidade × preço de agora</small></dd></div>
-          <div class="kpi"><dt>Resultado</dt><dd class="${res >= 0 ? "pos" : "neg"}">${fmt.brl(res)}<small>${ok(varp) ? fmt.delta(varp) + "% sobre o que você colocou" : ""}</small></dd></div>
+          <div class="kpi"><dt>Você colocou</dt><dd>${fmt.brl(t.aplicado)}<small>${t.devolvido > 0.005 ? `e já voltaram ${fmt.brlTexto(t.devolvido)} (vendas, resgates, proventos)` : "soma de cada aporte, na data dele"}</small></dd></div>
+          <div class="kpi"><dt>Vale agora</dt><dd>${fmt.brl(t.valor_atual)}<small>preço de agora · renda fixa com rendimento</small></dd></div>
+          <div class="kpi"><dt>Ganho</dt><dd class="${t.ganho >= 0 ? "pos" : "neg"}">${t.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(t.ganho))}
+            <small>${ok(t.periodo_pct) ? html`<b class="${t.periodo_pct >= 0 ? "pos" : "neg"}">${pctTxt(t.periodo_pct)}</b> no período${ok(t.xirr) ? html` · <b>${pctTxt(t.xirr)}</b> ao ano (TIR)` : ""}` : ""}</small></dd></div>
         </dl>
         ${compacto && classes.length < 2 ? "" : html`<div class="lista mt3" style="box-shadow:none">${classes.map(([k, nome, cor]) => {
-          const c = pc[k];
+          const c = rt.classes[k];
           return html`<div class="item"><span class="ponto-e" style="background:${cor};width:12px;height:12px"></span>
             <div class="principal"><div class="titulo">${nome}</div>
-              <div class="detalhe">${c.n} ativo${c.n === 1 ? "" : "s"} · colocou ${fmt.brlTexto(c.investido)} · vale ${fmt.brlTexto(c.atual_com_custo)}</div></div>
-            <div class="valores"><b class="${c.resultado >= 0 ? "pos" : "neg"}">${c.resultado >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(c.resultado))}</b><small>${ok(c.variacao) ? fmt.delta(c.variacao) + "%" : ""}</small></div></div>`;
+              <div class="detalhe">colocou ${fmt.brlTexto(c.aplicado)}${c.devolvido > 0.005 ? ` · voltou ${fmt.brlTexto(c.devolvido)}` : ""} · vale ${fmt.brlTexto(c.valor_atual)}${ok(c.xirr) ? ` · TIR ${pctTxt(c.xirr)} a.a.` : ""}</div></div>
+            <div class="valores"><b class="${c.ganho >= 0 ? "pos" : "neg"}">${c.ganho >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(c.ganho))}</b><small>${pctTxt(c.periodo_pct)} no período</small></div></div>`;
         })}</div>`}
-        ${tot.todo - tot.atu > 0.005 ? html`<p class="texto-p mt2">Fora da conta acima: ${fmt.brl(tot.todo - tot.atu)} em ${classes.flatMap(([k]) => pc[k].sem_custo).join(", ")}, sem preço médio — sem o custo não dá para saber o ganho. Preencha em Investimentos → Editar.</p>` : ""}
+        <p class="texto-p mt2">Cada aporte entra com a sua data: o retorno no período divide o ganho pelo capital médio que ficou aplicado (Modified Dietz), e a TIR é a taxa anual equivalente — aparece a partir de 90 dias de história.</p>
+        ${rt.sem_custo.length ? html`<p class="texto-p mt1">Fora da conta: ${rt.sem_custo.join(", ")}, sem preço médio — sem o custo não dá para saber o ganho. Preencha em Investimentos → Editar.</p>` : ""}
       </div></section>`;
   };
 
   C.acharAtivo = (ticker) => (FC.estado.dados.ativos || []).find((a) => a.ticker === ticker);
+
+  // ---------------------------------------------------------------- rentabilidade
+  const pctTxt = (v, casas = 2) => (FC.ok(v) ? `${fmt.delta(v, casas)}%` : "—");
+  const corPct = (v) => (FC.ok(v) ? (v >= 0 ? "pos" : "neg") : "fraco");
+  // resumo consolidado: ganho, retorno no período e TIR ao ano
+  C.kpisRentab = (r, { titulo = "" } = {}) => !r ? "" : html`<dl class="kpis mb2 rentab-kpis">
+    <div class="kpi pequeno"><dt>Aplicado${titulo}</dt><dd>${r.aplicado != null ? fmt.brl(r.aplicado) : "—"}${r.devolvido > 0.005 ? html`<small>${fmt.brl(r.devolvido)} já voltou</small>` : ""}</dd></div>
+    <div class="kpi pequeno"><dt>Ganho</dt><dd class="${corPct(r.ganho)}">${r.ganho != null ? html`${r.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(r.ganho))}` : "—"}</dd></div>
+    <div class="kpi pequeno"><dt>No período ${FC.ajuda("Ganho dividido pelo capital médio que ficou aplicado, ponderado pelo tempo de cada aporte (Modified Dietz). Não depende de quando você olha nem de quanto aportou de uma vez.")}</dt>
+      <dd class="${corPct(r.periodo_pct)}">${pctTxt(r.periodo_pct)}<small>${r.desde ? "desde " + FC.datas.br(r.desde) : ""}</small></dd></div>
+    <div class="kpi pequeno"><dt>TIR ao ano ${FC.ajuda("Taxa interna de retorno com as datas de cada aporte, resgate e provento (XIRR): a taxa anual que o seu dinheiro rendeu. Aparece a partir de 90 dias de história.")}</dt>
+      <dd class="${corPct(r.xirr)}">${FC.ok(r.xirr) ? pctTxt(r.xirr) : "—"}<small>${FC.ok(r.xirr) ? "a.a." : r.dias != null && r.dias < 90 ? "precisa de 90 dias" : ""}</small></dd></div>
+  </dl>`;
+
+  // tabela: cada aporte com a sua data, a sua taxa e o seu rendimento
+  C.tabelaLotesRF = function (rent) {
+    if (!rent || !rent.lotes.length) return "";
+    return html`<h3 style="font-size:17px;margin:4px 0 8px">Rendimento por aporte</h3>
+      ${C.kpisRentab(rent)}
+      <div class="tabela-rola"><table class="tabela lotes">
+        <thead><tr><th>Data</th><th>Taxa</th><th class="n">Aplicado</th><th class="n">Vale hoje</th><th class="n">Rendeu</th><th class="n">% ao ano</th></tr></thead>
+        <tbody>${rent.lotes.map((l) => html`<tr>
+          <td>${FC.datas.br(l.data)}<span class="leg">${l.origem}${l.proprio ? " · taxa própria" : ""}</span></td>
+          <td>${l.rotulo_taxa}</td>
+          <td class="n">${fmt.brl(l.valor)}</td>
+          <td class="n">${fmt.brl(l.valor_atual)}</td>
+          <td class="n ${corPct(l.rendimento)}">${l.valor > 0 ? html`${l.rendimento >= 0 ? "+" : "−"}${fmt.brl(Math.abs(l.rendimento))}<span class="leg">${pctTxt(l.pct)}</span>` : "—"}</td>
+          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}</tbody>
+      </table></div>
+      ${rent.sem_indices ? html`<div class="mensagem alerta mt2">${icone("info", 16)}<span>Índices do Banco Central ainda carregando: por enquanto os valores estão sem rendimento.</span></div>`
+        : rent.estimado ? html`<p class="texto-p mt2">Os dias mais recentes (ou anteriores à série disponível) usam o último índice conhecido — o valor se ajusta quando o Banco Central publica.</p>` : ""}`;
+  };
+
+  // ações, FIIs e cripto: cada compra como um lote (vendas consomem os mais antigos)
+  C.blocoRentabAtivo = function (ticker) {
+    const rt = FC.estado.dados && FC.estado.dados.rentab;
+    const r = rt && rt.ativos.find((x) => x.ticker === ticker);
+    if (!r || !r.lotes.length) return "";
+    return html`<h3 style="font-size:17px;margin:22px 0 8px">Rentabilidade por aporte</h3>
+      ${r.sem_custo ? html`<div class="mensagem alerta mb2">${icone("info", 16)}<span>Sem o preço médio da posição inicial não dá para medir o retorno do ativo. Preencha em Editar.</span></div>` : C.kpisRentab(r)}
+      <div class="tabela-rola"><table class="tabela lotes">
+        <thead><tr><th>Data</th><th class="n">Qtd.</th><th class="n">Preço pago</th><th class="n">Vale hoje</th><th class="n">Resultado</th><th class="n">% ao ano</th></tr></thead>
+        <tbody>${r.lotes.map((l) => html`<tr>
+          <td>${FC.datas.br(l.data)}<span class="leg">${l.origem}</span></td>
+          <td class="n">${fmt.qtd(l.quantidade)}</td>
+          <td class="n">${l.preco != null ? fmt.preco(l.preco) : "—"}</td>
+          <td class="n">${l.valor_atual != null ? fmt.brl(l.valor_atual) : "—"}</td>
+          <td class="n ${corPct(l.rendimento)}">${l.rendimento != null ? html`${l.rendimento >= 0 ? "+" : "−"}${fmt.brl(Math.abs(l.rendimento))}<span class="leg">${pctTxt(l.pct)}</span>` : "—"}</td>
+          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}</tbody>
+      </table></div>
+      ${r.realizados.length ? html`<p class="texto-p mt2">Vendas: ${r.realizados.map((v) => `${fmt.qtd(v.q)} em ${FC.datas.br(v.data_venda)}${FC.ok(v.pct) ? ` (${pctTxt(v.pct)})` : ""}`).join(" · ")}.</p>` : ""}
+      ${r.proventos > 0.005 ? html`<p class="texto-p mt1">Inclui ${fmt.brl(r.proventos)} em proventos já pagos, contados como dinheiro que voltou.</p>` : ""}`;
+  };
 
   // ---------------------------------------------------------------- Graham
   // bloco de destaque: preço justo, margem de segurança e a conta
@@ -116,6 +176,7 @@
         ` : ""}
       </dl>
       ${C.blocoGraham(a.graham, a.preco)}
+      ${C.blocoRentabAtivo(a.ticker)}
       ${evolucaoPosicao(a)}
       ${a.avisos.map((av) => html`<div class="mensagem alerta mb2" style="font-size:13px">${icone("info", 16)}<span>${av}</span></div>`)}
       <h3 style="font-size:17px;margin:20px 0 4px">Indicadores</h3>
@@ -195,6 +256,9 @@
             <input id="a-pm" name="preco_medio" inputmode="decimal" value="${item.preco_medio ? String(item.preco_medio).replace(".", ",") : ""}" placeholder="0,00">
             <span class="dica" id="a-dica-pm"></span></div>
         </div>
+        <div class="campo" id="a-desde-c"><label for="a-desde">Tenho essa posição desde</label>
+          <input id="a-desde" name="data_base" type="date" value="${item.data_base || (item.criado_em ? String(item.criado_em).slice(0, 10) : "")}" max="${FC.datas.hoje()}">
+          <span class="dica">a data (aproximada) da compra ao preço médio — é a partir dela que o retorno é medido</span></div>
         <div id="a-erro" class="mensagem erro" hidden></div>
       </form>`,
       rodape: html`${novo ? "" : html`<button class="botao perigo" data-acao="apagar" style="margin-right:auto">${icone("lixo", 16)} Remover</button>`}
@@ -210,7 +274,11 @@
     };
     classe.addEventListener("change", () => { if (novo) pilar.value = pilarPadrao[classe.value] || "acoes"; dicas(); });
     dicas();
-    const ajustaPosicao = () => { FC.$("#a-posicao", form).style.display = lista.value === "watchlist" ? "none" : ""; };
+    const ajustaPosicao = () => {
+      const w = lista.value === "watchlist";
+      FC.$("#a-posicao", form).style.display = w ? "none" : "";
+      FC.$("#a-desde-c", form).style.display = w ? "none" : "";
+    };
     lista.addEventListener("change", ajustaPosicao); ajustaPosicao();
     FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
     const apagar = FC.$("[data-acao=apagar]", f.el);
@@ -228,6 +296,7 @@
         classe: d.classe, pilar: d.pilar, lista: d.lista,
         quantidade: d.lista === "watchlist" ? 0 : FC.lerNum(d.quantidade) || 0,
         preco_medio: d.lista === "watchlist" ? null : FC.lerNum(d.preco_medio),
+        data_base: d.lista === "watchlist" ? null : d.data_base || null,
       };
       if (linha.ticker.length < (linha.classe === "cripto" ? 2 : 3)) { erro.textContent = "Informe o código do ativo (ex.: ITSA4, MXRF11, BTC)."; erro.hidden = false; return; }
       try {
@@ -257,6 +326,7 @@
         <div class="linha2">
           <div class="campo"><label for="r-tipo">Indexador</label><select id="r-tipo" name="tipo">
             <option value="cdi" ${item.tipo === "cdi" ? "selected" : ""}>% do CDI</option>
+            <option value="selic" ${item.tipo === "selic" ? "selected" : ""}>% da Selic</option>
             <option value="ipca" ${item.tipo === "ipca" ? "selected" : ""}>IPCA + taxa</option>
             <option value="prefixado" ${item.tipo === "prefixado" ? "selected" : ""}>Prefixado</option></select></div>
           <div class="campo"><label for="r-taxa">Taxa contratada</label><input id="r-taxa" name="taxa" inputmode="decimal" value="${item.taxa ?? ""}" placeholder="110">
@@ -265,11 +335,13 @@
         <div class="linha2">
           <div class="campo"><label for="r-valor">Saldo inicial (R$)</label><input id="r-valor" name="valor_aplicado" inputmode="decimal" value="${item.valor_aplicado ? String(item.valor_aplicado).replace(".", ",") : ""}" placeholder="0,00">
             <span class="dica">o que já estava aplicado antes. Se vai lançar o dinheiro em Aportes, deixe 0 — senão ele conta duas vezes.</span></div>
-          <div class="campo"><label for="r-venc">Vencimento</label><input id="r-venc" name="vencimento" type="date" value="${item.vencimento || ""}"></div>
+          <div class="campo"><label for="r-ini">Saldo inicial desde</label><input id="r-ini" name="data_inicio" type="date" value="${item.data_inicio || (item.criado_em ? String(item.criado_em).slice(0, 10) : "")}">
+            <span class="dica">a partir de quando o saldo inicial rende</span></div>
         </div>
+        <div class="campo"><label for="r-venc">Vencimento</label><input id="r-venc" name="vencimento" type="date" value="${item.vencimento || ""}"></div>
         <div class="campo"><label for="r-pilar">Pilar</label><select id="r-pilar" name="pilar">
           ${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}" ${item.pilar === p.chave ? "selected" : ""}>${p.nome}</option>`)}</select></div>
-        ${!novo && aportadoRf(item.nome) ? html`<div class="mensagem info">${icone("info", 16)}<span>Saldo total: <b>${fmt.brl(item.valor_aplicado + aportadoRf(item.nome))}</b> = saldo inicial ${fmt.brl(item.valor_aplicado)} + ${fmt.brl(aportadoRf(item.nome))} em aportes registrados.</span></div>` : ""}
+        ${!novo ? (() => { const r = (FC.estado.dados.rendaFixa || []).find((x) => x.id === item.id); return r && r.rent ? html`<div class="mt2">${C.tabelaLotesRF(r.rent)}</div>` : ""; })() : ""}
         <div id="r-erro" class="mensagem erro" hidden></div>
       </form>`,
       rodape: html`${novo ? "" : html`<button class="botao perigo" data-acao="apagar" style="margin-right:auto">${icone("lixo", 16)} Remover</button>`}
@@ -277,7 +349,7 @@
     });
     const form = FC.$("#f-rf", f.el);
     const dica = () => {
-      FC.$("#r-dica", form).textContent = { cdi: "110 = 110% do CDI", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#r-tipo", form).value];
+      FC.$("#r-dica", form).textContent = { cdi: "110 = 110% do CDI", selic: "100 = Tesouro Selic", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#r-tipo", form).value];
     };
     FC.$("#r-tipo", form).addEventListener("change", dica); dica();
     FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
@@ -291,7 +363,7 @@
       e.preventDefault();
       const d = FC.dadosDoForm(form);
       const linha = { nome: d.nome, tipo: d.tipo, taxa: FC.lerNum(d.taxa), valor_aplicado: FC.lerNum(d.valor_aplicado) || 0,
-        vencimento: d.vencimento || null, pilar: d.pilar };
+        vencimento: d.vencimento || null, pilar: d.pilar, data_inicio: d.data_inicio || null };
       const erro = FC.$("#r-erro", form);
       if (!linha.nome) { erro.textContent = "Dê um nome ao título."; erro.hidden = false; return; }
       try {

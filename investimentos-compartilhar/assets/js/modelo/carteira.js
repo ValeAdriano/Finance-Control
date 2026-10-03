@@ -191,9 +191,14 @@
     });
 
     const macro = (universo && universo.macro) || {};
+    // renda fixa: cada aporte rende da sua data pela sua taxa. Daqui para
+    // frente "valor_aplicado" é o valor da posição (com rendimento) — é o
+    // que entra na alocação, no patrimônio e na projeção.
+    const ix = mercado.indices || null;
     const rendaFixa = base.rendaFixa.map((i) => {
+      const rent = FC.rentab.avaliaTitulo(i, aportes, ix);
       const extra = caixaExtra[i.nome] || 0;
-      const item = extra ? { ...i, valor_aplicado: i.valor_aplicado + extra, aportado_aqui: extra } : i;
+      const item = { ...i, principal: i.valor_aplicado + extra, valor_aplicado: rent.valor_atual, aportado_aqui: extra, rent };
       return FC.avaliador.avaliaRendaFixa(item, macro);
     });
 
@@ -230,7 +235,7 @@
     hist.renda_mensal = proventosPorMes(proventos);
     hist.rendimento_rf = Math.max(0, atual + rf - (hist.valor_final || 0));
 
-    return {
+    const dados = {
       ativos, rendaFixa, agro, macro, regras,
       alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo,
       historico: hist,
@@ -245,6 +250,12 @@
       },
       atualizado: universo ? universo.gerado : null,
     };
+    // rentabilidade aporte a aporte, consolidada (TIR e retorno no período);
+    // proventos já pagos entram como dinheiro que voltou
+    let pagos = [];
+    try { if (FC.estado && FC.estado.proventos) pagos = FC.dividendos.analisa(dados, base, FC.estado.proventos).pagamentos; } catch (e) { console.error(e); }
+    try { dados.rentab = FC.rentab.carteira(dados, base, ix, pagos); } catch (e) { console.error(e); dados.rentab = null; }
+    return dados;
   }
 
   FC.carteira = { monta, posicao, consolidadoPorTicker, proventosPorMes, precoEm };

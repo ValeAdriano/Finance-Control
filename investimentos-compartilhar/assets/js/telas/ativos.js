@@ -16,6 +16,7 @@
         <span class="chevron">${icone("chevron", 18)}</span></div>`;
     }
     const p = a.posicao, g = a.graham;
+    const rt = FC.estado.dados.rentab && FC.estado.dados.rentab.ativos.find((x) => x.ticker === a.ticker);
     return html`<div class="item clicavel" data-abre="${a.ticker}" role="button" tabindex="0">
       ${FC.anel(a.score, a.cor)}
       <div class="principal">
@@ -30,7 +31,7 @@
           : g ? html`<small class="muito-fraco" title="${g.motivo}">Graham n/a</small>` : html`<small class="muito-fraco">—</small>`}
       </div>
       <div class="valores esconde-mob" style="min-width:120px">
-        ${p ? html`<b>${fmt.brl(p.atual)}</b><small>${fmt.qtd(p.quantidade)} ${FC.unidade(a, p.quantidade)}${ok(p.variacao) ? html` · <span class="${p.variacao >= 0 ? "pos" : "neg"}">${fmt.delta(p.variacao)}%</span>` : ""}</small>`
+        ${p ? html`<b>${fmt.brl(p.atual)}</b><small>${fmt.qtd(p.quantidade)} ${FC.unidade(a, p.quantidade)}${ok(rt && rt.periodo_pct) ? html` · <span class="${rt.periodo_pct >= 0 ? "pos" : "neg"}" title="cada compra com a sua data">${fmt.delta(rt.periodo_pct)}%</span>` : ""}</small>`
             : html`<small class="muito-fraco">sem posição</small>`}
       </div>
       <div class="esconde-mob" style="width:120px;text-align:right">${FC.pilula(a.cor, a.veredito_curto)}</div>
@@ -66,9 +67,11 @@
           <div class="principal"><div class="titulo">${r.nome}</div>
             <div class="detalhe">${r.base}${r.vencimento ? " · vence " + FC.datas.br(r.vencimento) : ""}${ok(r.real) ? " · real " + fmt.num(r.real) + "% a.a." : ""}</div></div>
           <div class="esconde-mob">${FC.pilula(r.cor, r.leitura)}</div>
-          <div class="valores"><b>${fmt.brl(r.valor_aplicado)}</b>${r.aportado_aqui ? html`<small>inclui ${fmt.brl(r.aportado_aqui)} de aportes</small>` : html`<small>${ok(r.nominal) ? fmt.num(r.nominal) + "% a.a." : ""}</small>`}</div>
+          <div class="valores"><b>${fmt.brl(r.valor_aplicado)}</b>${r.rent && r.rent.aplicado > 0
+            ? html`<small>aplicou ${fmt.brl(r.rent.aplicado)} · <span class="${r.rent.ganho >= 0 ? "pos" : "neg"}">${r.rent.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(r.rent.ganho))}</span></small>`
+            : html`<small>${ok(r.nominal) ? fmt.num(r.nominal) + "% a.a." : ""}</small>`}</div>
           <span class="chevron">${icone("chevron", 18)}</span></div>`)}</div>
-        <p class="texto-p mt2">A comparação é a foto de hoje. Um título IPCA+ rende menos que o CDI enquanto a Selic está alta e a inflação baixa, e a relação se inverte no cenário oposto.</p>`
+        <p class="texto-p mt2">O valor de cada título é o que ele vale hoje: cada aporte rende da própria data, pela própria taxa, com o CDI, a Selic ou o IPCA de cada dia útil (valor bruto, antes de IR). A comparação ao lado é a foto de hoje. Um título IPCA+ rende menos que o CDI enquanto a Selic está alta e a inflação baixa, e a relação se inverte no cenário oposto.</p>`
         : html`<div class="lista">${C.vazio("🏦", "Nenhum título", "Cadastre CDBs, Tesouro Direto ou a conta remunerada para eles entrarem no patrimônio e na alocação.", html`<button class="botao" data-novo="rf">Adicionar título</button>`)}</div>`}
     </section>`;
   }

@@ -92,6 +92,23 @@ do ativo) saem desses registros; o log fica em Ajustes → Log do sistema.
 O agendamento se autentica com `CRON_SECRET`, guardado no Vault do banco
 e nos segredos da Edge Function.
 
+## Rentabilidade aporte a aporte
+
+- **Índices**: CDI e Selic diários e IPCA mensal do Banco Central ficam em
+  `indices_diarios` (a Edge Function completa todo dia; se o BCB cair, usa o
+  cache do CDI e o IPCA do IBGE).
+- **Renda fixa**: cada aporte rende da própria data pela própria taxa
+  (`aportes.indexador`/`taxa`; vazio = a do título). Pós-fixado compõe o CDI
+  ou a Selic de cada dia útil × o percentual; prefixado usa dias úteis/252;
+  IPCA + X distribui o IPCA do mês pelos dias úteis. Valores brutos, antes de IR.
+- **Ações, FIIs e cripto**: um lote por compra; vendas consomem os lotes mais
+  antigos (PEPS). A posição inicial usa `ativos.data_base`.
+- **Consolidação** (`modelo/rentabilidade.js`): retorno no período por
+  Modified Dietz (ganho ÷ capital médio ponderado pelo tempo) e TIR/XIRR ao
+  ano a partir de 90 dias; TWR na série diária para comparar com o CDI.
+- **Gráfico de crescimento**: reconstruído dia a dia a partir dos lançamentos;
+  o histórico anotado à parte aparece separado, tracejado.
+
 ## Cripto
 
 Classe `cripto`, pilar Alternativos por padrão. O Yahoo não publica mais

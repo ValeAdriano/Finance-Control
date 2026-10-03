@@ -83,7 +83,7 @@
   const num = (v) => (v == null ? null : Number(v));
   function normAtivo(a) { return { ...a, quantidade: num(a.quantidade) || 0, preco_medio: num(a.preco_medio) }; }
   function normRF(r) { return { ...r, taxa: num(r.taxa), valor_aplicado: num(r.valor_aplicado) || 0 }; }
-  function normAporte(a) { return { ...a, quantidade: num(a.quantidade), preco: num(a.preco), valor: num(a.valor) }; }
+  function normAporte(a) { return { ...a, quantidade: num(a.quantidade), preco: num(a.preco), valor: num(a.valor), taxa: num(a.taxa) }; }
   function normMov(m) {
     return { ...m, cabecas: Number(m.cabecas), peso_medio_kg: num(m.peso_medio_kg), preco_arroba: num(m.preco_arroba),
              preco_cabeca: num(m.preco_cabeca), valor_total: num(m.valor_total) || 0, despesas: num(m.despesas) || 0 };
@@ -215,13 +215,29 @@
     async proventos(itens, forcar = false) {
       const saida = {}, faltam = [];
       for (const it of itens) {
-        const c = !forcar && doNavegador("prov:" + it.ticker, 6 * 60 * 60 * 1000);
+        // "prov2": a versão anterior podia guardar a lista vazia de um FII pedido como ação
+        const c = !forcar && doNavegador("prov2:" + it.ticker, 6 * 60 * 60 * 1000);
         if (c) saida[it.ticker] = c; else faltam.push(it);
       }
       if (faltam.length) {
         const d = (await chama({ acao: "proventos", itens: faltam })) || {};
-        for (const [t, v] of Object.entries(d)) { saida[t] = v; if (!v.erro) guarda("prov:" + t, v); }
+        for (const [t, v] of Object.entries(d)) { saida[t] = v; if (!v.erro) guarda("prov2:" + t, v); }
       }
+      return saida;
+    },
+    // CDI e Selic diários e IPCA mensal desde 2015, lidos direto da tabela
+    // (dado público). Antes, pede à Edge Function que complete o que faltar.
+    async indices(forcar = false) {
+      if (!forcar) { const c = doNavegador("indices", 6 * 60 * 60 * 1000); if (c) return c; }
+      try { await chama({ acao: "indices" }); } catch (e) { console.warn(e); /* lê o que já existe */ }
+      const saida = { cdi: [], selic: [], ipca: [] };
+      for (let de = 0; ; de += 1000) {
+        const { data, error } = await sb.from("indices_diarios").select("indice,data,valor").order("indice").order("data").range(de, de + 999);
+        if (error) throw error;
+        for (const r of data) saida[r.indice].push([r.data, Number(r.valor)]);
+        if (data.length < 1000) break;
+      }
+      guarda("indices", saida);
       return saida;
     },
     // preço de agora: CoinGecko para cripto, Yahoo para bolsa (cache de 1 min no servidor)

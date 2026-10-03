@@ -39,6 +39,7 @@
     try {
       estado.proventos = { ...(estado.proventos || {}), ...(await FC.mercado.proventos(itens, forcar)) };
       estado.proventosEm = Date.now();
+      FC.recalcula();    // proventos pagos entram na rentabilidade de cada ativo
     } catch (e) { console.error(e); estado.proventos = estado.proventos || {}; }
     return estado.proventos;
   };
@@ -86,11 +87,13 @@
     atualizaBotaoAtualizar();
     try {
       const anos = estado.prefs.regras.janela_historico_anos || 3;
-      const [universo, historicos] = await Promise.all([
+      const [universo, historicos, indices] = await Promise.all([
         FC.mercado.universo(forcar),
         FC.mercado.historicos(itensDeMercado(), anos, forcar),
+        FC.mercado.indices(forcar).catch((e) => { console.error(e); return null; }),
       ]);
       estado.mercado = { ...estado.mercado, universo, historicos: { ...estado.mercado.historicos, ...historicos } };
+      if (indices) estado.mercado.indices = FC.rentab.preparaIndices(indices);
       await buscaCotacoes();
       FC.recalcula();
       estado.erroMercado = null;

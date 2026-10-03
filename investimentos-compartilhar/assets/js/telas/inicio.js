@@ -119,46 +119,6 @@
     if (eInicio(location.hash) && !eInicio(rotaAnterior)) Object.assign(cresc, CRESC_PADRAO);
     rotaAnterior = location.hash;
   });
-  // Dinheiro que entrou (ou saiu) no período: aportes, resgates, vendas,
-  // compras e custos do agro. Crescer porque você colocou dinheiro não é
-  // ganho — o ganho é a variação do patrimônio MENOS esse fluxo.
-  function fluxoEntre(de, ate) {
-    const b = FC.estado.base;
-    const dentro = (d) => d > de && d <= ate;
-    let f = 0;
-    for (const a of b.aportes) {
-      if (!dentro(a.data)) continue;
-      if (a.tipo === "ativo") f += a.valor;                      // venda já vem negativa
-      else if (a.tipo === "caixa" && !a.historico) f += a.valor; // resgate já vem negativo
-    }
-    for (const m of b.agro.movs) {
-      if (!dentro(m.data)) continue;
-      if (m.tipo === "compra") f += m.valor_total + m.despesas;
-      else if (m.tipo === "venda") f -= m.valor_total - m.despesas;
-      else if (m.tipo === "entrada") f += m.valor_total;
-      else if (m.tipo === "saida") f -= m.valor_total;
-    }
-    for (const c of b.agro.custos) if (dentro(c.data)) f += c.valor;
-    return f;
-  }
-
-  // Ganho entre um registro-base e agora. Os meses importados guardam só o
-  // capital investido (sem valor de mercado), então nunca servem de base.
-  function ganhoDesde(regs, base, ultimo) {
-    if (!base || !base.patrimonio || base === ultimo) return null;
-    const fluxo = fluxoEntre(base.data, ultimo.data);
-    const abs = ultimo.patrimonio - base.patrimonio - fluxo;
-    const capital = base.patrimonio + Math.max(0, fluxo);
-    return { abs, pct: capital ? (abs / capital) * 100 : null, desde: base.data, fluxo };
-  }
-  // registros do período: o valor no início (último registro antes dele)
-  // e tudo o que caiu dentro
-  function recorte(regs, de, ate) {
-    const antes = [...regs].reverse().find((r) => r.data < de);
-    const dentro = regs.filter((r) => r.data >= de && r.data <= ate);
-    return antes ? [antes, ...dentro] : dentro;
-  }
-
   // Espaçamento do gráfico conforme o tamanho do período: com anos de
   // histórico, um ponto por mês; em meses, um por semana; no curto
   // prazo, um por dia. Fica sempre o primeiro e o último ponto (hoje).
@@ -177,34 +137,54 @@
     return saida;
   }
 
-  function crescimento(d) {
-    // registros gravados + o valor de agora como ponto de hoje
-    const hoje = FC.datas.hoje();
-    const r0 = d.resumo;
-    let regs = (d.registros || []).filter((r) => r.data !== hoje);
-    if (FC.estado.mercado.universo && r0.patrimonio > 0) {
-      regs = regs.concat([{ data: hoje, origem: "app", patrimonio: r0.patrimonio, renda_variavel: r0.bolsa, cripto: r0.cripto,
-        renda_fixa: r0.renda_fixa, agro: r0.agro, ao_vivo: true }]);
-    }
-    if (!regs.length) return "";
+  // série reconstruída (cara de calcular): uma vez por montagem da carteira
+  const cacheSerie = new WeakMap();
+  function serieDoPainel(d) {
+    if (cacheSerie.has(d)) return cacheSerie.get(d);
+    const e = FC.estado;
+    let r = { pontos: [], inicio: null };
+    try { r = FC.rentab.serieDiaria(e.base, e.mercado, e.mercado.indices, e.prefs, d.resumo.patrimonio > 0 ? d.resumo.patrimonio : null); }
+    catch (err) { console.error(err); }
+    cacheSerie.set(d, r);
+    return r;
+  }
 
-    const primeiroDia = regs[0].data;
+  function crescimento(d) {
+    // 1) o patrimônio reconstruído dia a dia pelo painel: posições × preço
+    //    de cada dia + renda fixa rendendo aporte a aporte + rebanho;
+    // 2) antes disso, os meses anotados à parte (Notion), que guardam só o
+    //    total — ficam numa linha tracejada, sem se emendar à do painel.
+    const hoje = FC.datas.hoje();
+    const ser = serieDoPainel(d);
+    const painel = ser.pontos;
+    const anotados = (d.registros || []).filter((r) => r.origem === "importado").map((r) => ({ data: r.data, valor: r.patrimonio }));
+    if (!painel.length && !anotados.length) return "";
+    const primeiroDia = [anotados[0] && anotados[0].data, ser.inicio].filter(Boolean).sort()[0];
+
     const periodos = { ano: [FC.datas.soma(hoje, -365), hoje], mes: [FC.datas.soma(hoje, -30), hoje], tudo: [primeiroDia, hoje],
       custom: [cresc.de || FC.datas.soma(hoje, -90), cresc.ate || hoje] };
     const [de, ate] = periodos[cresc.periodo] || periodos.tudo;
-    const trecho = recorte(regs, de, ate);
-    const grao = granularidade(trecho.length ? trecho[0].data : de, ate);
+    const grao = granularidade(de < primeiroDia ? primeiroDia : de, ate);
+    const trecho = painel.filter((p) => p.data >= de && p.data <= ate);
+    // a série anotada entra com o mês anterior ao período, para a linha não começar no meio
+    const dentroAnot = anotados.filter((r) => r.data >= de && r.data <= ate);
+    const antesAnot = dentroAnot.length ? [...anotados].reverse().find((r) => r.data < de) : null;
+    const trechoAnot = (antesAnot ? [antesAnot] : []).concat(dentroAnot);
 
-    // rendimento só se mede entre registros do painel (com valor de mercado)
-    const medidos = trecho.filter((r) => r.origem !== "importado");
-    let rend = null, serieRend = [];
-    if (medidos.length >= 2) {
-      const base = medidos[0];
-      serieRend = medidos.map((r) => [r.data, r.patrimonio - base.patrimonio - fluxoEntre(base.data, r.data)]);
-      rend = ganhoDesde(medidos, base, medidos.at(-1));
+    // rendimento = variação do patrimônio menos o dinheiro que entrou no período
+    let rend = null, serieRend = [], twrPer = null, cdiPer = null;
+    const p0 = trecho[0], p1 = trecho.at(-1);
+    if (trecho.length >= 2) {
+      const fluxo = p1.fluxo - p0.fluxo;
+      const abs = p1.valor - p0.valor - fluxo;
+      const capital = p0.valor + Math.max(0, fluxo);
+      rend = { abs, pct: capital > 0 ? (abs / capital) * 100 : null };
+      serieRend = trecho.map((p) => [p.data, p.valor - p0.valor - (p.fluxo - p0.fluxo)]);
+      twrPer = FC.rentab.twr(trecho);
+      const ix = FC.estado.mercado.indices;
+      if (ix) cdiPer = (ix.fator("cdi", 100, p0.data, p1.data).f - 1) * 100;
     }
-    const fimPer = trecho.at(-1);
-    const fluxoPer = trecho.length ? fluxoEntre(trecho[0].data, fimPer.data) : 0;
+    const fluxoPer = trecho.length >= 2 ? p1.fluxo - p0.fluxo : 0;
 
     const seletor = html`<div class="flex quebra mb3" style="gap:10px">
       <div class="segmentado" role="group" id="seg-periodo" aria-label="Período">
@@ -218,13 +198,22 @@
         <button type="button" data-v="rendimento" aria-pressed="${cresc.vista === "rendimento"}">Rendimento</button></div>
     </div>`;
 
+    const series = [];
+    if (trechoAnot.length >= 2) series.push({ nome: "Anotado à parte", pontos: espaca(trechoAnot.map((r) => [r.data, r.valor]), "dia"), classe: "lref" });
+    if (trecho.length >= 2) series.push({ nome: "Patrimônio", pontos: espaca(trecho.map((p) => [p.data, p.valor]), grao), classe: "l1", area: true });
+    // buraco de verdade: o último mês anotado bem antes do primeiro dia do painel
+    const lacuna = trechoAnot.length >= 2 && trecho.length >= 2 && FC.datas.dias(trechoAnot.at(-1).data, trecho[0].data) > 45;
+
     const grafico = cresc.vista === "rendimento"
       ? (serieRend.length >= 2
         ? html`${FC.graficos.linhas({ series: [{ nome: "Rendimento", pontos: espaca(serieRend, grao), classe: "l2", area: false }], altura: 240, zero: true })}
           <p class="texto-p mt2">Quanto o patrimônio rendeu no período, já sem o dinheiro que você aportou ou retirou.</p>`
-        : html`<div class="mensagem info">${icone("info", 18)}<span>Ainda não há registros diários suficientes neste período para medir o rendimento. O painel grava um por dia — escolha um período maior ou volte em alguns dias.</span></div>`)
-      : (trecho.length >= 2
-        ? FC.graficos.linhas({ series: [{ nome: "Patrimônio", pontos: espaca(trecho.map((r) => [r.data, r.patrimonio]), grao), classe: "l1", area: true }], altura: 240 })
+        : html`<div class="mensagem info">${icone("info", 18)}<span>O painel ainda não tem dias suficientes neste período para medir o rendimento. Escolha um período maior.</span></div>`)
+      : (series.length
+        ? html`${FC.graficos.linhas({ series, altura: 240 })}
+          <div class="legenda-g">${trecho.length >= 2 ? html`<span><i class="k1"></i>calculado pelo painel, dia a dia, com o que está cadastrado nele</span>` : ""}${trechoAnot.length >= 2 ? html`<span><i class="kref"></i>total anotado à parte (Notion), mês a mês</span>` : ""}</div>
+          ${trechoAnot.length >= 2 && trecho.length >= 2 && !lacuna ? html`<p class="texto-p mt2">As duas linhas medem coisas diferentes: a tracejada é o total que você anotava; a cheia só conhece o que já foi cadastrado no painel em cada data.</p>` : ""}
+          ${lacuna ? html`<p class="texto-p mt2">Entre ${FC.datas.mesAno(trechoAnot.at(-1).data)} e ${FC.datas.mesAno(trecho[0].data)} não há registro — o gráfico deixa o intervalo em branco em vez de inventar a linha.</p>` : ""}`
         : html`<div class="mensagem info">${icone("info", 18)}<span>Só há um registro neste período.</span></div>`);
 
     return html`<section class="secao" id="crescimento">
@@ -233,9 +222,10 @@
         ${seletor}
         <dl class="kpis mb3">
           <div class="kpi"><dt>Rendimento no período</dt><dd class="${rend ? (rend.abs >= 0 ? "pos" : "neg") : "fraco"}">${rend ? html`${rend.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(rend.abs))}` : "—"}
-            <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" : "sem registros suficientes"}</small></dd></div>
+            <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" : "sem dias suficientes"}</small></dd></div>
           <div class="kpi pequeno"><dt>Aportes no período</dt><dd>${Math.abs(fluxoPer) > 0.005 ? html`${fluxoPer >= 0 ? "+" : "−"}${fmt.brl(Math.abs(fluxoPer))}` : fmt.brl(0)}<small>${fluxoPer < 0 ? "saiu mais do que entrou" : "dinheiro novo que entrou"}</small></dd></div>
-          <div class="kpi pequeno"><dt>Patrimônio ${fimPer && fimPer.ao_vivo ? "agora" : "no fim"}</dt><dd>${fmt.brl(fimPer ? fimPer.patrimonio : 0)}<small>${trecho.length >= 2 ? (() => { const v = fimPer.patrimonio - trecho[0].patrimonio; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>
+          ${FC.ok(twrPer) ? html`<div class="kpi pequeno"><dt>TWR ${FC.ajuda("Retorno ponderado pelo tempo: encadeia o rendimento de cada dia e ignora o tamanho dos aportes. É a medida para comparar a carteira com o CDI ou o Ibovespa.")}</dt><dd class="${twrPer >= 0 ? "pos" : "neg"}">${fmt.delta(twrPer, 2)}%<small>${FC.ok(cdiPer) ? `CDI no período: ${fmt.num(cdiPer, 2)}%` : ""}</small></dd></div>` : ""}
+          <div class="kpi pequeno"><dt>Patrimônio ${p1 && p1.data === hoje ? "agora" : "no fim"}</dt><dd>${fmt.brl(p1 ? p1.valor : (trechoAnot.at(-1) || {}).valor || 0)}<small>${trecho.length >= 2 ? (() => { const v = p1.valor - p0.valor; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>
         </dl>
         ${grafico}
       </div></section>`;
@@ -314,7 +304,7 @@
           ${r.renda_fixa ? html`<span class="chip"><span class="ponto" style="background:var(--s2)"></span>Renda fixa <b class="rs">${fmt.brlTexto(r.renda_fixa)}</b></span>` : ""}
           ${r.agro ? html`<span class="chip"><span class="ponto" style="background:var(--s5)"></span>Agro <b class="rs">${fmt.brlTexto(r.agro)}</b></span>` : ""}
           ${r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s3)"></span>Cripto <b class="rs">${fmt.brlTexto(r.cripto)}</b></span>` : ""}
-          ${r.tem_preco_medio ? html`<span class="chip">Resultado nas posições <b class="${r.resultado >= 0 ? "pos" : "neg"}">${fmt.delta(r.variacao)}%</b></span>` : ""}
+          ${d.rentab && d.rentab.total && FC.ok(d.rentab.total.periodo_pct) ? html`<span class="chip" title="ganho ÷ capital médio aplicado, cada aporte com a sua data">Rendimento <b class="${d.rentab.total.periodo_pct >= 0 ? "pos" : "neg"}">${fmt.delta(d.rentab.total.periodo_pct)}%</b>${FC.ok(d.rentab.total.xirr) ? html` · ${fmt.delta(d.rentab.total.xirr)}% a.a.` : ""}</span>` : ""}
           ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
         </div>
       </div>

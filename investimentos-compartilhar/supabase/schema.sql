@@ -326,3 +326,29 @@ begin
 end $$;
 
 drop function if exists public.painel_mfa_ok();
+
+-- ------------------------------------------------------------ rentabilidade por aporte
+-- Índices históricos do Banco Central, um valor por dia útil (CDI e Selic,
+-- % ao dia) ou por mês (IPCA, % no mês, guardado no dia 1º). Dado público:
+-- qualquer usuário logado lê; só a Edge Function escreve.
+create table if not exists public.indices_diarios (
+  indice text not null check (indice in ('cdi','selic','ipca')),
+  data   date not null,
+  valor  numeric not null,
+  primary key (indice, data)
+);
+alter table public.indices_diarios enable row level security;
+drop policy if exists "leitura" on public.indices_diarios;
+create policy "leitura" on public.indices_diarios for select to authenticated using (true);
+revoke insert, update, delete on public.indices_diarios from anon, authenticated;
+
+-- cada título pode ser pós (CDI/Selic), pré ou híbrido (IPCA + X)
+alter table public.renda_fixa drop constraint if exists renda_fixa_tipo_check;
+alter table public.renda_fixa add constraint renda_fixa_tipo_check check (tipo in ('cdi','selic','ipca','prefixado'));
+-- data a partir da qual o saldo inicial rende (vazio = data do cadastro)
+alter table public.renda_fixa add column if not exists data_inicio date;
+-- cada aporte de renda fixa pode ter a própria taxa; vazio = a do título
+alter table public.aportes add column if not exists indexador text check (indexador in ('cdi','selic','ipca','prefixado'));
+alter table public.aportes add column if not exists taxa numeric;
+-- data da posição inicial de um ativo (vazio = data do cadastro)
+alter table public.ativos add column if not exists data_base date;

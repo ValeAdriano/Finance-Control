@@ -15,6 +15,8 @@
 //   {acao: "cotacoes", itens: [{ticker, classe}]} preço de agora (cache 1 min)
 //   {acao: "proventos", itens: [{ticker, classe}]} dividendos, JCP e rendimentos
 //                                                com data com e data de pagamento
+//   {acao: "indices", forcar?}                   completa CDI, Selic e IPCA em indices_diarios
+//   {acao: "apagar_conta", confirmacao: "APAGAR"} apaga a conta e todos os dados
 //   {acao: "registro_diario"}                    só o agendamento (x-cron-secret):
 //                                                grava a foto do dia de cada usuário
 //
@@ -296,6 +298,155 @@ async function cdiDiario(anos: number) {
   });
 }
 
+// ------------------------------------------------------------------ índices históricos
+// CDI (série 12) e Selic (11) em % ao dia útil; IPCA (433) em % ao mês.
+// Ficam na tabela indices_diarios; aqui só se completa o que falta.
+const SERIES_INDICES: Record<string, number> = { cdi: 12, selic: 11, ipca: 433 };
+const INICIO_INDICES = "2015-01-01";
+const brData = (iso: string) => { const [a, m, d] = iso.split("-"); return `${d}/${m}/${a}`; };
+
+// o BCB oscila (502, conexão recusada): tenta de novo antes de desistir
+async function baixaComRetentativa(url: string, tentativas = 3): Promise<string> {
+  let erro: unknown = null;
+  for (let k = 0; k < tentativas; k++) {
+    try { return await baixa(url); } catch (e) { erro = e; await new Promise((r) => setTimeout(r, 800 * (k + 1) * (k + 1))); }
+  }
+  throw erro;
+}
+const isoBr = (br: string) => { const [d, m, a] = br.split("/"); return `${a}-${m}-${d}`; };
+
+// IPCA mensal pelo IBGE (SIDRA, tabela 1737, variável 63), se o BCB falhar
+async function ipcaIbge(desde: string) {
+  const d = JSON.parse(await baixaComRetentativa("https://apisidra.ibge.gov.br/values/t/1737/n1/all/v/63/p/all?formato=json"));
+  return (d as any[]).slice(1).map((x) => ({ data: `${String(x.D3C).slice(0, 4)}-${String(x.D3C).slice(4, 6)}-01`, valor: Number(x.V) }))
+    .filter((r) => r.data >= desde && Number.isFinite(r.valor));
+}
+
+async function atualizaIndices() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const feito: Record<string, unknown> = {};
+  const grava = async (rows: { indice: string; data: string; valor: number }[]) => {
+    for (let i = 0; i < rows.length; i += 1000) {
+      const { error } = await admin.from("indices_diarios").upsert(rows.slice(i, i + 1000), { onConflict: "indice,data" });
+      if (error) throw error;
+    }
+  };
+  for (const [indice, cod] of Object.entries(SERIES_INDICES)) {
+    const { data: ult } = await admin.from("indices_diarios").select("data").eq("indice", indice)
+      .order("data", { ascending: false }).limit(1).maybeSingle();
+    const { data: pri } = await admin.from("indices_diarios").select("data").eq("indice", indice)
+      .order("data", { ascending: true }).limit(1).maybeSingle();
+    let n = 0;
+    const erros: string[] = [];
+    // começo da série faltando (ex.: veio só o cache de 5 anos): completa até o 1º dia que já existe
+    if (pri && pri.data > INICIO_INDICES && indice !== "ipca") {
+      for (let a = INICIO_INDICES; a < pri.data;) {
+        const f = new Date(Math.min(Date.parse(a) + 365 * 86400000, Date.parse(pri.data) - 86400000)).toISOString().slice(0, 10);
+        try {
+          const linhas = JSON.parse(await baixaComRetentativa(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${cod}/dados?formato=json&dataInicial=${brData(a)}&dataFinal=${brData(f)}`, 2));
+          const rows = (Array.isArray(linhas) ? linhas : []).map((x: any) => ({ indice, data: isoBr(String(x.data)), valor: Number(String(x.valor).replace(",", ".")) })).filter((r) => Number.isFinite(r.valor));
+          await grava(rows); n += rows.length;
+        } catch (e) { erros.push(`início ${a}: ${String((e as any)?.message || e).slice(0, 60)}`); break; }
+        a = new Date(Date.parse(f) + 86400000).toISOString().slice(0, 10);
+      }
+    }
+    let de = ult ? new Date(Date.parse(ult.data + "T12:00:00Z") + 86400000).toISOString().slice(0, 10) : INICIO_INDICES;
+    // blocos de 1 ano (o BCB limita a 10 anos e fica instável com consultas grandes)
+    while (de <= hoje) {
+      const fim = new Date(Math.min(Date.parse(de) + 365 * 86400000, Date.parse(hoje))).toISOString().slice(0, 10);
+      try {
+        const linhas = JSON.parse(await baixaComRetentativa(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.${cod}/dados?formato=json&dataInicial=${brData(de)}&dataFinal=${brData(fim)}`));
+        const rows = (Array.isArray(linhas) ? linhas : []).map((x: any) => ({ indice, data: isoBr(String(x.data)), valor: Number(String(x.valor).replace(",", ".")) }))
+          .filter((r) => Number.isFinite(r.valor));
+        await grava(rows); n += rows.length;
+      } catch (e) {
+        erros.push(`${de}: ${String((e as any)?.message || e).slice(0, 100)}`);
+        break;   // não pula buracos: a próxima rodada recomeça daqui
+      }
+      de = new Date(Date.parse(fim) + 86400000).toISOString().slice(0, 10);
+    }
+    // reservas: CDI do cache que o gráfico de benchmarks já guardou; IPCA do IBGE
+    if (erros.length && indice === "cdi") {
+      const { data: c } = await admin.from("mercado_cache").select("dados").like("chave", "bcb:cdi_diario:%").order("atualizado_em", { ascending: false }).limit(1).maybeSingle();
+      const rows = ((c?.dados as [string, number][]) || []).filter(([d]) => !ult || d > ult.data).map(([d, v]) => ({ indice, data: d, valor: v }));
+      if (rows.length) { await grava(rows); n += rows.length; erros.push(`usado o cache do CDI (${rows.length} dias)`); }
+    }
+    if (erros.length && indice === "ipca") {
+      try { const rows = (await ipcaIbge(ult ? ult.data : INICIO_INDICES)).map((r) => ({ indice, ...r })); await grava(rows); n += rows.length; erros.push(`usado o IBGE (${rows.length} meses)`); }
+      catch (e) { erros.push("IBGE: " + String(e).slice(0, 80)); }
+    }
+    feito[indice] = erros.length ? { gravados: n, avisos: erros } : n;
+  }
+  return feito;
+}
+
+async function lerIndices(desde: string) {
+  const saida: Record<string, [string, number][]> = { cdi: [], selic: [], ipca: [] };
+  for (const indice of Object.keys(SERIES_INDICES)) {
+    for (let de = 0; ; de += 1000) {
+      const { data } = await admin.from("indices_diarios").select("data,valor").eq("indice", indice)
+        .gte("data", indice === "ipca" ? desde.slice(0, 7) + "-01" : desde).order("data").range(de, de + 999);
+      for (const r of data || []) saida[indice].push([r.data, Number(r.valor)]);
+      if (!data || data.length < 1000) break;
+    }
+  }
+  return saida;
+}
+
+// Fator de um aporte de renda fixa entre a data dele e "ate" (exclusiva):
+// pós-fixado composto dia a dia com o índice de cada dia útil; prefixado
+// por dias úteis/252; IPCA + X pró-rata pelos dias úteis do mês. O
+// calendário de dias úteis é o do próprio CDI; depois do último dado
+// publicado, vale o último valor (estimativa).
+function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: Record<string, [string, number][]>) {
+  if (!(de < ate)) return 1;
+  const cal = idx.cdi;
+  const ultimoCal = cal.length ? cal.at(-1)![0] : "0000";
+  const diasUteis: string[] = cal.filter(([d]) => d >= de && d < ate).map(([d]) => d);
+  // depois do último dia publicado: dias de semana, com o último valor
+  const umDia = 86400000;
+  let d = Date.parse((ultimoCal >= de ? ultimoCal : de) + "T12:00:00Z") + (ultimoCal >= de ? umDia : 0);
+  for (; new Date(d).toISOString().slice(0, 10) < ate; d += umDia) {
+    const dow = new Date(d).getUTCDay();
+    if (dow !== 0 && dow !== 6) diasUteis.push(new Date(d).toISOString().slice(0, 10));
+  }
+  let f = 1;
+  if (indexador === "cdi" || indexador === "selic") {
+    // Selic sem dado no dia: o CDI do dia (ficam a ~0,1 p.p. ao ano)
+    const s = idx[indexador].length ? idx[indexador] : idx.cdi, mapa = new Map(s), cdi = new Map(idx.cdi);
+    const ultimo = s.length ? s.at(-1)![1] : 0;
+    for (const d of diasUteis) f *= 1 + ((mapa.get(d) ?? cdi.get(d) ?? ultimo) / 100) * (taxa / 100);
+  } else if (indexador === "prefixado") {
+    f = Math.pow(1 + taxa / 100, diasUteis.length / 252);
+  } else if (indexador === "ipca") {
+    const ipca = new Map(idx.ipca.map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : 0;
+    const porMes: Record<string, number> = {};
+    for (const [d] of cal) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1;
+    for (const d of diasUteis) {
+      const m = d.slice(0, 7), du = d > ultimoCal ? 21 : porMes[m] || 21;
+      f *= Math.pow(1 + (ipca.get(m) ?? ultimo) / 100, 1 / du) * Math.pow(1 + taxa / 100, 1 / 252);
+    }
+  }
+  return f;
+}
+
+// valor de hoje de cada título: saldo inicial e cada aporte rendendo do seu dia
+function valorTitulos(rf: any[], aportes: any[], idx: Record<string, [string, number][]>, hoje: string) {
+  const out: Record<string, number> = {};
+  for (const r of rf) {
+    const ind = r.tipo, tx = r.taxa != null ? Number(r.taxa) : (ind === "cdi" || ind === "selic" ? 100 : 0);
+    const ini = r.data_inicio || String(r.criado_em).slice(0, 10);
+    let v = Number(r.valor_aplicado) ? Number(r.valor_aplicado) * fatorRF(ind, tx, ini, hoje, idx) : 0;
+    for (const a of aportes) {
+      if (a.tipo !== "caixa" || a.historico || a.origem || a.titulo !== r.nome) continue;
+      const ia = a.indexador || ind, ta = a.taxa != null ? Number(a.taxa) : tx;
+      v += Number(a.valor) * fatorRF(ia, ta, a.data, hoje, idx);
+    }
+    out[r.nome] = v;
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ CoinGecko
 // O CoinGecko identifica moedas por id ("bitcoin"), não pelo código. O
 // código é resolvido uma vez pela busca — fica a moeda com esse símbolo
@@ -405,13 +556,31 @@ async function proventosFundamentus(ticker: string, fii: boolean) {
   return { fonte: "Fundamentus", lista };
 }
 
+// FII ou ação? A classe que o app manda nem sempre é confiável (um ticker
+// visto só num aporte chega como "acao_br"), e a página errada do
+// Fundamentus volta vazia. Decide pela lista de FIIs do próprio Fundamentus
+// e, se ainda vier vazio, tenta a outra página. O cache guarda o tipo na
+// chave, para um pedido errado não esconder os proventos de ninguém.
+async function proventosB3(t: string, classe: string) {
+  let fii = classe === "fii";
+  try {
+    const lista: any = await comCache("fundamentus:fiis", 6 * HORA, false, fiis);
+    if (lista && lista[t]) fii = true;
+  } catch { /* segue com a classe informada */ }
+  const busca = (ehFii: boolean) => comCache(`proventos:${ehFii ? "fii" : "acao"}:${t}`, 12 * HORA, false, () => proventosFundamentus(t, ehFii));
+  const r: any = await busca(fii);
+  if ((r.lista || []).length || !/11$/.test(t)) return r;
+  const outra: any = await busca(!fii);
+  return (outra.lista || []).length ? outra : r;
+}
+
 async function proventos(itens: { ticker: string; classe: string }[]) {
   const saida: Record<string, unknown> = {};
   await emLotes(itens, 6, async (i) => {
     const t = i.ticker.toUpperCase();
     try {
       if (i.classe === "acao_br" || i.classe === "fii") {
-        saida[t] = await comCache(`proventos:${t}`, 12 * HORA, false, () => proventosFundamentus(t, i.classe === "fii"));
+        saida[t] = await proventosB3(t, i.classe);
       } else if (i.classe !== "cripto") {
         const s: any = await comCache(`yahoo:${simbolo(t, i.classe)}:5y`, 12 * HORA, false, () => serieYahoo(t, i.classe, 5));
         saida[t] = { fonte: "Yahoo Finance (só data com)", lista: (s.dividendos || []).map(([d, v]: [string, number]) =>
@@ -432,6 +601,8 @@ function hojeBrasil() {
 }
 
 async function registroDiario() {
+  try { await atualizaIndices(); } catch { /* o registro segue com o que já tem */ }
+  const idx = await lerIndices("2015-01-01");
   const { data: usuarios } = await admin.from("ativos").select("user_id");
   const { data: comRf } = await admin.from("renda_fixa").select("user_id");
   const ids = [...new Set([...(usuarios || []), ...(comRf || [])].map((u: any) => u.user_id))];
@@ -440,7 +611,7 @@ async function registroDiario() {
     try {
       const [{ data: ativos }, { data: aportes }, { data: rf }, { data: ultimo }] = await Promise.all([
         admin.from("ativos").select("*").eq("user_id", uid),
-        admin.from("aportes").select("tipo,ticker,quantidade,preco,valor,titulo,origem,historico").eq("user_id", uid),
+        admin.from("aportes").select("tipo,data,ticker,quantidade,preco,valor,titulo,origem,historico,indexador,taxa").eq("user_id", uid),
         admin.from("renda_fixa").select("*").eq("user_id", uid),
         admin.from("patrimonio_historico").select("agro").eq("user_id", uid).order("data", { ascending: false }).limit(1).maybeSingle(),
       ]);
@@ -471,11 +642,10 @@ async function registroDiario() {
         if (a.classe === "cripto") cripto += valor; else rv += valor;
         if (custo != null) investido += custo;
       }
-      const extra: Record<string, number> = {};
-      for (const a of aportes || []) if (a.tipo === "caixa" && !a.historico && !a.origem) extra[a.titulo] = (extra[a.titulo] || 0) + Number(a.valor);
+      const valores = valorTitulos(rf || [], aportes || [], idx, hojeBrasil());
       let rfTotal = 0;
       for (const r of rf || []) {
-        const v = Number(r.valor_aplicado) + (extra[r.nome] || 0);
+        const v = valores[r.nome] || 0;
         rfTotal += v; porPilar[r.pilar] = (porPilar[r.pilar] || 0) + v;
       }
       const agro = Number(ultimo?.agro) || 0;
@@ -558,6 +728,26 @@ Deno.serve(async (req) => {
         ticker: String(i.ticker || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), classe: String(i.classe || "acao_br") }))
         .filter((i: any) => i.ticker);
       return resposta(await proventos(itens));
+    }
+
+    // Exclusão da conta pelo próprio dono (exigência das lojas de apps).
+    // Com 2FA ligado, só uma sessão que passou pelo código pode apagar.
+    // As tabelas têm "on delete cascade": apagar o usuário leva tudo junto.
+    if (corpo.acao === "apagar_conta") {
+      if (corpo.confirmacao !== "APAGAR") return resposta({ erro: "confirmação ausente" }, 400);
+      let aal = "aal1";
+      try { aal = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).aal || "aal1"; } catch { /* segue aal1 */ }
+      const temFator = (quem.user.factors ?? []).some((f: any) => f.status === "verified");
+      if (temFator && aal !== "aal2") return resposta({ erro: "confirme o código do autenticador antes" }, 403);
+      const { error } = await admin.auth.admin.deleteUser(quem.user.id);
+      if (error) throw error;
+      return resposta({ ok: true });
+    }
+
+    // completa a tabela de índices (no máximo a cada 6 h; a leitura é direta na tabela)
+    if (corpo.acao === "indices") {
+      const r = await comCache("indices:atualizado", 6 * HORA, forcar, async () => ({ feito: await atualizaIndices(), quando: new Date().toISOString() }));
+      return resposta(r);
     }
 
     if (corpo.acao === "benchmarks") {
