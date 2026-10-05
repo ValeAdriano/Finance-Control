@@ -23,7 +23,7 @@
       resumo: "Tudo o que você tem ou acompanha na bolsa e em cripto, avaliado pelos seus critérios, e a renda fixa contra o CDI.",
       partes: [
         ["ativos", "Minha lista", "Seus ativos com quantidade, preço médio, valor atual e o veredito: Atende, Zona cinzenta ou Não atende. Use o botão “+ Ativo” para cadastrar um novo."],
-        ["info", "Detalhe do ativo", "Toque em um ativo para ver indicadores, evolução da posição e como a nota é formada nas quatro lentes: histórico do próprio ativo, seu alvo, os pares do setor e a renda fixa."],
+        ["info", "Detalhe do ativo", "Toque em um ativo para ver indicadores, evolução da posição e como a nota é formada nas quatro lentes. FIIs ganham um raio-x da CVM e uma análise própria do tipo: tijolo (vacância física e financeira, concentração em imóveis), papel (concentração em CRIs), fundo de fundos e híbrido."],
         ["moeda", "Pagadoras de dividendos", "Ranking de quem paga: frequência, meses em que paga, quanto do preço devolve por ano e há quantos anos paga sem falhar."],
         ["renda", "Renda fixa", "Seus títulos com taxa, vencimento e rendimento real (descontada a inflação). “+ Título” cadastra um novo."],
         ["carteira", "Seu dinheiro investido", "Quanto você colocou, quanto vale e o ganho. O % é do período, com cada aporte na sua data (não é valor de hoje ÷ total aportado), e a TIR mostra a taxa ao ano."],

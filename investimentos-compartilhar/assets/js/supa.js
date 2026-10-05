@@ -225,6 +225,13 @@
       }
       return saida;
     },
+    // raio-x de cada FII pelo informe trimestral da CVM (cache de 1 dia aqui, 7 no servidor)
+    async fiisCvm(forcar = false) {
+      if (!forcar) { const c = doNavegador("fiis_cvm", 24 * 60 * 60 * 1000); if (c) return c; }
+      const d = await chama({ acao: "fiis_cvm", forcar });
+      if (d && d.fundos) guarda("fiis_cvm", d);
+      return d;
+    },
     // CDI e Selic diários e IPCA mensal desde 2015, lidos direto da tabela
     // (dado público). Antes, pede à Edge Function que complete o que faltar.
     async indices(forcar = false) {

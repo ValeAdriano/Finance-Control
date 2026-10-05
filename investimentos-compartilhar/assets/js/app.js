@@ -87,12 +87,24 @@
     atualizaBotaoAtualizar();
     try {
       const anos = estado.prefs.regras.janela_historico_anos || 3;
-      const [universo, historicos, indices] = await Promise.all([
+      const [universo, historicos, indices, cvm] = await Promise.all([
         FC.mercado.universo(forcar),
         FC.mercado.historicos(itensDeMercado(), anos, forcar),
         FC.mercado.indices(forcar).catch((e) => { console.error(e); return null; }),
+        FC.mercado.fiisCvm(forcar).catch((e) => { console.error(e); return null; }),
       ]);
       estado.mercado = { ...estado.mercado, universo, historicos: { ...estado.mercado.historicos, ...historicos } };
+      // o raio-x da CVM entra em cada FII do universo (e serve de par para os outros)
+      if (cvm && cvm.fundos && universo && universo.fiis) {
+        for (const [t, v] of Object.entries(cvm.fundos)) {
+          const f = universo.fiis[t];
+          if (!f) continue;
+          f.cvm = { ...v, fonte: cvm.fonte };
+          f.vacancia_financeira = v.vacancia_financeira ?? null;
+          f.concentracao = v.tipo === "papel" ? (v.cri || {}).maior : v.tipo === "fof" ? (v.fii || {}).maior
+            : v.tipo === "hibrido" ? v.maior_imovel ?? (v.cri || {}).maior ?? null : v.maior_imovel ?? null;
+        }
+      }
       // sem a série diária (ou com ela incompleta), a renda fixa rende pela
       // taxa anual do Banco Central em vez de ficar parada no valor aplicado
       const reserva = (universo && universo.macro) || {};

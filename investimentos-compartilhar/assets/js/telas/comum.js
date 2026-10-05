@@ -126,6 +126,41 @@
       ${r.proventos > 0.005 ? html`<p class="texto-p mt1">Inclui ${fmt.brl(r.proventos)} em proventos já pagos, contados como dinheiro que voltou.</p>` : ""}`;
   };
 
+  // ---------------------------------------------------------------- FII: raio-x da CVM
+  // Cada tipo de FII tem um risco diferente, e a análise muda com ele.
+  const TIPOS_FII = {
+    fii_tijolo: ["Tijolo", "azul", "O que paga é o aluguel: P/VP, DY, vacância física (área vaga), vacância financeira (receita que deixa de entrar) e se a renda depende de poucos imóveis ou de um setor só."],
+    fii_papel: ["Papel (CRI)", "amarelo", "Não há imóvel nem vacância: o risco é de crédito. P/VP, DY e o quanto a carteira depende do maior CRI."],
+    fii_fof: ["Fundo de fundos", "azul", "Carteira de cotas de outros FIIs: P/VP (FOF costuma negociar com desconto), DY e o peso do maior fundo da carteira."],
+    fii_hibrido: ["Híbrido", "cinza", "Imóveis e papéis juntos: P/VP, DY, vacâncias da parte de imóveis e a concentração na maior posição."],
+  };
+  C.blocoFii = function (a) {
+    if (a.classe !== "fii") return "";
+    const tipo = TIPOS_FII[a.perfil] || TIPOS_FII.fii_tijolo, c = a.cvm;
+    const pctTxt = (v) => (ok(v) ? `${fmt.num(v, 1)}%` : "—");
+    const fatos = [];
+    if (c) {
+      if (ok(c.receita_aluguel)) fatos.push(["Receita de aluguel", pctTxt(c.receita_aluguel), "do que entrou no trimestre (o resto vem de CRIs e cotas)"]);
+      if (c.n_imoveis) fatos.push(["Imóveis", fmt.int(c.n_imoveis), ok(c.maior_imovel) ? `o maior traz ${pctTxt(c.maior_imovel)} da receita` : ""]);
+      if (c.maior_setor) fatos.push(["Maior setor de inquilinos", c.maior_setor.nome, `${pctTxt(c.maior_setor.pct)} da receita · ${c.n_setores} setor${c.n_setores === 1 ? "" : "es"}`]);
+      if (ok(c.vacancia_fisica_cvm)) fatos.push(["Vacância física", pctTxt(c.vacancia_fisica_cvm), "área vaga, ponderada pela área de cada imóvel"]);
+      if (ok(c.vacancia_financeira)) fatos.push(["Vacância financeira", pctTxt(c.vacancia_financeira), "estimada: receita que os espaços vagos deixam de gerar"]);
+      if (ok(c.inadimplencia)) fatos.push(["Inadimplência", pctTxt(c.inadimplencia), "ponderada pela receita de cada imóvel"]);
+      if (c.cri) fatos.push(["CRIs", fmt.int(c.cri.n), `o maior é ${pctTxt(c.cri.maior)} da carteira de CRIs · 5 maiores: ${pctTxt(c.cri.top5)}`]);
+      if (c.fii) fatos.push(["Cotas de FIIs", fmt.int(c.fii.n), `o maior é ${pctTxt(c.fii.maior)} · 5 maiores: ${pctTxt(c.fii.top5)}`]);
+    }
+    const tri = c ? c.data_referencia.slice(0, 7).split("-").reverse().join("/") : null;
+    return html`<section class="raiox">
+      <div class="raiox-topo">
+        <div><span class="rot">Raio-X do fundo</span><b>${FC.pilula(tipo[1], tipo[0])}</b></div>
+        ${c ? html`<span class="raiox-fonte">CVM · informe de ${tri}</span>` : ""}
+      </div>
+      <p class="texto-p">${tipo[2]}</p>
+      ${fatos.length ? html`<dl class="raiox-fatos">${fatos.map(([t, v, s]) => html`<div><dt>${t}</dt><dd>${v}</dd>${s ? html`<small>${s}</small>` : ""}</div>`)}</dl>`
+        : html`<p class="texto-p mt1 fraco">Sem informe trimestral na CVM para este fundo — a análise usa só os dados do Fundamentus.</p>`}
+    </section>`;
+  };
+
   // ---------------------------------------------------------------- Graham
   // bloco de destaque: preço justo, margem de segurança e a conta
   C.blocoGraham = function (g, preco) {
@@ -177,6 +212,7 @@
         ` : ""}
       </dl>
       ${C.blocoGraham(a.graham, a.preco)}
+      ${C.blocoFii(a)}
       ${C.blocoRentabAtivo(a.ticker)}
       ${evolucaoPosicao(a)}
       ${a.avisos.map((av) => html`<div class="mensagem alerta mb2" style="font-size:13px">${icone("info", 16)}<span>${av}</span></div>`)}

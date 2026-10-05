@@ -109,6 +109,26 @@ e nos segredos da Edge Function.
 - **Gráfico de crescimento**: reconstruído dia a dia a partir dos lançamentos;
   o histórico anotado à parte aparece separado, tracejado.
 
+## FIIs por tipo
+
+O informe trimestral da CVM (dados abertos) entra pela Edge Function
+(`fiis_cvm`, cache de 7 dias; agregação em `functions/mercado/cvm.ts`):
+receita de aluguel × juros de títulos, imóveis com vacância, inadimplência e
+fatia da receita, setores de inquilinos, CRIs e cotas de FIIs. Daí sai o tipo:
+**tijolo** (≥ 50% da receita em aluguel), **papel**, **fundo de fundos** ou
+**híbrido** — e cada um tem um perfil de análise em `padroes.js`:
+
+| Tipo | Métricas |
+|---|---|
+| Tijolo | P/VP, DY, vacância física, vacância financeira (estimada), concentração no maior imóvel, cap rate, liquidez |
+| Papel | P/VP, DY, concentração no maior CRI, liquidez |
+| Fundo de fundos | P/VP, DY, concentração no maior FII, liquidez |
+| Híbrido | P/VP, DY, vacâncias, concentração na maior posição, liquidez |
+
+A vacância financeira é estimada imóvel a imóvel: receita potencial =
+receita ÷ (1 − vacância); imóveis quase todos vagos usam o aluguel médio por
+m² do fundo.
+
 ## Cripto
 
 Classe `cripto`, pilar Alternativos por padrão. O Yahoo não publica mais

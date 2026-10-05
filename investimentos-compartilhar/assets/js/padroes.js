@@ -57,12 +57,15 @@
     ...FC.CLASSES,
     fii_papel: "FII de papel",
     fii_tijolo: "FII de tijolo",
+    fii_fof: "FII de fundos (FOF)",
+    fii_hibrido: "FII híbrido",
   };
 
   FC.ROTULO_CURTO = {
     pvp: "P/VP", pl: "P/L", dy: "DY", vacancia: "Vacância", cap_rate: "Cap rate",
     liquidez: "Liquidez", roe: "ROE", div_liq_pl: "Dív/PL", cresc_rec_5a: "Cresc 5a",
     dist_maxima_52s: "Desc. máx", premio_media_200d: "vs média 200d",
+    vacancia_financeira: "Vac. financ.", concentracao: "Concentração",
   };
 
   FC.VEREDITO_CURTO = {
@@ -89,7 +92,10 @@
         metricas: {
           pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.9, aceitavel: 1.02, ruim: 1.25 },
           dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11, aceitavel: 8.5, ruim: 6, ancora_macro: "cdi" },
-          vacancia: { rotulo: "Vacância média", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 10, ruim: 25 },
+          vacancia: { rotulo: "Vacância física", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 10, ruim: 25 },
+          // a receita que deixa de entrar — pesa mais que a área vaga
+          vacancia_financeira: { rotulo: "Vacância financeira (estimada)", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 8, ruim: 20 },
+          concentracao: { rotulo: "Concentração — maior imóvel na receita", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 15, aceitavel: 30, ruim: 60 },
           cap_rate: { rotulo: "Cap Rate", unidade: "%", direcao: "maior_melhor", peso: 1, otimo: 10, aceitavel: 7.5, ruim: 5 },
           liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
         },
@@ -100,6 +106,31 @@
         metricas: {
           pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 4, otimo: 0.95, aceitavel: 1.03, ruim: 1.12 },
           dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 4, otimo: 13, aceitavel: 10, ruim: 8, ancora_macro: "cdi" },
+          // sem imóvel não há vacância: o risco é de crédito, e diluído é melhor
+          concentracao: { rotulo: "Concentração — maior CRI da carteira", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 5, aceitavel: 10, ruim: 25 },
+          liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
+        },
+      },
+      fii_fof: {
+        descricao: "Fundo de fundos — carteira de cotas de outros FIIs",
+        isento_ir: true,
+        metricas: {
+          // FOF costuma negociar com desconto: o próprio desconto é parte da tese
+          pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.88, aceitavel: 0.98, ruim: 1.08 },
+          dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11, aceitavel: 9, ruim: 7, ancora_macro: "cdi" },
+          concentracao: { rotulo: "Concentração — maior FII da carteira", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 10, aceitavel: 20, ruim: 40 },
+          liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
+        },
+      },
+      fii_hibrido: {
+        descricao: "FII híbrido — imóveis e papéis na mesma carteira",
+        isento_ir: true,
+        metricas: {
+          pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.92, aceitavel: 1.02, ruim: 1.2 },
+          dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11.5, aceitavel: 9, ruim: 7, ancora_macro: "cdi" },
+          vacancia: { rotulo: "Vacância física", unidade: "%", direcao: "menor_melhor", peso: 1, otimo: 3, aceitavel: 10, ruim: 25 },
+          vacancia_financeira: { rotulo: "Vacância financeira (estimada)", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 8, ruim: 20 },
+          concentracao: { rotulo: "Concentração — maior posição", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 15, aceitavel: 30, ruim: 60 },
           liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
         },
       },

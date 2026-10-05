@@ -15,6 +15,7 @@
 //   {acao: "cotacoes", itens: [{ticker, classe}]} preço de agora (cache 1 min)
 //   {acao: "proventos", itens: [{ticker, classe}]} dividendos, JCP e rendimentos
 //                                                com data com e data de pagamento
+//   {acao: "fiis_cvm", forcar?}                  vacância financeira, concentração e tipo de cada FII (CVM)
 //   {acao: "indices", forcar?}                   completa CDI, Selic e IPCA em indices_diarios
 //   {acao: "apagar_conta", confirmacao: "APAGAR"} apaga a conta e todos os dados
 //   {acao: "registro_diario"}                    só o agendamento (x-cron-secret):
@@ -24,6 +25,7 @@
 // no Yahoo; macro no Banco Central; fundamentos no Fundamentus.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { lerZip, resumoFiis } from "./cvm.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -407,7 +409,7 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
   if (!(de < ate)) return 1;
   const cal = idx.cdi;
   const ultimoCal = cal.length ? cal.at(-1)![0] : "0000";
-  const diasUteis: string[] = cal.filter(([d]) => d >= de && d < ate).map(([d]) => d);
+  const diasUteis: string[] = (cal as [string, number][]).filter(([d]) => d >= de && d < ate).map(([d]) => d);
   // depois do último dia publicado: dias de semana, com o último valor
   const umDia = 86400000;
   let d = Date.parse((ultimoCal >= de ? ultimoCal : de) + "T12:00:00Z") + (ultimoCal >= de ? umDia : 0);
@@ -425,7 +427,7 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
   } else if (indexador === "prefixado") {
     f = Math.pow(1 + taxa / 100, diasUteis.length / 252);
   } else if (indexador === "ipca") {
-    const ipca = new Map(idx.ipca.map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : aoMes((idx.reserva || {}).ipca_12m);
+    const ipca = new Map((idx.ipca as [string, number][]).map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : aoMes((idx.reserva || {}).ipca_12m);
     const porMes: Record<string, number> = {};
     for (const [d] of cal) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1;
     for (const d of diasUteis) {
@@ -451,6 +453,24 @@ function valorTitulos(rf: any[], aportes: any[], idx: Record<string, any>, hoje:
     out[r.nome] = v;
   }
   return out;
+}
+
+// ------------------------------------------------------------------ FIIs pela CVM
+// Informe trimestral nos dados abertos da CVM: o ano corrente e o anterior
+// (no começo do ano, o último trimestre entregue ainda está no anterior).
+async function fiisCvm() {
+  const ano = new Date().getUTCFullYear();
+  const zips = [];
+  const erros: string[] = [];
+  for (const a of [ano - 1, ano]) {
+    try {
+      const r = await fetch(`https://dados.cvm.gov.br/dados/FII/DOC/INF_TRIMESTRAL/DADOS/inf_trimestral_fii_${a}.zip`, { headers: { "User-Agent": UA } });
+      if (!r.ok) { erros.push(`${a}: ${r.status}`); continue; }
+      zips.push(lerZip(new Uint8Array(await r.arrayBuffer())));
+    } catch (e) { erros.push(`${a}: ${String(e).slice(0, 80)}`); }
+  }
+  if (!zips.length) throw new Error("CVM indisponível: " + erros.join("; "));
+  return { gerado: new Date().toISOString(), fonte: "CVM · informe trimestral de FII (dados abertos)", fundos: resumoFiis(zips) };
 }
 
 // ------------------------------------------------------------------ CoinGecko
@@ -755,6 +775,11 @@ Deno.serve(async (req) => {
     if (corpo.acao === "indices") {
       const r = await comCache("indices:atualizado", 6 * HORA, forcar, async () => ({ feito: await atualizaIndices(), quando: new Date().toISOString() }));
       return resposta(r);
+    }
+
+    // raio-x dos FIIs pela CVM (o informe é trimestral: cache de 7 dias)
+    if (corpo.acao === "fiis_cvm") {
+      return resposta(await comCache("cvm:fiis", 7 * 24 * HORA, forcar, fiisCvm));
     }
 
     if (corpo.acao === "benchmarks") {

@@ -86,13 +86,22 @@
   }
 
   // ---------------------------------------------------------------- perfis
-  function perfilDoFii(ticker, segmento, regras) {
+  // O tipo do FII define a análise. Sai da composição da receita e da
+  // carteira no informe da CVM; o segmento do Fundamentus desempata (um
+  // fundo de imóveis que não declarou os imóveis no trimestre não vira papel).
+  function perfilDoFii(ticker, segmento, regras, fii = {}) {
     if ((regras.override_perfil || {})[ticker]) return regras.override_perfil[ticker];
-    if ((regras.segmentos_papel || []).includes(segmento)) return "fii_papel";
-    return "fii_tijolo";
+    const papelSeg = (regras.segmentos_papel || []).includes(segmento);
+    const tipo = fii.cvm && fii.cvm.tipo;
+    const existe = (p) => !!(regras.perfis || {})[p];
+    if (tipo === "fof" && existe("fii_fof")) return "fii_fof";
+    if (tipo === "hibrido" && existe("fii_hibrido")) return "fii_hibrido";
+    if (tipo === "tijolo") return "fii_tijolo";
+    if (tipo === "papel") return !papelSeg && fii.qtd_imoveis > 0 ? "fii_tijolo" : "fii_papel";
+    return papelSeg ? "fii_papel" : "fii_tijolo";
   }
   function perfilDoAtivo(ticker, classe, universo, regras) {
-    if (classe === "fii") return perfilDoFii(ticker, (universo.fiis[ticker] || {}).segmento || "", regras);
+    if (classe === "fii") { const f = universo.fiis[ticker] || {}; return perfilDoFii(ticker, f.segmento || "", regras, f); }
     return classe;
   }
 
@@ -102,7 +111,7 @@
   // 91% num shopping é a ocupação invertida). Melhor calar que errar.
   const ZERO_E_AUSENTE = new Set(["vacancia", "cap_rate", "dy", "pvp", "pl", "roe", "ffo_yield", "ev_ebitda", "roic", "liquidez"]);
   const NEGATIVO_E_RUIM = new Set(["pl", "pvp", "ev_ebitda"]);
-  const PLAUSIVEL = { vacancia: [0, 60], cap_rate: [0, 30], dy: [0, 40], pvp: [0, 5], ffo_yield: [0, 40] };
+  const PLAUSIVEL = { vacancia: [0, 60], cap_rate: [0, 30], dy: [0, 40], pvp: [0, 5], ffo_yield: [0, 40], vacancia_financeira: [0, 95], concentracao: [0, 100] };
 
   function sanitiza(chave, valor) {
     if (!ok(valor)) return [null, false, null];
@@ -118,9 +127,10 @@
     if (classe === "fii") {
       const seg = (universo.fiis[ticker] || {}).segmento || "";
       pares = Object.entries(universo.fiis)
-        .filter(([k, v]) => k !== ticker && perfilDoFii(k, v.segmento || "", regras) === perfil && (perfil === "fii_papel" || v.segmento === seg))
+        // papel, FOF e híbrido se comparam com o mesmo tipo; tijolo, com o mesmo segmento
+        .filter(([k, v]) => k !== ticker && perfilDoFii(k, v.segmento || "", regras, v) === perfil && (perfil !== "fii_tijolo" || v.segmento === seg))
         .map(([, v]) => v);
-      nome = perfil === "fii_papel" ? "fundos de papel" : "FIIs de " + seg;
+      nome = { fii_papel: "fundos de papel", fii_fof: "fundos de fundos", fii_hibrido: "FIIs híbridos" }[perfil] || "FIIs de " + seg;
     } else if (classe === "acao_br") {
       // sem classificação setorial gratuita: compara com a B3 líquida
       pares = Object.entries(universo.acoes).filter(([k, v]) => k !== ticker && (v.liquidez || 0) > 1e6).map(([, v]) => v);
@@ -246,6 +256,16 @@
       valores.cotacao = agora.preco;
     }
     if (!Object.keys(valores).length) return { ticker, classe, erro: "ativo não encontrado nas fontes" };
+    // FII: a concentração que importa depende do tipo (imóvel, CRI ou FII)
+    const cvm = classe === "fii" ? (universo.fiis[ticker] || {}).cvm : null;
+    if (cvm) {
+      if (valores.vacancia == null && cvm.vacancia_fisica_cvm > 0) valores.vacancia = cvm.vacancia_fisica_cvm;
+      valores.vacancia_financeira = cvm.vacancia_financeira ?? null;
+      valores.concentracao = perfil === "fii_papel" ? (cvm.cri || {}).maior
+        : perfil === "fii_fof" ? (cvm.fii || {}).maior
+        : perfil === "fii_hibrido" ? cvm.maior_imovel ?? (cvm.cri || {}).maior ?? null
+        : cvm.maior_imovel ?? null;          // tijolo: só a concentração dos imóveis
+    }
 
     const series = h ? { dy: serieDy(h), pvp: seriePvp(h, valores.pvp), premio_media_200d: seriePremioMedia(h) } : {};
     const [grupo, pares] = grupoDePares(ticker, classe, perfil, universo, regras);
@@ -328,6 +348,7 @@
       tipo_rotulo: FC.CLASSE_ROTULO[perfil] || FC.CLASSE_ROTULO[classe] || classe,
       // Graham só faz sentido para ação brasileira (lucro e patrimônio contábeis)
       graham: classe === "acao_br" ? FC.graham(valores.cotacao, valores.pl, valores.pvp) : null,
+      cvm: cvm || null,
     };
   }
 
