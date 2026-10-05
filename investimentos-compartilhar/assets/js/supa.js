@@ -228,7 +228,8 @@
     // CDI e Selic diários e IPCA mensal desde 2015, lidos direto da tabela
     // (dado público). Antes, pede à Edge Function que complete o que faltar.
     async indices(forcar = false) {
-      if (!forcar) { const c = doNavegador("indices", 6 * 60 * 60 * 1000); if (c) return c; }
+      // uma série vazia guardada (Edge Function fora do ar) não vale: tenta de novo
+      if (!forcar) { const c = doNavegador("indices", 6 * 60 * 60 * 1000); if (c && c.cdi && c.cdi.length) return c; }
       try { await chama({ acao: "indices" }); } catch (e) { console.warn(e); /* lê o que já existe */ }
       const saida = { cdi: [], selic: [], ipca: [] };
       for (let de = 0; ; de += 1000) {
@@ -237,7 +238,7 @@
         for (const r of data) saida[r.indice].push([r.data, Number(r.valor)]);
         if (data.length < 1000) break;
       }
-      guarda("indices", saida);
+      if (saida.cdi.length) guarda("indices", saida);
       return saida;
     },
     // preço de agora: CoinGecko para cripto, Yahoo para bolsa (cache de 1 min no servidor)

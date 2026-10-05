@@ -24,12 +24,19 @@
   // { cdi: [[data, %dia]], selic: [...], ipca: [[AAAA-MM-01, %mês]] } →
   // calendário de dias úteis (o do CDI publicado; depois dele, o do app)
   // e fatores acumulados por indexador e taxa, para consultar em O(1).
-  function preparaIndices(bruto) {
+  // "reserva" é a foto anual do Banco Central (macro: cdi, selic_meta,
+  // ipca_12m): sem a série diária, o título rende por ela (como estimativa)
+  // em vez de ficar parado no valor aplicado.
+  const aoDia = (anual) => (FC.ok(anual) ? (Math.pow(1 + anual / 100, 1 / 252) - 1) * 100 : null);
+  const aoMes = (anual) => (FC.ok(anual) ? (Math.pow(1 + anual / 100, 1 / 12) - 1) * 100 : null);
+  function preparaIndices(bruto, reserva) {
+    bruto = bruto || {}; reserva = reserva || {};
     const cdi = bruto.cdi || [], selic = bruto.selic || [], ipca = bruto.ipca || [];
+    const resCdi = aoDia(reserva.cdi), resSelic = aoDia(reserva.selic_meta) ?? resCdi, resIpca = aoMes(reserva.ipca_12m);
     const mCdi = new Map(cdi), mSelic = new Map(selic), mIpca = new Map(ipca.map(([d, v]) => [d.slice(0, 7), v]));
     const priCal = cdi.length ? cdi[0][0] : null, ultCal = cdi.length ? cdi.at(-1)[0] : null;
     const ultCdi = cdi.length ? cdi.at(-1)[1] : null, priCdi = cdi.length ? cdi[0][1] : null;
-    const ultIpca = ipca.length ? ipca.at(-1)[1] : null;
+    const ultIpca = ipca.length ? ipca.at(-1)[1] : resIpca;
     const hoje = D().hoje();
     // todos os dias corridos de INICIO a hoje (+1, para "até hoje" incluir hoje)
     const dias = [], pos = new Map();
@@ -45,7 +52,7 @@
         if (mSelic.has(d)) return [mSelic.get(d), false];
         if (mCdi.has(d)) return [mCdi.get(d), true];        // Selic ausente: o CDI do dia
       } else if (mCdi.has(d)) return [mCdi.get(d), false];
-      if (ultCdi == null) return [null, true];
+      if (ultCdi == null) return [indexador === "selic" ? resSelic : resCdi, true];
       return [d > ultCal ? ultCdi : priCdi, true];
     }
 
@@ -86,7 +93,8 @@
       const s = serie(indexador, Number(taxa) || 0);
       return { f: s.acum[j] / s.acum[i], estimado: s.est[j] - s.est[i] > 0 || de < INICIO };
     }
-    return { fator, ultimo: { cdi: ultCal, ipca: ipca.length ? ipca.at(-1)[0] : null, selic: selic.length ? selic.at(-1)[0] : null }, tem: cdi.length > 0 };
+    return { fator, ultimo: { cdi: ultCal, ipca: ipca.length ? ipca.at(-1)[0] : null, selic: selic.length ? selic.at(-1)[0] : null },
+      tem: cdi.length > 0, so_reserva: !cdi.length && resCdi != null, vazio: !cdi.length && resCdi == null };
   }
 
   // ---------------------------------------------------------------- consolidação
@@ -198,7 +206,7 @@
     });
     const valor = lotes.reduce((s, l) => s + l.valor_atual, 0);
     const fluxos = lotes.map((l) => ({ data: l.data, valor: -l.valor }));
-    return { lotes, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !ix }) };
+    return { lotes, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !ix || ix.vazio, so_reserva: !!(ix && ix.so_reserva) }) };
   }
 
   // ---------------------------------------------------------------- ações, FIIs, cripto

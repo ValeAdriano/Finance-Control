@@ -398,7 +398,12 @@ async function lerIndices(desde: string) {
 // por dias úteis/252; IPCA + X pró-rata pelos dias úteis do mês. O
 // calendário de dias úteis é o do próprio CDI; depois do último dado
 // publicado, vale o último valor (estimativa).
-function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: Record<string, [string, number][]>) {
+// Sem nenhum dado na tabela, vale a taxa anual de hoje do Banco Central
+// (idx.reserva, do macro) — melhor uma estimativa que rendimento zero.
+const aoDia = (anual: number | null | undefined) => (anual == null ? 0 : (Math.pow(1 + anual / 100, 1 / 252) - 1) * 100);
+const aoMes = (anual: number | null | undefined) => (anual == null ? 0 : (Math.pow(1 + anual / 100, 1 / 12) - 1) * 100);
+
+function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: Record<string, any>) {
   if (!(de < ate)) return 1;
   const cal = idx.cdi;
   const ultimoCal = cal.length ? cal.at(-1)![0] : "0000";
@@ -414,12 +419,13 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
   if (indexador === "cdi" || indexador === "selic") {
     // Selic sem dado no dia: o CDI do dia (ficam a ~0,1 p.p. ao ano)
     const s = idx[indexador].length ? idx[indexador] : idx.cdi, mapa = new Map(s), cdi = new Map(idx.cdi);
-    const ultimo = s.length ? s.at(-1)![1] : 0;
+    const res = idx.reserva || {};
+    const ultimo = s.length ? s.at(-1)![1] : aoDia(indexador === "selic" ? res.selic_meta ?? res.cdi : res.cdi);
     for (const d of diasUteis) f *= 1 + ((mapa.get(d) ?? cdi.get(d) ?? ultimo) / 100) * (taxa / 100);
   } else if (indexador === "prefixado") {
     f = Math.pow(1 + taxa / 100, diasUteis.length / 252);
   } else if (indexador === "ipca") {
-    const ipca = new Map(idx.ipca.map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : 0;
+    const ipca = new Map(idx.ipca.map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : aoMes((idx.reserva || {}).ipca_12m);
     const porMes: Record<string, number> = {};
     for (const [d] of cal) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1;
     for (const d of diasUteis) {
@@ -431,7 +437,7 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
 }
 
 // valor de hoje de cada título: saldo inicial e cada aporte rendendo do seu dia
-function valorTitulos(rf: any[], aportes: any[], idx: Record<string, [string, number][]>, hoje: string) {
+function valorTitulos(rf: any[], aportes: any[], idx: Record<string, any>, hoje: string) {
   const out: Record<string, number> = {};
   for (const r of rf) {
     const ind = r.tipo, tx = r.taxa != null ? Number(r.taxa) : (ind === "cdi" || ind === "selic" ? 100 : 0);
@@ -602,7 +608,8 @@ function hojeBrasil() {
 
 async function registroDiario() {
   try { await atualizaIndices(); } catch { /* o registro segue com o que já tem */ }
-  const idx = await lerIndices("2015-01-01");
+  const idx: Record<string, any> = await lerIndices("2015-01-01");
+  if (!idx.cdi.length || !idx.ipca.length) { try { idx.reserva = await macro(); } catch { /* sem reserva */ } }
   const { data: usuarios } = await admin.from("ativos").select("user_id");
   const { data: comRf } = await admin.from("renda_fixa").select("user_id");
   const ids = [...new Set([...(usuarios || []), ...(comRf || [])].map((u: any) => u.user_id))];

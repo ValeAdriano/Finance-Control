@@ -101,6 +101,7 @@
           <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}</tbody>
       </table></div>
       ${rent.sem_indices ? html`<div class="mensagem alerta mt2">${icone("info", 16)}<span>Índices do Banco Central ainda carregando: por enquanto os valores estão sem rendimento.</span></div>`
+        : rent.so_reserva ? html`<div class="mensagem alerta mt2">${icone("info", 16)}<span>A série diária do CDI/IPCA não carregou: o rendimento está estimado pela taxa anual de hoje do Banco Central e se ajusta quando a série voltar.</span></div>`
         : rent.estimado ? html`<p class="texto-p mt2">Os dias mais recentes (ou anteriores à série disponível) usam o último índice conhecido — o valor se ajusta quando o Banco Central publica.</p>` : ""}`;
   };
 

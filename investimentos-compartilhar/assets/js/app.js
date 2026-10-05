@@ -93,7 +93,10 @@
         FC.mercado.indices(forcar).catch((e) => { console.error(e); return null; }),
       ]);
       estado.mercado = { ...estado.mercado, universo, historicos: { ...estado.mercado.historicos, ...historicos } };
-      if (indices) estado.mercado.indices = FC.rentab.preparaIndices(indices);
+      // sem a série diária (ou com ela incompleta), a renda fixa rende pela
+      // taxa anual do Banco Central em vez de ficar parada no valor aplicado
+      const reserva = (universo && universo.macro) || {};
+      if (indices || (reserva.cdi != null && !(estado.mercado.indices && estado.mercado.indices.tem))) estado.mercado.indices = FC.rentab.preparaIndices(indices || {}, reserva);
       await buscaCotacoes();
       FC.recalcula();
       estado.erroMercado = null;
