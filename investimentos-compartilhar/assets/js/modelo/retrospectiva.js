@@ -223,19 +223,19 @@
     t.abertura = { rotulo: d.rotulo, sub: primeiro ? pe.primeiro : "Seu patrimônio" };
 
     if (!primeiro) {
-      const v = P.variacao_pct || 0, rend = P.rendimento;
+      // a manchete é o RENDIMENTO, sem o dinheiro novo: crescer porque você
+      // aportou não é ganho. O crescimento total fica como complemento.
+      const v = P.rendimento_pct ?? P.variacao_pct ?? 0, rend = P.rendimento;
+      const cresceu = !pv && A.total > 0 && P.variacao != null ? ` Com os aportes, o patrimônio ${P.variacao >= 0 ? "cresceu" : "mudou"} ${brl(P.variacao)}.` : "";
       let frase;
-      if (Math.abs(v) < 0.05) frase = `${pe.Periodo} estável: o patrimônio ficou onde estava.`;
-      else if (v > 0) {
-        frase = `${pe.Periodo} de alta: ${pct(v)}.`;
-        if (rend != null && rend > 0 && A.total > 0) frase += pv ? ` Rendimento de ${pct(P.rendimento_pct || 0, false)}, fora os aportes.` : ` Rendimento de ${brl(rend)}, fora os aportes.`;
-        else if (rend != null && rend <= 0 && A.total > 0) frase += " A alta veio dos seus aportes; o mercado ficou de lado.";
-      } else {
-        frase = `O patrimônio recuou ${pct(Math.abs(v), false)}.`;
+      if (Math.abs(v) < 0.05) frase = `${pe.Periodo} estável: o dinheiro aplicado ficou onde estava.${cresceu}`;
+      else if (v > 0) frase = `${pe.Periodo} de alta: ${pct(v)} de rendimento${pv ? "" : ` (${brl(rend)})`}, fora os aportes.${cresceu}`;
+      else {
+        frase = `O que estava aplicado rendeu ${pct(v)}${pv ? "" : ` (${brl(rend)})`}.`;
         if (A.total > 0) frase += pv ? " Você seguiu aportando — é assim que se compra mais barato." : ` Você seguiu aportando ${brl(A.total)} — é assim que se compra mais barato.`;
         else frase += " Queda de mercado faz parte; o que conta é o prazo.";
       }
-      t.resultado = { rotulo: `${pe.O} em uma linha`, frase, positivo: v >= 0 };
+      t.resultado = { rotulo: `${pe.O} em uma linha`, frase, positivo: v >= 0, valor: v };
     }
 
     if (A.total > 0) {
@@ -328,23 +328,145 @@
       }
       if (c.id === "final") ev.push({ t: c.ini + 0.1, tipo: "acorde" });
     });
-    const positivo = d.patrimonio.variacao_pct == null || d.patrimonio.variacao_pct >= 0;
+    const ref = d.patrimonio.rendimento_pct ?? d.patrimonio.variacao_pct;
+    const positivo = ref == null || ref >= 0;
     return { eventos: ev.sort((a, b) => a.t - b.t), total: pl.total, positivo };
   }
 
-  // ---------------------------------------------------------------- dados
-  // Ponto único de integração: hoje devolve o mock. Depois, montar o
-  // MonthRecap a partir de patrimonio_historico, aportes, ganhos,
-  // proventos e preferências do usuário no Supabase.
-  async function getMonthRecap(userId, mes) {
-    void userId; void mes;
-    return FC.RECAP_MOCK;
+  // ---------------------------------------------------------------- dados reais
+  // O MonthRecap montado com os números da conta aberta (FC.estado):
+  // patrimônio e rendimento pela série reconstruída dia a dia, aportes e
+  // ganhos do período, plano do Salário, proventos pagos, alocação contra a
+  // meta, maior alta e maior queda pelo preço histórico e o rebanho.
+  const MES_NOME = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+  const CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const COR_PILAR = { acoes: "#0a84ff", real_estate: "#bf5af2", alternativos: "#ff9f0a", caixa: "#30d158", agro: "#c9a77c" };
+  const NOME_PILAR = { acoes: "Ações", real_estate: "FIIs", alternativos: "Cripto e ETFs", caixa: "Renda fixa", agro: "Agro" };
+
+  // qual mês e qual ano mostrar: dentro da janela, o período corrente;
+  // fora dela, o último completo (o ano corrente até hoje, salvo em janeiro)
+  function periodoDe(tipo, hoje = FC.datas.hoje()) {
+    if (tipo === "ano") {
+      const ano = hoje.slice(5, 7) === "01" ? String(Number(hoje.slice(0, 4)) - 1) : hoje.slice(0, 4);
+      return { tipo, chave: ano, ini: `${ano}-01-01`, fim: `${ano}-12-31` < hoje ? `${ano}-12-31` : hoje, rotulo: ano };
+    }
+    const mes = naJanela("mes", hoje) ? hoje.slice(0, 7) : FC.datas.soma(hoje.slice(0, 8) + "01", -1).slice(0, 7);
+    const ult = `${mes}-${String(FC.datas.ultimoDiaDoMes(mes)).padStart(2, "0")}`;
+    return { tipo, chave: mes, ini: `${mes}-01`, fim: ult < hoje ? ult : hoje, rotulo: `${MES_NOME[Number(mes.slice(5, 7)) - 1]} de ${mes.slice(0, 4)}` };
   }
-  // mesmo contrato, com tipo "ano" e a lista de meses
-  async function getYearRecap(userId, ano) {
-    void userId; void ano;
-    return FC.RECAP_ANO_MOCK;
+
+  function montaRecap(per) {
+    const e = FC.estado, d = e.dados, base = e.base, prefs = e.prefs, hoje = FC.datas.hoje();
+    const antes = FC.datas.soma(per.ini, -1);
+    let pontos = [];
+    try { pontos = FC.rentab.serieDiaria(base, e.mercado, e.mercado.indices, prefs, d.resumo.patrimonio).pontos; } catch (err) { console.error(err); }
+    const ponto = (dia) => { let r = null; for (const p of pontos) { if (p.data > dia) break; r = p; } return r; };
+    const p0 = ponto(antes), p1 = ponto(per.fim) || pontos.at(-1);
+    const noPer = pontos.filter((p) => p.data >= per.ini && p.data <= per.fim);
+    const inicial = p0 && p0.valor > 0 ? p0.valor : null;
+    const final = p1 ? p1.valor : d.resumo.patrimonio || 0;
+    const fluxo = p1 ? p1.fluxo - (p0 ? p0.fluxo : 0) : 0;
+    const variacao = inicial != null ? final - inicial : null;
+    const rendimento = inicial != null ? final - inicial - fluxo : null;
+    const capitalMedio = inicial != null ? inicial + fluxo / 2 : null;
+
+    // ---- aportes do período (compras − vendas e renda fixa, sem proventos)
+    const dentro = (dt) => dt && dt >= per.ini && dt <= per.fim;
+    const lanc = base.aportes.filter((a) => dentro(a.data) && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico)));
+    const porDestino = {};
+    for (const a of lanc) if (a.valor > 0) { const k = a.ticker || a.titulo || "—"; porDestino[k] = (porDestino[k] || 0) + a.valor; }
+    const totalAportes = lanc.reduce((s, a) => s + a.valor, 0);
+    let plano = null;
+    const pl = prefs.plano;
+    if (pl && pl.destinos && pl.destinos.length) {
+      let planejado = 0, aportado = 0;
+      for (let m = per.ini.slice(0, 7); m <= per.fim.slice(0, 7); m = FC.datas.soma(m + "-28", 5).slice(0, 7)) {
+        try { const g = FC.salario.planoDoMes({ plano: pl, ganhos: base.ganhos || [], base, mes: m }); planejado += g.total; aportado += g.aportado; } catch (err) { /* segue */ }
+      }
+      if (planejado > 0) plano = { planejado, cumprido_pct: Math.min(100, (aportado / planejado) * 100) };
+    }
+
+    // ---- receitas do período (ganhos mês a mês)
+    const porCat = {};
+    let receitas = 0;
+    for (let m = per.ini.slice(0, 7); m <= per.fim.slice(0, 7); m = FC.datas.soma(m + "-28", 5).slice(0, 7)) {
+      const r = FC.salario.rendaDoMes(base.ganhos || [], m);
+      receitas += r.total;
+      for (const g of r.itens) porCat[g.categoria] = (porCat[g.categoria] || 0) + g.valor;
+    }
+
+    // ---- proventos pagos no período
+    let div = { total: 0, pagamentos: 0, maior: null };
+    try {
+      const a = FC.dividendos.analisa(d, base, e.proventos || {});
+      const pagos = a.pagamentos.filter((p) => p.status === "pago" && dentro(p.pagamento || p.quando));
+      const porT = {};
+      for (const p of pagos) porT[p.ticker] = (porT[p.ticker] || 0) + p.valor;
+      const top = Object.entries(porT).sort((x, y) => y[1] - x[1])[0];
+      div = { total: pagos.reduce((s, p) => s + p.valor, 0), pagamentos: pagos.length, maior: top ? { ticker: top[0], valor: top[1] } : null };
+    } catch (err) { console.error(err); }
+
+    // ---- maior alta e maior queda: preço do fim do período contra o do início
+    const hist = e.mercado.historicos || {};
+    const vars = d.ativos.filter((a) => a.posicao && !a.erro).map((a) => {
+      const h = hist[a.ticker];
+      if (!h || h.erro || !h.precos || !h.precos.length) return null;
+      const de = FC.carteira.precoEm(h.precos, antes) ?? h.precos[0][1];
+      const ate = per.fim >= hoje ? a.preco : FC.carteira.precoEm(h.precos, per.fim);
+      return de && ate ? { ticker: a.ticker, pct: (ate / de - 1) * 100 } : null;
+    }).filter(Boolean).sort((x, y) => y.pct - x.pct);
+
+    // ---- rebanho: cabeças no fim e a variação no período
+    let agro = null;
+    if (FC.modulo("agro") && d.agro && d.agro.tem_dados && d.agro.total > 0) {
+      const ag = base.agro, ate = (dt) => (x) => x.data <= dt;
+      let ini = 0;
+      try { ini = FC.agro.analisa({ movs: ag.movs.filter(ate(antes)), custos: ag.custos.filter(ate(antes)), pesagens: ag.pesagens.filter(ate(antes)) }, prefs.agro).total || 0; } catch (err) { /* segue */ }
+      agro = { cabecas: d.agro.total, variacao_cabecas: d.agro.total - ini, valor: d.agro.valorRebanho || 0 };
+    }
+
+    // ---- mês a mês (só no ano): rendimento de cada mês, sem os aportes
+    let meses;
+    if (per.tipo === "ano") {
+      meses = [];
+      for (let m = per.ini.slice(0, 7); m <= per.fim.slice(0, 7); m = FC.datas.soma(m + "-28", 5).slice(0, 7)) {
+        const a = ponto(FC.datas.soma(m + "-01", -1)), fimM = `${m}-${String(FC.datas.ultimoDiaDoMes(m)).padStart(2, "0")}`, b = ponto(fimM < hoje ? fimM : hoje);
+        if (!a || !b || !(a.valor > 0)) continue;
+        const fl = b.fluxo - a.fluxo, cap = a.valor + fl / 2;
+        if (cap > 0) meses.push({ mes: m, rotulo: CURTO[Number(m.slice(5, 7)) - 1], variacao_pct: ((b.valor - a.valor - fl) / cap) * 100 });
+      }
+    }
+
+    return {
+      tipo: per.tipo, mes: per.chave, rotulo: per.rotulo, seed: seedDoMes(per.chave),
+      patrimonio: {
+        inicial, final, variacao, variacao_pct: inicial ? (variacao / inicial) * 100 : null,
+        rendimento, rendimento_pct: capitalMedio > 0 ? (rendimento / capitalMedio) * 100 : null,
+        serie: noPer.map((p) => [p.data, p.valor]),
+      },
+      aportes: {
+        total: totalAportes, quantidade: lanc.filter((a) => a.valor > 0).length,
+        por_destino: Object.entries(porDestino).sort((x, y) => y[1] - x[1]).slice(0, 3).map(([rotulo, valor]) => ({ rotulo, valor })),
+        plano,
+      },
+      receitas: {
+        total: receitas, por_categoria: Object.entries(porCat).map(([categoria, valor]) => ({ categoria, rotulo: (FC.CATEGORIAS_GANHO || {})[categoria] || categoria, valor })),
+        taxa_investida_pct: receitas > 0 && totalAportes > 0 ? (totalAportes / receitas) * 100 : null,
+      },
+      despesas: null,
+      dividendos: div,
+      alocacao: (d.alocacao || []).map((l) => ({ chave: l.chave, nome: NOME_PILAR[l.chave] || l.nome, cor: COR_PILAR[l.chave] || "#8e8e93", pct: l.pct, meta_pct: l.alvo_pct })),
+      destaques: { alta: vars[0] && vars[0].pct > 0 ? vars[0] : null, queda: vars.length && vars.at(-1).pct < 0 ? vars.at(-1) : null },
+      metas: [], agro, ir: null, meses,
+      tem_dados: pontos.length > 0,
+      // período ainda em curso (o ano até hoje, o mês na última semana)
+      parcial: per.fim < (per.tipo === "ano" ? `${per.chave}-12-31` : `${per.chave}-${String(FC.datas.ultimoDiaDoMes(per.chave)).padStart(2, "0")}`),
+    };
   }
+
+  // Pontos de integração (o userId fica para quando o cálculo for ao servidor)
+  async function getMonthRecap(userId, quando) { void userId; return montaRecap(periodoDe("mes", quando)); }
+  async function getYearRecap(userId, quando) { void userId; return montaRecap(periodoDe("ano", quando)); }
 
   // quando o cartão aparece no Início: últimos 5 dias do mês / do ano
   function naJanela(tipo, hoje = FC.datas.hoje()) {
@@ -353,5 +475,5 @@
     return Number(hoje.slice(8)) > ultimo - 5;
   }
 
-  FC.recap = { seedDoMes, plano, textos, eventos, getMonthRecap, getYearRecap, naJanela, periodo, brl, pct };
+  FC.recap = { seedDoMes, plano, textos, eventos, getMonthRecap, getYearRecap, naJanela, periodo, periodoDe, brl, pct };
 })();

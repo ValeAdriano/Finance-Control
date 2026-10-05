@@ -52,13 +52,13 @@
       ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
         <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
           <span class="modulo-ic">${icone("play", 18)}</span>
-          <div class="principal"><div class="titulo">Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("mes").rotulo.toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
           <span class="chevron">${icone("chevron", 18)}</span></a>
         <a class="item clicavel" href="#/retrospectiva/ano/ajustes" style="color:inherit;text-decoration:none">
           <span class="modulo-ic ano">${icone("play", 18)}</span>
-          <div class="principal"><div class="titulo">Retrospectiva de ${FC.RECAP_ANO_MOCK.rotulo}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("ano").rotulo}${FC.recap.periodoDe("ano").fim < FC.recap.periodoDe("ano").chave + "-12-31" ? " até agora" : ""}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
           <span class="chevron">${icone("chevron", 18)}</span></a>
-      </div><p class="texto-p mt2">Por enquanto as duas usam dados de exemplo; a ligação com os seus números vem a seguir.</p>`)}
+      </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
 
       ${grupo("Divulgação", "material de marketing do sistema", html`<div class="lista">
         <div class="item clicavel" id="aj-promo"><span class="modulo-ic">${icone("play", 18)}</span>

@@ -238,7 +238,7 @@
       titulo(ctx, [pe.nome + ",", "foi assim."], SAFE, 520, lt, 0.2, { tam: pe.ano ? 190 : 150, cor: p.tinta, reduzido: o.reduzido });
       const de = P.inicial != null && P.inicial > 0 ? P.inicial : 0;
       const q = eOut((lt - 1.6) / 0.5);
-      texto(ctx, tx.abertura.sub === "Seu patrimônio" ? `Seu patrimônio fechou ${pe.o} em` : `${pe.primeiro}. Patrimônio:`, SAFE, 1030, { tam: 44, peso: 700, cor: p.tinta, alpha: q });
+      texto(ctx, tx.abertura.sub !== "Seu patrimônio" ? `${pe.primeiro}. Patrimônio:` : d.parcial ? `Seu patrimônio ${pe.o === "o ano" ? "neste ano" : "neste mês"}, até agora:` : `Seu patrimônio fechou ${pe.o} em`, SAFE, 1030, { tam: 44, peso: 700, cor: p.tinta, alpha: q });
       if (q > 0) {
         ctx.save(); ctx.globalAlpha = q;
         numeroGrande(ctx, R().brl(conta(c.contador, t, de, P.final), o.privado), SAFE, 1250, { tam: 190, cor: p.destaque });
@@ -248,7 +248,7 @@
     },
 
     resultado(ctx, t, lt, c, d, tx, o) {
-      const P = d.patrimonio, pos = tx.resultado.positivo, v = P.variacao_pct || 0;
+      const P = d.patrimonio, pos = tx.resultado.positivo, v = tx.resultado.valor || 0;   // rendimento, sem os aportes
       const cor = Math.abs(v) < 0.05 ? "#ffffff" : pos ? GANHO : PERDA;
       rotulo(ctx, tx.resultado.rotulo.toUpperCase(), "rgba(255,255,255,0.6)", lt);
       // a linha do mês, grande, desenhando
@@ -272,8 +272,8 @@
       }
       if (pos && v >= 0.05 && !o.reduzido) confete(ctx, d.seed, lt - 1.9, [GANHO, "#ffe14d", "#ffffff", "#00c2ff"]);
       numeroGrande(ctx, R().pct(conta(c.contador, t, 0, v)), SAFE, 690, { tam: 330, cor, sombra: cor + "88" });
-      if (!o.privado && P.variacao != null) {
-        const vr = conta(c.contador, t, 0, P.variacao);
+      if (!o.privado && P.rendimento != null) {
+        const vr = conta(c.contador, t, 0, P.rendimento);
         texto(ctx, (vr >= 0 ? "+" : "") + R().brl(vr).replace("R$ −", "−R$ "), SAFE, 800, { tam: 60, peso: 800, cor: "#fff", alpha: eOut((lt - 0.9) / 0.4) });
       }
       frase(ctx, tx.resultado.frase, SAFE, 1570, lt, 1.5, { tam: 48, reduzido: o.reduzido });
@@ -476,9 +476,9 @@
       logo(ctx, SAFE + 110, 540, 120, clamp((lt - 0.3) / 0.8), false);
       texto(ctx, "Finance Control", SAFE + 200, 530, { tam: 44, peso: 900, cor: "#1b0030", esp: -1 });
       texto(ctx, tx.final.rotulo, SAFE + 200, 580, { tam: 34, peso: 700, cor: "rgba(27,0,48,0.6)" });
-      const v = P.variacao_pct, stats = [
+      const v = P.rendimento_pct ?? P.variacao_pct, stats = [
         ["Patrimônio", R().brl(P.final, o.privado)],
-        [pe.ano ? "No ano" : "No mês", v != null ? R().pct(v) : "—"],
+        [pe.ano ? "Rendeu no ano" : "Rendeu no mês", v != null ? R().pct(v) : "—"],
         ["Aportes", d.aportes.total > 0 ? R().brl(d.aportes.total, o.privado) : "—"],
         ["Dividendos", d.dividendos.total > 0 ? R().brl(d.dividendos.total, o.privado) : "—"],
       ];
@@ -487,7 +487,7 @@
         const x = SAFE + 60 + col * 420, y = 760 + lin * 300;
         const qa = eOut((lt - 0.5 - i * 0.12) / 0.4);
         texto(ctx, rot.toUpperCase(), x, y, { tam: 30, peso: 800, cor: "rgba(27,0,48,0.55)", esp: 2, alpha: qa });
-        const corVal = (rot === "No mês" || rot === "No ano") && v != null && Math.abs(v) >= 0.05 ? (v > 0 ? "#0f8a3c" : "#d42a2d") : "#1b0030";
+        const corVal = rot.startsWith("Rendeu") && v != null && Math.abs(v) >= 0.05 ? (v > 0 ? "#0f8a3c" : "#d42a2d") : "#1b0030";
         ctx.save(); ctx.globalAlpha *= qa; fonte(ctx, 900, 72, -3);
         const k = Math.min(1, 380 / ctx.measureText(val).width);
         ctx.translate(x, y + 90); ctx.scale(k, k); ctx.fillStyle = corVal; ctx.textAlign = "left"; ctx.fillText(val, 0, 0);

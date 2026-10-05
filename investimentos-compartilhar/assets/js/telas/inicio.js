@@ -331,11 +331,11 @@
   // últimos 5 dias do mês e de 27 a 31 de dezembro (em Ajustes, sempre)
   function retrospectivas() {
     const itens = [];
-    if (FC.recap.naJanela("ano")) itens.push(["ano", `Seu ${FC.RECAP_ANO_MOCK.rotulo} em retrospectiva`, "o ano inteiro contado em etapas"]);
-    if (FC.recap.naJanela("mes")) itens.push(["mes", `Retrospectiva de ${FC.RECAP_MOCK.rotulo.split(" ")[0].toLowerCase()}`, "seu mês contado em etapas"]);
+    if (FC.recap.naJanela("ano")) itens.push(["ano", `Seu ${FC.recap.periodoDe("ano").rotulo} em retrospectiva`, "o ano inteiro contado em etapas"]);
+    if (FC.recap.naJanela("mes")) itens.push(["mes", `Retrospectiva de ${FC.recap.periodoDe("mes").rotulo.split(" ")[0].toLowerCase()}`, "seu mês contado em etapas"]);
     return html`${itens.map(([tipo, t, s]) => html`<a class="cartao clicavel recap-entrada mt3 ${tipo === "ano" ? "ano" : ""}" href="#/retrospectiva/${tipo}">
       <span class="recap-entrada-ic">${icone("play", 22)}</span>
-      <span><b>${t}</b><small>${s} · prévia com dados de exemplo</small></span>
+      <span><b>${t}</b><small>${s}, com os seus números</small></span>
       <span class="chevron">${icone("chevron", 18)}</span></a>`)}`;
   }
 

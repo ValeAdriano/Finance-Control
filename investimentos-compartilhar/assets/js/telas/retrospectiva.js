@@ -19,9 +19,23 @@
     const chave = tipo + volta;
     if (aberto && abertoChave === chave) return;
     if (aberto) { aberto.destroi(); aberto = null; }
+    // a retrospectiva usa preços, índices e proventos: espera chegarem
+    raiz.innerHTML = '<div class="carregando-tela"><div class="roda"></div><span>Montando a sua retrospectiva…</span></div>';
+    const e = FC.estado, limite = Date.now() + 45000;
+    if (!e.proventos) FC.carregaProventos().catch(() => {});
+    // (as cotações de agora entram no valor final: sem elas o patrimônio sairia só com a renda fixa)
+    while (Date.now() < limite && !(e.mercado.universo && e.mercado.indices && e.spotEm && !e.carregandoMercado && e.dados && e.dados.rentab && e.proventos)) {
+      await new Promise((r) => setTimeout(r, 300));
+      if (!location.hash.startsWith("#/retrospectiva")) return;
+    }
     const uid = FC.auth.usuario.id, hoje = FC.datas.hoje();
-    const data = tipo === "ano" ? await FC.recap.getYearRecap(uid, hoje.slice(0, 4)) : await FC.recap.getMonthRecap(uid, hoje.slice(0, 7));
+    const data = tipo === "ano" ? await FC.recap.getYearRecap(uid, hoje) : await FC.recap.getMonthRecap(uid, hoje);
     if (!location.hash.startsWith("#/retrospectiva")) return;
+    if (!data.tem_dados) {
+      raiz.innerHTML = String(html`<div class="vazio" style="padding:64px 16px"><h3>Ainda não há o que contar</h3><p class="texto-p">Cadastre seus investimentos e aportes — a retrospectiva é montada com eles.</p><a class="botao mt2" href="${volta}">Voltar</a></div>`);
+      return;
+    }
+    raiz.innerHTML = "";
     aberto = monta(data, volta); abertoChave = chave;
   };
   window.addEventListener("hashchange", () => {
@@ -45,7 +59,7 @@
           <div class="historia-barras"></div>
           <div class="historia-cab">
             <span class="historia-marca">${FC.logo(14)}</span>
-            <span class="historia-nome"><b>Retrospectiva ${data.tipo === "ano" ? "do ano" : "do mês"}</b><small>dados de exemplo</small></span>
+            <span class="historia-nome"><b>Retrospectiva ${data.tipo === "ano" ? "do ano" : "do mês"}</b><small>${data.rotulo}</small></span>
             <button type="button" class="historia-bt" data-c="mudo"></button>
             <button type="button" class="historia-bt" data-c="privado"></button>
             <button type="button" class="historia-bt" data-c="exportar" aria-label="Exportar vídeo" title="Exportar vídeo">${icone("exportar", 20)}</button>

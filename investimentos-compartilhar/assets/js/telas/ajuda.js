@@ -100,7 +100,7 @@
       dicas: ["Com “Usar meu plano do Salário” ligado, o aporte mensal e a divisão vêm do plano."],
     },
     retrospectiva: {
-      resumo: "Seu mês contado em etapas, no estilo das retrospectivas de fim de ano, montado a partir dos seus números. Por enquanto, com dados de exemplo.",
+      resumo: "Seu mês contado em etapas, no estilo das retrospectivas de fim de ano, montado com os seus números do período.",
       partes: [
         ["play", "Etapas", "Como stories: toque à direita avança, à esquerda volta e segurar pausa. No teclado, as setas, o espaço e Esc para sair."],
         ["som", "Som", "Trilha e efeitos gerados na hora. O botão de som liga e desliga sem parar o vídeo."],
