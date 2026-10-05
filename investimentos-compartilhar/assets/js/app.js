@@ -109,6 +109,8 @@
       // taxa anual do Banco Central em vez de ficar parada no valor aplicado
       const reserva = (universo && universo.macro) || {};
       if (indices || (reserva.cdi != null && !(estado.mercado.indices && estado.mercado.indices.tem))) estado.mercado.indices = FC.rentab.preparaIndices(indices || {}, reserva);
+      // Ibovespa para as comparações (sem travar o resto)
+      if (!estado.bench) FC.mercado.benchmarks(5).then((b) => { estado.bench = b; }).catch((e) => console.error(e));
       await buscaCotacoes();
       FC.recalcula();
       estado.erroMercado = null;

@@ -387,6 +387,30 @@
     return (f - 1) * 100;
   }
 
-  FC.rentab = { preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
+  // ---------------------------------------------------------------- comparação
+  // "E se cada aporte tivesse ido para a Selic (ou o Ibovespa) no mesmo dia?"
+  // Cada fluxo cresce pelo índice da data dele até hoje; vendas, resgates e
+  // proventos saem da conta simulada na mesma data, pelo mesmo valor.
+  function crescimentoIndice(indice, de, ate, ix, ibov) {
+    if (indice === "selic") return ix ? ix.fator("selic", 100, de, ate).f : null;
+    if (!ibov || !ibov.length || de < ibov[0][0]) return null;      // antes da série: sem comparação
+    const a = FC.carteira.precoEm(ibov, de), b = FC.carteira.precoEm(ibov, ate);
+    return a && b ? b / a : null;
+  }
+  function comparaIndices(fluxos, hoje, ix, ibov) {
+    const out = {};
+    for (const indice of ["selic", "ibov"]) {
+      let v = 0, ok = true;
+      for (const f of fluxos) {
+        const g = crescimentoIndice(indice, f.data, hoje, ix, ibov);
+        if (g == null) { ok = false; break; }
+        v += -f.valor * g;
+      }
+      out[indice] = ok && fluxos.length ? v : null;
+    }
+    return out;
+  }
+
+  FC.rentab = { crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
     lotesDoTitulo, valorTituloEm, rotuloTaxa, PADRAO_TAXA };
 })();

@@ -149,6 +149,32 @@
     return r;
   }
 
+  // ---- comparação: o mesmo dinheiro, com os mesmos aportes nas mesmas datas,
+  // aplicado só na Selic ou só no Ibovespa. Comparar com o índice puro
+  // enganaria: o aporte pareceria ganho.
+  const comparar = () => FC.local.ler("cresc-comparar", { selic: false, ibov: false });
+  let benchPedido = false;
+  function garanteIbov(anos) {
+    const e = FC.estado;
+    if (e.bench || benchPedido) return;
+    benchPedido = true;
+    FC.mercado.benchmarks(Math.min(10, Math.max(2, anos)))
+      .then((b) => { e.bench = b; if (location.hash.startsWith("#/inicio") || !location.hash) FC.rerender({ suave: true, semAnimacao: true }); })
+      .catch((err) => { console.error(err); e.bench = { ibov: [], erro: true }; })
+      .finally(() => { benchPedido = false; });
+  }
+  // valor dia a dia de uma carteira que só tivesse o índice
+  function simula(trecho, retorno) {
+    let v = trecho[0].valor;
+    const out = [[trecho[0].data, v]];
+    for (let i = 1; i < trecho.length; i++) {
+      const r = retorno(trecho[i - 1].data, trecho[i].data);
+      v = v * (r == null ? 1 : r) + (trecho[i].fluxo - trecho[i - 1].fluxo);
+      out.push([trecho[i].data, v]);
+    }
+    return out;
+  }
+
   function crescimento(d) {
     // 1) o patrimônio reconstruído dia a dia pelo painel: posições × preço
     //    de cada dia + renda fixa rendendo aporte a aporte + rebanho;
@@ -186,6 +212,29 @@
     }
     const fluxoPer = trecho.length >= 2 ? p1.fluxo - p0.fluxo : 0;
 
+    // referências ligadas
+    const cmp = comparar(), refs = [];
+    if (trecho.length >= 2) {
+      const ix = FC.estado.mercado.indices;
+      if (cmp.selic && ix) {
+        const estimada = !ix.ultimo || !ix.ultimo.selic;
+        refs.push({ k: "selic", nome: estimada ? "Selic (pelo CDI)" : "Selic", classe: "lselic",
+          pontos: simula(trecho, (a, b) => ix.fator("selic", 100, a, b).f),
+          indice: (ix.fator("selic", 100, p0.data, p1.data).f - 1) * 100 });
+      }
+      if (cmp.ibov) {
+        const b = FC.estado.bench;
+        if (!b) garanteIbov(Math.ceil(FC.datas.dias(p0.data, hoje) / 365) + 1);
+        const serie = b && b.ibov && b.ibov.length ? b.ibov : null;
+        if (serie) {
+          const pt = (x) => FC.carteira.precoEm(serie, x) ?? serie[0][1];
+          refs.push({ k: "ibov", nome: "Ibovespa", classe: "libov",
+            pontos: simula(trecho, (a, c) => pt(c) / pt(a)), indice: (pt(p1.data) / pt(p0.data) - 1) * 100 });
+        } else refs.push({ k: "ibov", nome: "Ibovespa", carregando: !(b && b.erro), erro: !!(b && b.erro) });
+      }
+    }
+    const refsProntas = refs.filter((r) => r.pontos);
+
     const seletor = html`<div class="flex quebra mb3" style="gap:10px">
       <div class="segmentado" role="group" id="seg-periodo" aria-label="Período">
         ${[["tudo", "Tudo"], ["ano", "Ano"], ["mes", "Mês"], ["custom", "Personalizado"]].map(([k, v]) => html`<button type="button" data-p="${k}" aria-pressed="${cresc.periodo === k}">${v}</button>`)}</div>
@@ -193,6 +242,11 @@
         <input class="entrada" type="date" id="per-de" value="${de}" min="${primeiroDia}" max="${hoje}" style="max-width:170px;min-height:36px;font-size:14px" aria-label="De">
         <span class="fraco">até</span>
         <input class="entrada" type="date" id="per-ate" value="${ate}" min="${primeiroDia}" max="${hoje}" style="max-width:170px;min-height:36px;font-size:14px" aria-label="Até"></div>` : ""}
+      <div class="comparar" role="group" aria-label="Comparar com">
+        <span class="fraco">Comparar com</span>
+        <button type="button" class="comparar-bt selic" data-cmp="selic" aria-pressed="${!!cmp.selic}">Selic</button>
+        <button type="button" class="comparar-bt ibov" data-cmp="ibov" aria-pressed="${!!cmp.ibov}">Ibovespa</button>
+      </div>
       <div class="segmentado" role="group" id="seg-vista" aria-label="O que mostrar" style="margin-left:auto">
         <button type="button" data-v="patrimonio" aria-pressed="${cresc.vista === "patrimonio"}">Patrimônio</button>
         <button type="button" data-v="rendimento" aria-pressed="${cresc.vista === "rendimento"}">Rendimento</button></div>
@@ -200,18 +254,22 @@
 
     const series = [];
     if (trechoAnot.length >= 2) series.push({ nome: "Anotado à parte", pontos: espaca(trechoAnot.map((r) => [r.data, r.valor]), "dia"), classe: "lref" });
+    for (const r of refsProntas) series.push({ nome: r.nome, pontos: espaca(r.pontos, grao), classe: r.classe });
     if (trecho.length >= 2) series.push({ nome: "Patrimônio", pontos: espaca(trecho.map((p) => [p.data, p.valor]), grao), classe: "l1", area: true });
     // buraco de verdade: o último mês anotado bem antes do primeiro dia do painel
     const lacuna = trechoAnot.length >= 2 && trecho.length >= 2 && FC.datas.dias(trechoAnot.at(-1).data, trecho[0].data) > 45;
 
     const grafico = cresc.vista === "rendimento"
       ? (serieRend.length >= 2
-        ? html`${FC.graficos.linhas({ series: [{ nome: "Rendimento", pontos: espaca(serieRend, grao), classe: "l2", area: false }], altura: 240, zero: true })}
+        ? html`${FC.graficos.linhas({ series: [
+            ...refsProntas.map((r) => ({ nome: r.nome, pontos: espaca(r.pontos.map(([dt, v], i) => [dt, v - p0.valor - (trecho[i].fluxo - p0.fluxo)]), grao), classe: r.classe })),
+            { nome: "Rendimento", pontos: espaca(serieRend, grao), classe: "l2", area: false }], altura: 240, zero: true })}
+          ${refsProntas.length ? html`<div class="legenda-g"><span><i class="k2"></i>sua carteira</span>${refsProntas.map((r) => html`<span><i class="k${r.k}"></i>${r.nome}, com os mesmos aportes</span>`)}</div>` : ""}
           <p class="texto-p mt2">Quanto o patrimônio rendeu no período, já sem o dinheiro que você aportou ou retirou.</p>`
         : html`<div class="mensagem info">${icone("info", 18)}<span>O painel ainda não tem dias suficientes neste período para medir o rendimento. Escolha um período maior.</span></div>`)
       : (series.length
         ? html`${FC.graficos.linhas({ series, altura: 240 })}
-          <div class="legenda-g">${trecho.length >= 2 ? html`<span><i class="k1"></i>calculado pelo painel, dia a dia, com o que está cadastrado nele</span>` : ""}${trechoAnot.length >= 2 ? html`<span><i class="kref"></i>total anotado à parte (Notion), mês a mês</span>` : ""}</div>
+          <div class="legenda-g">${trecho.length >= 2 ? html`<span><i class="k1"></i>calculado pelo painel, dia a dia, com o que está cadastrado nele</span>` : ""}${trechoAnot.length >= 2 ? html`<span><i class="kref"></i>total anotado à parte (Notion), mês a mês</span>` : ""}${refsProntas.map((r) => html`<span><i class="k${r.k}"></i>${r.nome}, com os mesmos aportes</span>`)}</div>
           ${trechoAnot.length >= 2 && trecho.length >= 2 && !lacuna ? html`<p class="texto-p mt2">As duas linhas medem coisas diferentes: a tracejada é o total que você anotava; a cheia só conhece o que já foi cadastrado no painel em cada data.</p>` : ""}
           ${lacuna ? html`<p class="texto-p mt2">Entre ${FC.datas.mesAno(trechoAnot.at(-1).data)} e ${FC.datas.mesAno(trecho[0].data)} não há registro — o gráfico deixa o intervalo em branco em vez de inventar a linha.</p>` : ""}`
         : html`<div class="mensagem info">${icone("info", 18)}<span>Só há um registro neste período.</span></div>`);
@@ -227,6 +285,13 @@
           ${FC.ok(twrPer) ? html`<div class="kpi pequeno"><dt>TWR ${FC.ajuda("Retorno ponderado pelo tempo: encadeia o rendimento de cada dia e ignora o tamanho dos aportes. É a medida para comparar a carteira com o CDI ou o Ibovespa.")}</dt><dd class="${twrPer >= 0 ? "pos" : "neg"}">${fmt.delta(twrPer, 2)}%<small>${FC.ok(cdiPer) ? `CDI no período: ${fmt.num(cdiPer, 2)}%` : ""}</small></dd></div>` : ""}
           <div class="kpi pequeno"><dt>Patrimônio ${p1 && p1.data === hoje ? "agora" : "no fim"}</dt><dd>${fmt.brl(p1 ? p1.valor : (trechoAnot.at(-1) || {}).valor || 0)}<small>${trecho.length >= 2 ? (() => { const v = p1.valor - p0.valor; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>
         </dl>
+        ${refs.some((r) => r.carregando) ? html`<p class="texto-p mb2">Buscando o histórico do Ibovespa…</p>` : ""}
+        ${refs.some((r) => r.erro) ? html`<p class="texto-p mb2">O histórico do Ibovespa não veio agora. Tente atualizar daqui a pouco.</p>` : ""}
+        ${refsProntas.length ? html`<dl class="kpis mb3 comparar-kpis">${refsProntas.map((r) => {
+          const fim = r.pontos.at(-1)[1], dif = p1.valor - fim;
+          return html`<div class="kpi pequeno"><dt><i class="ponto-cmp k${r.k}"></i>Se fosse ${r.nome}</dt>
+            <dd>${fmt.brl(fim)}<small>${r.nome.split(" ")[0]} no período: ${fmt.delta(r.indice, 2)}% · você está <b class="${dif >= 0 ? "pos" : "neg"}">${dif >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(dif))}</b> ${dif >= 0 ? "acima" : "abaixo"}</small></dd></div>`;
+        })}</dl>` : ""}
         ${grafico}
       </div></section>`;
   }
@@ -341,6 +406,10 @@
     const repinta = () => setTimeout(() => FC.rerender({ suave: true }), 200);
     FC.$$("#seg-periodo button", raiz).forEach((b) => b.addEventListener("click", () => { cresc.periodo = b.dataset.p; repinta(); }));
     FC.$$("#seg-vista button", raiz).forEach((b) => b.addEventListener("click", () => { cresc.vista = b.dataset.v; repinta(); }));
+    FC.$$("[data-cmp]", raiz).forEach((b) => b.addEventListener("click", () => {
+      const c = comparar(); c[b.dataset.cmp] = !c[b.dataset.cmp];
+      FC.local.gravar("cresc-comparar", c); repinta();
+    }));
     ["#per-de", "#per-ate"].forEach((sel) => {
       const el = FC.$(sel, raiz);
       if (el) el.addEventListener("change", () => {

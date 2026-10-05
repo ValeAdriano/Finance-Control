@@ -111,7 +111,7 @@
         }
         // linha tracejada não pode ser "desenhada": a animação usa o próprio
         // tracejado e a deixaria contínua
-        const ref = /^lref/.test(se.classe || "");
+        const ref = /^(lref|lselic|libov)/.test(se.classe || "");
         s += `<path class="${se.classe || "l1"} ${ref ? "surge" : "anima"}" d="${d}"/>`;
       }
       s += `<line class="cursor" x1="0" x2="0" y1="${mT}" y2="${H - mB}"/>`;

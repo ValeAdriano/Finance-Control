@@ -85,11 +85,26 @@
       <dd class="${corPct(r.xirr)}">${FC.ok(r.xirr) ? pctTxt(r.xirr) : "—"}<small>${FC.ok(r.xirr) ? "a.a." : r.dias != null && r.dias < 90 ? "precisa de 90 dias" : ""}</small></dd></div>
   </dl>`;
 
+  // "E se cada aporte tivesse ido para a Selic ou o Ibovespa no mesmo dia?"
+  C.comparaIndices = function (fluxos, valorAtual) {
+    const e = FC.estado, ix = e.mercado.indices, ibov = (e.bench || {}).ibov;
+    if (!fluxos || !fluxos.length) return "";
+    const c = FC.rentab.comparaIndices(fluxos, FC.datas.hoje(), ix, ibov);
+    const item = (nome, cls, v) => {
+      if (v == null) return html`<div class="kpi pequeno"><dt><i class="ponto-cmp ${cls}"></i>${nome}</dt><dd class="fraco">—<small>${nome === "Ibovespa" && !e.bench ? "carregando o histórico…" : "sem histórico desde o 1º aporte"}</small></dd></div>`;
+      const dif = valorAtual - v;
+      return html`<div class="kpi pequeno"><dt><i class="ponto-cmp ${cls}"></i>Se fosse ${nome}</dt><dd>${fmt.brl(v)}<small>você está <b class="${dif >= 0 ? "pos" : "neg"}">${dif >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(dif))}</b> ${dif >= 0 ? "acima" : "abaixo"}</small></dd></div>`;
+    };
+    return html`<dl class="kpis mb2 comparar-kpis">${item("Selic", "kselic", c.selic)}${item("Ibovespa", "kibov", c.ibov)}</dl>
+      <p class="texto-p mb2">Cada aporte aplicado no índice no mesmo dia; vendas, resgates e proventos saem da conta na mesma data.</p>`;
+  };
+
   // tabela: cada aporte com a sua data, a sua taxa e o seu rendimento
   C.tabelaLotesRF = function (rent) {
     if (!rent || !rent.lotes.length) return "";
     return html`<h3 style="font-size:17px;margin:4px 0 8px">Rendimento por aporte</h3>
       ${C.kpisRentab(rent)}
+      ${C.comparaIndices(rent.lotes.map((l) => ({ data: l.data, valor: -l.valor })), rent.valor_atual)}
       <div class="tabela-rola"><table class="tabela lotes">
         <thead><tr><th>Data</th><th>Taxa</th><th class="n">Aplicado</th><th class="n">Vale hoje</th><th class="n">Rendeu</th><th class="n">% ao ano</th></tr></thead>
         <tbody>${rent.lotes.map((l) => html`<tr>
@@ -111,16 +126,21 @@
     const r = rt && rt.ativos.find((x) => x.ticker === ticker);
     if (!r || !r.lotes.length) return "";
     return html`<h3 style="font-size:17px;margin:22px 0 8px">Rentabilidade por aporte</h3>
-      ${r.sem_custo ? html`<div class="mensagem alerta mb2">${icone("info", 16)}<span>Sem o preço médio da posição inicial não dá para medir o retorno do ativo. Preencha em Editar.</span></div>` : C.kpisRentab(r)}
+      ${r.sem_custo ? html`<div class="mensagem alerta mb2">${icone("info", 16)}<span>Sem o preço médio da posição inicial não dá para medir o retorno do ativo. Preencha em Editar.</span></div>`
+        : html`${C.kpisRentab(r)}${C.comparaIndices(r.fluxos, r.valor_atual)}`}
       <div class="tabela-rola"><table class="tabela lotes">
-        <thead><tr><th>Data</th><th class="n">Qtd.</th><th class="n">Preço pago</th><th class="n">Vale hoje</th><th class="n">Resultado</th><th class="n">% ao ano</th></tr></thead>
+        <thead><tr><th>Data</th><th class="n">Qtd.</th><th class="n">Preço pago</th><th class="n">Vale hoje</th><th class="n">Resultado</th><th class="n">% ao ano</th><th class="n">Na Selic</th><th class="n">No Ibovespa</th></tr></thead>
         <tbody>${r.lotes.map((l) => html`<tr>
           <td>${FC.datas.br(l.data)}<span class="leg">${l.origem}</span></td>
           <td class="n">${fmt.qtd(l.quantidade)}</td>
           <td class="n">${l.preco != null ? fmt.preco(l.preco) : "—"}</td>
           <td class="n">${l.valor_atual != null ? fmt.brl(l.valor_atual) : "—"}</td>
           <td class="n ${corPct(l.rendimento)}">${l.rendimento != null ? html`${l.rendimento >= 0 ? "+" : "−"}${fmt.brl(Math.abs(l.rendimento))}<span class="leg">${pctTxt(l.pct)}</span>` : "—"}</td>
-          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}</tbody>
+          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td>
+          ${["selic", "ibov"].map((ind) => {
+            const g = l.custo != null ? FC.rentab.crescimentoIndice(ind, l.data, FC.datas.hoje(), FC.estado.mercado.indices, (FC.estado.bench || {}).ibov) : null;
+            return g == null ? html`<td class="n fraco">—</td>` : html`<td class="n">${fmt.brl(l.custo * g)}<span class="leg">${pctTxt((g - 1) * 100)}</span></td>`;
+          })}</tr>`)}</tbody>
       </table></div>
       ${r.realizados.length ? html`<p class="texto-p mt2">Vendas: ${r.realizados.map((v) => `${fmt.qtd(v.q)} em ${FC.datas.br(v.data_venda)}${FC.ok(v.pct) ? ` (${pctTxt(v.pct)})` : ""}`).join(" · ")}.</p>` : ""}
       ${r.proventos > 0.005 ? html`<p class="texto-p mt1">Inclui ${fmt.brl(r.proventos)} em proventos já pagos, contados como dinheiro que voltou.</p>` : ""}`;
