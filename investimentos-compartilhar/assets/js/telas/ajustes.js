@@ -60,6 +60,12 @@
           <span class="chevron">${icone("chevron", 18)}</span></a>
       </div><p class="texto-p mt2">Por enquanto as duas usam dados de exemplo; a ligação com os seus números vem a seguir.</p>`)}
 
+      ${grupo("Divulgação", "material de marketing do sistema", html`<div class="lista">
+        <div class="item clicavel" id="aj-promo"><span class="modulo-ic">${icone("play", 18)}</span>
+          <div class="principal"><div class="titulo">Gerar vídeo de divulgação</div><div class="detalhe">${Math.round(FC.promo.TOTAL)} s com trilha, vertical ou horizontal, feito no navegador com os números desta conta</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></div>
+      </div>`)}
+
       ${grupo("Segurança", "", html`<div class="lista">
         <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
           <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
@@ -158,6 +164,7 @@
       }, 700);
     });
     FC.$("#aj-senha", raiz).addEventListener("click", trocaSenha);
+    FC.$("#aj-promo", raiz).addEventListener("click", () => FC.abrePromo());
     FC.$("#aj-apresentacao", raiz).addEventListener("click", () => FC.onboarding.abre());
     FC.$("#aj-mfa-add", raiz) && FC.$("#aj-mfa-add", raiz).addEventListener("click", () => ligaMfa(fatores.length));
     FC.$$("[data-remove-fator]", raiz).forEach((bt) => bt.addEventListener("click", () => removeFator(fatores, bt.dataset.removeFator)));

@@ -1002,3 +1002,31 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 .comparar-bt[aria-pressed="true"].ibov { border-color: var(--s4); color: var(--s4); background: rgba(175,82,222,.12); font-weight: 600; }
 .ponto-cmp { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .comparar-kpis { padding-top: 4px; border-top: 1px solid var(--linha); }
+
+/* ------------------------------------------------------------ vídeo de divulgação */
+.promo { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 20px;
+  background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.promo-caixa { width: min(1180px, 100%); max-height: calc(100dvh - 40px); overflow: auto; background: var(--bg-2); border-radius: 26px;
+  box-shadow: var(--sombra-alta); padding: 18px 22px 22px; }
+.promo-topo { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.promo-topo b { font-size: 19px; }
+.promo-topo .icone-bt { margin-left: auto; }
+.promo-corpo { display: grid; grid-template-columns: auto minmax(260px, 1fr); gap: 24px; align-items: start; }
+.promo-palco { position: relative; height: min(70dvh, 760px); aspect-ratio: 9 / 16; border-radius: 18px; overflow: hidden; background: #050f2b; }
+.promo-palco.horizontal { height: auto; width: min(640px, 60vw); aspect-ratio: 16 / 9; }
+.promo-palco canvas { width: 100%; height: 100%; display: block; }
+.promo-gravando { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 8px; align-items: center; justify-content: center;
+  padding: 8px; border-radius: 12px; background: rgba(0,0,0,.55); color: #fff; font-size: 13px; }
+.promo-lado { display: grid; gap: 16px; }
+.promo-lado .segmentado { display: flex; }
+.promo-lado .segmentado button { flex: 1; }
+.promo-controles { display: flex; align-items: center; gap: 8px; }
+.promo-controles .recap-barra { flex: 1; }
+.promo.gravando .promo-lado { opacity: .5; pointer-events: none; }
+@media (max-width: 760px) {
+  .promo { padding: 0; }
+  .promo-caixa { border-radius: 0; max-height: 100dvh; height: 100dvh; }
+  .promo-corpo { grid-template-columns: 1fr; }
+  .promo-palco { height: auto; width: 100%; }
+  .promo-palco.horizontal { width: 100%; }
+}

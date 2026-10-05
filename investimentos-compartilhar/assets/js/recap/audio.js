@@ -30,7 +30,8 @@
     const ch = ruido.getChannelData(0);
     for (let i = 0; i < ch.length; i++) { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; ch[i] = s / 2147483648 - 1; }
 
-    const { eventos, total, positivo } = FC.recap.eventos(data, opts);
+    // a linha do tempo pode vir pronta (vídeo de divulgação) ou da retrospectiva
+    const { eventos, total, positivo } = opts.linha || FC.recap.eventos(data, opts);
     let ativos = [];
 
     const guarda = (n) => { ativos.push(n); n.onended = () => { ativos = ativos.filter((x) => x !== n); }; return n; };
