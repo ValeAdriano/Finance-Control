@@ -93,6 +93,9 @@ create table if not exists public.agro_movimentos (
   valor_total       numeric not null default 0 check (valor_total >= 0),
   -- frete, comissão, Funrural etc. da própria operação
   despesas          numeric not null default 0 check (despesas >= 0),
+  -- venda: quanto do líquido fica no agro para as próximas compras (o resto
+  -- é saque); null = tudo saque
+  reinvestido       numeric check (reinvestido is null or reinvestido >= 0),
   fazenda           text,
   lote              text,
   contraparte       text,
@@ -100,6 +103,7 @@ create table if not exists public.agro_movimentos (
   criado_em         timestamptz not null default now(),
   check (tipo <> 'reclassificacao' or categoria_destino is not null)
 );
+alter table public.agro_movimentos add column if not exists reinvestido numeric check (reinvestido is null or reinvestido >= 0);
 create index if not exists agro_mov_user_data_idx on public.agro_movimentos (user_id, data);
 
 create table if not exists public.agro_custos (

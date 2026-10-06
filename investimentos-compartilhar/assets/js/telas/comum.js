@@ -26,6 +26,64 @@
   // estados vazios: ícone da família do app num quadrado suave
   const ICONE_VAZIO = { "🧾": "recibo", "🧭": "bussola", "💼": "carteira", "🎁": "presente", "💸": "moeda", "📅": "calendario",
     "📈": "projecoes", "🏦": "renda", "🐂": "boi", "🐄": "boi", "⚖️": "balanca", "🧺": "cesta", "📊": "ativos" };
+  // ---------------------------------------------------------------- sequência de aportes
+  const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  C.sequencia = function () {
+    const e = FC.estado;
+    if (!e.base || !e.prefs.plano) return null;
+    const st = FC.salario.streak({ plano: e.prefs.plano, ganhos: e.base.ganhos || [], base: e.base });
+    return st.tem_meta ? st : null;
+  };
+  const meses = (n) => (n === 1 ? "mês" : "meses");
+  C.fraseSequencia = function (st) {
+    const m = st.mesAtual, nome = MES_LONGO[Number(m.mes.slice(5)) - 1];
+    if (m.estado === "batido") return html`Meta de ${nome} batida. A sequência segue acesa!`;
+    if (m.estado === "sem_meta") return html`Sem renda cadastrada em ${nome}, o mês não conta nem quebra a sequência.`;
+    const falta = Math.max(0, m.meta - m.investido);
+    return st.atual ? html`Faltam <b class="rs">${fmt.brlTexto(falta)}</b> para manter a sequência em ${nome}.`
+      : html`Aporte <b class="rs">${fmt.brlTexto(falta)}</b> em ${nome} para acender o foguinho.`;
+  };
+  C.chipSequencia = (st) => html`<a class="chip chip-fogo" href="#/salario" title="Meses seguidos batendo a meta de aporte do plano">
+    ${FC.foguinho(26, { aceso: st.atual > 0, pct: st.mesAtual.pct })}<b>${fmt.int(st.atual)}</b> ${meses(st.atual)} seguido${st.atual === 1 ? "" : "s"}</a>`;
+  C.cartaoSequencia = function (st) {
+    const bola = (x) => x.estado === "batido" ? FC.foguinho(22, { aceso: true })
+      : x.estado === "andamento" ? FC.foguinho(26, { aceso: false, pct: x.pct })
+      : x.estado === "abaixo" ? html`<span class="seq-x">${icone("fechar", 13)}</span>` : html`<span class="seq-traco"></span>`;
+    const titulo = (x) => `${MES_LONGO[Number(x.mes.slice(5)) - 1]}: ${x.estado === "sem_meta" ? "sem meta" : `${fmt.brlTexto(x.investido, 0)} de ${fmt.brlTexto(x.meta, 0)}`}`;
+    return html`<div class="cartao sequencia">
+      <div class="seq-topo">
+        ${FC.foguinho(72, { aceso: st.atual > 0, pct: st.mesAtual.pct })}
+        <div class="seq-conta"><p class="seq-num"><span data-conta="${st.atual}" data-modo="int">${fmt.int(st.atual)}</span></p>
+          <p class="seq-rot">${meses(st.atual)} seguido${st.atual === 1 ? "" : "s"} batendo a meta</p></div>
+        <div class="seq-recorde"><span>Recorde</span><b>${fmt.int(st.recorde)}</b></div>
+      </div>
+      <div class="seq-meses">${st.meses.map((x) => html`<div class="seq-mes ${x.estado}" title="${titulo(x)}">
+        <span class="bola">${bola(x)}</span><small>${MES_CURTO[Number(x.mes.slice(5)) - 1]}</small></div>`)}</div>
+      <p class="texto-p mt2">${C.fraseSequencia(st)}</p>
+    </div>`;
+  };
+  // a primeira vez que a meta do mês é batida: a chama acende, solta faíscas e avisa
+  C.comemoraSequencia = function (raiz, st) {
+    if (!st || st.mesAtual.estado !== "batido") return;
+    const chave = "fc:streak-comemorado:" + st.mesAtual.mes;
+    try { if (localStorage.getItem(chave)) return; localStorage.setItem(chave, "1"); } catch (err) { return; }
+    FC.$$(".sequencia .seq-topo > .fogo, .chip-fogo > .fogo", raiz).forEach((f) => {
+      f.classList.add("acende");
+      for (let i = 0; i < 12; i++) {
+        const fa = document.createElement("i");
+        fa.className = "faisca";
+        const ang = (i / 12) * Math.PI * 2, dist = 0.7 + Math.random() * 0.6;
+        fa.style.setProperty("--x", (Math.cos(ang) * dist).toFixed(2));
+        fa.style.setProperty("--y", (Math.sin(ang) * dist - 0.3).toFixed(2));
+        fa.style.animationDelay = (Math.random() * 0.15).toFixed(2) + "s";
+        f.appendChild(fa);
+      }
+      setTimeout(() => { f.classList.remove("acende"); FC.$$(".faisca", f).forEach((x) => x.remove()); }, 1600);
+    });
+    FC.ui.aviso(`Sequência de ${st.atual} ${meses(st.atual)}! Meta do mês batida.`);
+  };
+
   C.vazio = (emoji, titulo, texto, acao) => html`<div class="vazio">
     <div class="icone-grande">${icone(ICONE_VAZIO[emoji] || emoji, 26)}</div><h3 style="font-size:19px;margin-bottom:6px">${titulo}</h3>
     <p class="texto-p" style="margin:0 auto 16px">${texto}</p>${acao || ""}</div>`;

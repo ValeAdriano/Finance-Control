@@ -357,6 +357,7 @@
     const r = d.resumo;
     const vazio = !d.ativos.length && !d.rendaFixa.length && !d.agro.tem_dados;
     const nome = ((FC.auth.usuario.user_metadata || {}).nome || "").trim();
+    const seq = C.sequencia();
 
     raiz.innerHTML = String(html`
       ${C.estadoMercado()}
@@ -370,6 +371,7 @@
           ${r.agro ? html`<span class="chip"><span class="ponto" style="background:var(--s5)"></span>Agro <b class="rs">${fmt.brlTexto(r.agro)}</b></span>` : ""}
           ${r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s3)"></span>Cripto <b class="rs">${fmt.brlTexto(r.cripto)}</b></span>` : ""}
           ${d.rentab && d.rentab.total && FC.ok(d.rentab.total.periodo_pct) ? html`<span class="chip" title="ganho ÷ capital médio aplicado, cada aporte com a sua data">Rendimento <b class="${d.rentab.total.periodo_pct >= 0 ? "pos" : "neg"}">${fmt.delta(d.rentab.total.periodo_pct)}%</b>${FC.ok(d.rentab.total.xirr) ? html` · ${fmt.delta(d.rentab.total.xirr)}% a.a.` : ""}</span>` : ""}
+          ${seq ? C.chipSequencia(seq) : ""}
           ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
         </div>
       </div>
@@ -418,6 +420,7 @@
         FC.rerender({ suave: true, semAnimacao: true });
       });
     });
+    C.comemoraSequencia(raiz, seq);
     FC.$$("[data-comeca]", raiz).forEach((el) => el.addEventListener("click", () => (el.dataset.comeca === "ativo" ? C.formAtivo() : C.formRendaFixa())));
   };
 })();

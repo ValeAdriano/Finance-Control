@@ -170,11 +170,9 @@
     const meses = FC.salario.mesesAte(hoje, 6);
     const historico = meses.map((m) => {
       const g = FC.salario.planoDoMes({ plano, ganhos, base: b, mes: m, dividendosDoMes: 0 });
-      // tudo o que entrou em investimentos no mês, com ou sem plano
-      const inv = FC.soma(b.aportes.filter((a) => a.data.slice(0, 7) === m && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor)
-        + FC.soma(b.agro.movs.filter((x) => x.data.slice(0, 7) === m && x.tipo === "compra"), (x) => x.valor_total + x.despesas);
-      return { mes: m, renda: g.renda.total, meta: g.valor_base, investido: inv };
+      return { mes: m, renda: g.renda.total, meta: g.valor_base, investido: FC.salario.investidoNoMes(b, m) };
     });
+    const seq = C.sequencia();
     const fixos = ganhos.filter((g) => g.tipo === "recorrente").sort((x, y) => (x.fim ? 1 : 0) - (y.fim ? 1 : 0) || y.valor - x.valor);
     const avulsos = ganhos.filter((g) => g.tipo === "avulso").sort((x, y) => y.inicio.localeCompare(x.inicio)).slice(0, 24);
     const ativoHoje = (g) => FC.salario.valeNoMes(g, hoje);
@@ -212,6 +210,10 @@
         return html`<div class="mensagem info mt2">${icone("carteira", 18)}<span>Próximo recebimento: <b>${p.ganho.nome}</b> de <b class="rs">${fmt.brlTexto(p.valor)}</b> em <b>${FC.datas.br(p.data)}</b>
           (${dias === 0 ? "hoje" : dias === 1 ? "amanhã" : `em ${dias} dias`}${FC.salario.descreveRegra(p.ganho) ? ", " + FC.salario.descreveRegra(p.ganho) : ""}).</span></div>`;
       })() : ""}
+
+      ${seq ? html`<section class="secao">
+        <div class="secao-topo"><h2>Sequência de aportes</h2><span class="sub">meses seguidos batendo a meta do plano</span></div>
+        ${C.cartaoSequencia(seq)}</section>` : ""}
 
       <section class="secao">
         <div class="secao-topo"><h2>Guia do mês</h2><span class="sub">o que o plano manda aportar e quanto já foi</span></div>
@@ -274,6 +276,7 @@
     const mh = FC.$("#mes-hoje", raiz); if (mh) mh.addEventListener("click", () => { mesVisto = hoje; FC.rerender({ suave: true, semAnimacao: true }); });
 
     // ---- ganhos
+    C.comemoraSequencia(raiz, seq);
     FC.$("#bt-ganho", raiz).addEventListener("click", () => formGanho());
     FC.$$("[data-ganho]", raiz).forEach((el) => el.addEventListener("click", () => formGanho(ganhos.find((g) => g.id === el.dataset.ganho))));
 

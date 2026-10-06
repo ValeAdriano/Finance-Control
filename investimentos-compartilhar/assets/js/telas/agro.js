@@ -64,6 +64,13 @@
     const comValor = comPreco || ["entrada", "saida"].includes(tipo);
     const modoInicial = item.preco_arroba ? "arroba" : item.preco_cabeca ? "cabeca" : item.valor_total ? "total" : "arroba";
     const T = FC.TIPOS_MOV[tipo];
+    // venda: quanto volta para o gado. Nova venda começa reinvestindo tudo;
+    // venda antiga sem resposta é saque (como o painel contava antes)
+    const liqItem = Math.max(0, (item.valor_total || 0) - (item.despesas || 0));
+    const rvInicial = novo ? "tudo" : !(item.reinvestido > 0) ? "saque" : item.reinvestido >= liqItem - 0.5 ? "tudo" : "parte";
+    // o caixa do agro sem este lançamento, para mostrar de onde sai a compra
+    const outros = (FC.estado.base.agro.movs || []).filter((m) => m.id !== item.id);
+    const cxSem = FC.agro.caixa(outros, FC.estado.base.agro.custos || []);
     const f = FC.ui.folha({
       titulo: (novo ? "" : "Editar · ") + T.nome,
       corpo: html`<form class="form" id="f-mov">${listasSugestao()}
@@ -93,6 +100,17 @@
             </div>` : ""}
         </div>
         <div class="cartao" style="background:var(--bg-3);box-shadow:none;padding:14px 18px" id="m-resumo"></div>` : ""}
+        ${tipo === "venda" ? html`<div class="campo destino-venda">
+          <span class="rot">Para onde vai o dinheiro? ${FC.ajuda("O que você reinveste fica no agro: paga as próximas compras e custos sem contar como aporte, e a carteira não cai na venda. Só o saque sai do patrimônio.")}</span>
+          <div class="segmentado" role="group" id="m-rv" style="align-self:flex-start">
+            <button type="button" data-rv="tudo" aria-pressed="${rvInicial === "tudo"}">Reinvestir tudo</button>
+            <button type="button" data-rv="parte" aria-pressed="${rvInicial === "parte"}">Parte</button>
+            <button type="button" data-rv="saque" aria-pressed="${rvInicial === "saque"}">Sacar tudo</button></div>
+          <div class="linha2 mt2" data-rvc="parte">
+            <div class="campo"><label for="m-reinv">Reinvestir no gado (R$)</label><input id="m-reinv" name="reinvestido" inputmode="decimal" value="${item.reinvestido ?? ""}" placeholder="0,00"></div>
+            <div></div></div>
+          <div class="divisao-venda" id="m-rv-res"></div>
+        </div>` : ""}
         <div class="linha3">
           <div class="campo"><label for="m-faz">Fazenda</label><input id="m-faz" name="fazenda" list="dl-faz" value="${item.fazenda || ""}" maxlength="60"></div>
           <div class="campo"><label for="m-lote">Lote</label><input id="m-lote" name="lote" list="dl-lote" value="${item.lote || ""}" maxlength="40"></div>
@@ -105,9 +123,39 @@
         <button class="botao sec" data-acao="cancelar">Cancelar</button><button class="botao" data-acao="salvar">Salvar</button>`,
     });
     const form = FC.$("#f-mov", f.el);
-    let modo = modoInicial;
+    let modo = modoInicial, rv = rvInicial;
     const rend = Number(cfg.rendimento_carcaca) || 52;
     const campo = (n) => FC.lerNum((FC.$(`[name=${n}]`, form) || {}).value);
+
+    // compra/entrada: quanto sai do caixa do agro e quanto é aporte novo
+    function caixaDaCompra(custo) {
+      if (!["compra", "entrada"].includes(tipo) || !(custo > 0)) return "";
+      const data = (FC.$("[name=data]", form) || {}).value || FC.datas.hoje();
+      const saldo = cxSem.saldoEm(data);
+      if (!(saldo > 0.5)) return "";
+      const doCaixa = Math.min(saldo, custo);
+      return html`<p class="texto-p mt2 caixa-compra">${icone("aportes", 15)} Do caixa do agro: <b>${fmt.brl(doCaixa)}</b>
+        · Aporte novo: <b>${fmt.brl(custo - doCaixa)}</b>${saldo - doCaixa > 0.5 ? html` · sobra <b>${fmt.brl(saldo - doCaixa)}</b> no caixa` : ""}</p>`;
+    }
+    // venda: divisão entre o que volta para o gado e o saque
+    function reinvestidoDe(liquido) {
+      if (rv === "tudo") return liquido;
+      if (rv === "saque") return 0;
+      return Math.min(liquido, Math.max(0, campo("reinvestido") || 0));
+    }
+    function divisaoVenda(liquido) {
+      const res = FC.$("#m-rv-res", form);
+      if (!res) return;
+      FC.$$("#m-rv button", form).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rv === rv)));
+      FC.$$("[data-rvc]", form).forEach((c) => { c.style.display = c.dataset.rvc === rv ? "" : "none"; });
+      const re = reinvestidoDe(liquido), sq = liquido - re;
+      const pct = liquido ? (re / liquido) * 100 : 0;
+      res.innerHTML = String(html`<div class="divisao-barra"><i style="width:${pct}%"></i></div>
+        <div class="flex entre quebra" style="gap:6px 16px">
+          <span><span class="ponto" style="background:var(--terra, #b08a5b)"></span> Fica no gado <b>${fmt.brl(re)}</b></span>
+          <span><span class="ponto" style="background:var(--texto-3, #8e8e93)"></span> Saque <b>${fmt.brl(sq)}</b></span></div>
+        <p class="texto-p mt1">${re > 0 ? "O reinvestido paga as próximas compras sem contar como aporte — é crescimento da atividade." : "Tudo sai do agro e da carteira, como um resgate."}</p>`);
+    }
 
     function recalcula() {
       const cab = campo("cabecas"), peso = campo("peso_medio_kg");
@@ -126,7 +174,8 @@
           ${cab && valor ? html`<div class="kpi pequeno"><dt>Por cabeça</dt><dd>${fmt.brl(valor / cab)}</dd></div>` : ""}
           ${totArr && valor ? html`<div class="kpi pequeno"><dt>Por @</dt><dd>${fmt.brl(valor / totArr)}</dd></div>` : ""}
           ${comPreco && desp ? html`<div class="kpi pequeno"><dt>${tipo === "venda" ? "Líquido recebido" : "Custo total"}</dt><dd>${fmt.brl(liquido)}</dd></div>` : ""}
-        </dl>`);
+        </dl>${caixaDaCompra(liquido)}`);
+        divisaoVenda(Math.max(0, liquido));
       }
       // aviso quando a saída passa do que o rebanho tem
       const aviso = FC.$("#m-aviso", form);
@@ -146,6 +195,18 @@
       }
     }
     FC.$$("#m-modo button", form).forEach((b) => b.addEventListener("click", () => { modo = b.dataset.m; recalcula(); }));
+    FC.$$("#m-rv button", form).forEach((b) => b.addEventListener("click", () => {
+      rv = b.dataset.rv; recalcula();
+      if (rv === "parte") {
+        const i = FC.$("#m-reinv", form);
+        if (i && !FC.lerNum(i.value)) {
+          const valor = FC.agro.valorDaOperacao({ modo, cabecas: campo("cabecas"), peso_medio_kg: campo("peso_medio_kg"), preco_arroba: campo("preco_arroba"), preco_cabeca: campo("preco_cabeca"), valor_total: campo("valor_total") }, rend);
+          const liq = Math.max(0, valor - (campo("despesas") || 0));
+          if (liq) { i.value = fmt.num(liq, 2); recalcula(); }
+        }
+        if (i) { i.focus(); i.select(); }
+      }
+    }));
     form.addEventListener("input", recalcula);
     form.addEventListener("change", recalcula);
     recalcula();
@@ -176,6 +237,7 @@
         if (modo === "cabeca") linha.preco_cabeca = FC.lerNum(d.preco_cabeca);
         if (comPreco && !(linha.valor_total > 0)) return FC.ui.aviso(modo === "arroba" && !peso ? "Para fechar por @, informe o peso médio." : "Informe o preço.", "erro");
       }
+      linha.reinvestido = tipo === "venda" ? Math.round(reinvestidoDe(Math.max(0, linha.valor_total - linha.despesas)) * 100) / 100 : null;
       try {
         await FC.ui.ocupado(FC.$("[data-acao=salvar]", f.el), () => (novo ? FC.db.inserir("agro_movimentos", linha) : FC.db.atualizar("agro_movimentos", item.id, linha)));
         f.fechar();
@@ -338,7 +400,8 @@
         return html`<div class="item clicavel" data-mov="${m.id}">
           <div style="width:44px;text-align:center"><b style="font-size:17px;display:block;line-height:1">${m.data.slice(8, 10)}</b><small class="muito-fraco">${FC.datas.mesAno(m.data)}</small></div>
           <div class="principal"><div class="titulo">${sinal}${fmt.int(m.cabecas)} ${cat} ${FC.pilula(T.cor, T.nome)}</div><div class="detalhe">${det || " "}</div></div>
-          <div class="valores">${m.valor_total ? html`<b class="${m.tipo === "venda" ? "pos" : ""}">${fmt.brl(m.valor_total)}</b>` : ""}${m.despesas ? html`<small>despesas ${fmt.brl(m.despesas)}</small>` : ""}</div>
+          <div class="valores">${m.valor_total ? html`<b class="${m.tipo === "venda" ? "pos" : ""}">${fmt.brl(m.valor_total)}</b>` : ""}${m.tipo === "venda" ? html`<small>${m.reinvestido > 0 ? `reinvestido ${fmt.brlTexto(Math.min(m.reinvestido, m.valor_total - m.despesas), 0)} · ` : ""}saque ${fmt.brlTexto(Math.max(0, m.valor_total - m.despesas - (m.reinvestido || 0)), 0)}</small>`
+              : m.despesas ? html`<small>despesas ${fmt.brl(m.despesas)}</small>` : ""}</div>
           <span class="chevron">${icone("chevron", 18)}</span></div>`;
       }) : C.vazio("🐂", "Nenhum movimento", "Registre compras, vendas, nascimentos e mortes. Se o gado já existia, comece com uma “Outra entrada” de estoque inicial.");
     } else if (aba === "custos") {
@@ -414,6 +477,8 @@
           </dl>
           <hr class="sep">
           <dl class="kpis">
+            ${fin.caixa_agro > 0.5 ? html`<div class="kpi pequeno"><dt>Caixa do agro ${FC.ajuda("Dinheiro de vendas que você escolheu reinvestir e que ainda não virou gado. Conta no patrimônio e paga as próximas compras sem virar aporte.")}</dt><dd>${fmt.brl(fin.caixa_agro, 0)}</dd></div>` : ""}
+            <div class="kpi pequeno"><dt>Aporte novo ${FC.ajuda("O que saiu do seu bolso para o agro, além do que as próprias vendas pagaram. É o que conta como aporte na carteira e no plano do mês.")}</dt><dd>${fmt.brl(fin.aportado, 0)}${fin.sacado > 0.5 ? html`<small>${fmt.brl(fin.sacado, 0)} sacados</small>` : ""}</dd></div>
             <div class="kpi pequeno"><dt>Caixa líquido ${FC.ajuda("Só o dinheiro que já entrou menos o que já saiu. Fica negativo enquanto o rebanho está em formação.")}</dt><dd class="${fin.caixa_liquido >= 0 ? "pos" : "neg"}">${fmt.brl(fin.caixa_liquido, 0)}</dd></div>
             ${ok(fin.preco_medio_arroba_venda) ? html`<div class="kpi pequeno"><dt>Preço médio da @ vendida</dt><dd>${fmt.brl(fin.preco_medio_arroba_venda)}</dd></div>` : ""}
             ${ok(fin.custo_medio_cabeca_compra) ? html`<div class="kpi pequeno"><dt>Custo médio por cabeça comprada</dt><dd>${fmt.brl(fin.custo_medio_cabeca_compra, 0)}</dd></div>` : ""}

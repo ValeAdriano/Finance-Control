@@ -12,6 +12,7 @@
       partes: [
         ["inicio", "Patrimônio", "Soma de tudo — bolsa, cripto, renda fixa e rebanho — com o preço de mercado de agora. Abaixo, a variação do dia e desde o início."],
         ["projecoes", "Crescimento do patrimônio", "O patrimônio reconstruído dia a dia: posições × preço de cada dia, renda fixa rendendo aporte a aporte e o rebanho. A linha tracejada é o total que você anotava à parte. O TWR compara com o CDI do mesmo período."],
+        ["ativos", "Foguinho roxo", "Sua sequência: quantos meses seguidos você bateu a meta de aporte do plano. O anel em volta mostra quanto da meta deste mês já foi. Toque para ir ao Salário."],
         ["ativos", "Alocação por pilar", "Quanto do total está em cada pilar comparado com a sua meta. A meta se ajusta em Ajustes → Metas de alocação."],
         ["moeda", "Dividendos", "Quanto você recebeu, a média mensal e os próximos pagamentos anunciados."],
         ["agro", "Agronegócio", "Cabeças no rebanho e o valor estimado do gado, quando você usa o Agro."],
@@ -37,6 +38,7 @@
         ["renda", "Custos", "Ração, vacina, pasto, frete e o que mais a atividade consumir, por categoria."],
         ["balanca", "Pesagens", "Peso médio por lote. Vira o valor estimado do rebanho e o ganho médio diário (GMD)."],
         ["projecoes", "Resultado da atividade", "Quanto entrou, quanto saiu e o resultado, somando o valor do gado que ainda está no pasto."],
+        ["moeda", "Venda e reinvestimento", "Ao vender, diga quanto volta para o gado. O reinvestido fica no caixa do agro e paga as próximas compras sem contar como aporte — vender 1 e recomprar 2 é crescimento, não saque. Só o saque sai do patrimônio."],
         ["boi", "Rebanho por categoria", "Cabeças em cada categoria agora, e a evolução ao longo do tempo."],
       ],
       dicas: ["Numa venda maior que o estoque da categoria, o painel tira da categoria de origem (ex.: boi magro que virou boi gordo).", "Em compras e vendas, informe o preço por @, por cabeça ou o total — o painel calcula o resto."],
@@ -65,6 +67,7 @@
       partes: [
         ["carteira", "Ganhos", "Salário, pró-labore, extras, 13º… Fixos valem todo mês a partir do início; avulsos, só na data. Dá para marcar o dia de receber, como o 5º dia útil."],
         ["ativos", "Seu plano", "Percentual da renda (ou valor fixo) para investir e a divisão entre pilares, ativos ou títulos. Com reinvestimento ligado, os dividendos do mês entram no valor."],
+        ["ativos", "Sequência de aportes", "O foguinho roxo conta os meses seguidos em que você bateu a meta do plano. O mês atual não quebra a sequência enquanto está em andamento; mês sem renda cadastrada fica congelado."],
         ["check", "Guia do mês", "O planejado para cada destino, o que você já aportou e o que falta. Navegue entre os meses com as setas."],
         ["projecoes", "Últimos 6 meses", "Renda e quanto dela virou investimento, mês a mês."],
       ],

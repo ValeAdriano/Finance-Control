@@ -73,6 +73,12 @@
         dentro.agro.push({ nome: c.nome, ticker: null, tipo: `${FC.fmt.int(c.cabecas)} cabeças`, valor: c.valor, score: null, cor: "terra", veredito: null });
       }
     }
+    // dinheiro de vendas reinvestido que ainda espera a próxima compra
+    const caixaAgro = agro ? agro.financeiro.caixa_agro || 0 : 0;
+    if (caixaAgro > 0.5) {
+      valor.agro += caixaAgro;
+      dentro.agro.push({ nome: "Caixa do agro", ticker: null, tipo: "reinvestido, à espera da compra", valor: caixaAgro, score: null, cor: "terra", veredito: null });
+    }
     const total = Object.values(valor).reduce((a, b) => a + b, 0);
     if (!total) return { linhas: [], total: 0 };
     // pilares sem valor e sem meta não aparecem (ex.: agro zerado)
@@ -244,7 +250,7 @@
         investido, atual, resultado: atualComCusto - investido,
         // só as posições com preço médio conhecido entram na conta
         variacao: investido ? (atualComCusto / investido - 1) * 100 : null,
-        renda_fixa: rf, agro: agro.valorRebanho, patrimonio: total || atual + rf + agro.valorRebanho,
+        renda_fixa: rf, agro: agro.valorRebanho + (agro.financeiro.caixa_agro || 0), patrimonio: total || atual + rf + agro.valorRebanho + (agro.financeiro.caixa_agro || 0),
         cripto, bolsa: atual - cripto, variacao_hoje: hojeAbs, por_classe: porClasse,
         tem_preco_medio: investido > 0,
       },

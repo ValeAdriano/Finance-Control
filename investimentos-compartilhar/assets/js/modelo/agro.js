@@ -143,7 +143,10 @@
     const cabCompradas = FC.soma(compras, (m) => m.cabecas);
 
     const investido = gastoCompras + totalCustos;
+    const cx = caixa(movs, custos);
     const financeiro = {
+      caixa_agro: cx.saldo,
+      aportado: FC.soma(cx.fluxos, (f) => f.aporte), sacado: FC.soma(cx.fluxos, (f) => f.saque),
       gasto_compras: gastoCompras, receita_vendas: receitaVendas, custos: totalCustos,
       investido, caixa_liquido: receitaVendas - investido,
       // resultado econômico: o que entrou + o que o rebanho vale hoje − tudo que saiu
@@ -211,5 +214,47 @@
     return ok(valor_total) ? valor_total : 0;
   }
 
-  FC.agro = { analisa, arrobas, valorDaOperacao };
+  // ---------------------------------------------------------------- caixa do agro
+  // O dinheiro que gira dentro da atividade. Numa venda, a parte
+  // reinvestida fica aqui e paga as próximas compras e custos; só o que
+  // passa do caixa é aporte novo, e só o que sai da venda sem voltar é
+  // saque. Assim vender 1 por 1,8x e recomprar 2 é crescimento, não um
+  // saque seguido de um aporte.
+  // Devolve os fluxos que de fato entram e saem da carteira e o saldo do
+  // caixa depois de cada lançamento.
+  function caixa(movs, custos) {
+    const ordem = { venda: 0, saida: 1, compra: 2, entrada: 3, custo: 4 };
+    const evs = [
+      ...(movs || []).filter((m) => ["compra", "venda", "entrada", "saida"].includes(m.tipo))
+        .map((m) => ({ data: m.data, tipo: m.tipo, id: m.id, m })),
+      ...(custos || []).map((c) => ({ data: c.data, tipo: "custo", id: c.id, c })),
+    ].sort((a, b) => a.data.localeCompare(b.data) || ordem[a.tipo] - ordem[b.tipo]
+      || String((a.m || a.c).criado_em || "").localeCompare(String((b.m || b.c).criado_em || "")));
+    let saldo = 0;
+    const fluxos = [], porId = {};
+    for (const e of evs) {
+      let aporte = 0, saque = 0, doCaixa = 0, reinvestido = 0;
+      if (e.tipo === "venda") {
+        const liquido = Math.max(0, e.m.valor_total - e.m.despesas);
+        reinvestido = Math.min(liquido, Math.max(0, Number(e.m.reinvestido) || 0));
+        saldo += reinvestido;
+        saque = liquido - reinvestido;
+      } else if (e.tipo === "saida") {
+        saque = e.m.valor_total || 0;
+      } else {
+        const custo = e.tipo === "custo" ? e.c.valor : e.tipo === "compra" ? e.m.valor_total + e.m.despesas : e.m.valor_total || 0;
+        doCaixa = Math.min(saldo, custo);
+        saldo -= doCaixa;
+        aporte = custo - doCaixa;
+      }
+      const f = { data: e.data, tipo: e.tipo, id: e.id, aporte, saque, do_caixa: doCaixa, reinvestido, saldo };
+      fluxos.push(f);
+      if (e.id) porId[e.id] = f;
+    }
+    // saldo do caixa ao fim de um dia
+    const saldoEm = (d) => { let v = 0; for (const f of fluxos) { if (f.data > d) break; v = f.saldo; } return v; };
+    return { fluxos, porId, saldo, saldoEm };
+  }
+
+  FC.agro = { analisa, arrobas, valorDaOperacao, caixa };
 })();

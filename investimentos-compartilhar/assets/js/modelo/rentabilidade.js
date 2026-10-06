@@ -271,16 +271,16 @@
     const ativos = dados.ativos.filter((a) => a.posicao || base.aportes.some((x) => x.tipo === "ativo" && x.ticker === a.ticker))
       .map((a) => ({ ticker: a.ticker, classe: a.classe, ...avaliaAtivo(a.item, base.aportes, a.preco, porTicker[a.ticker] || [], hoje) }));
     const titulos = base.rendaFixa.map((t) => ({ nome: t.nome, ...avaliaTitulo(t, base.aportes, ix, hoje) }));
-    // agro: compras, custos e entradas saem do bolso; vendas e saídas voltam
+    // agro: só o que passa do caixa da atividade sai do bolso (aporte) e só
+    // o que não é reinvestido volta (saque) — ver FC.agro.caixa
+    const cxAgro = FC.agro.caixa(base.agro.movs, base.agro.custos);
     const fAgro = [];
-    for (const m of base.agro.movs) {
-      if (m.tipo === "compra") fAgro.push({ data: m.data, valor: -(m.valor_total + m.despesas) });
-      else if (m.tipo === "venda") fAgro.push({ data: m.data, valor: m.valor_total - m.despesas });
-      else if (m.tipo === "entrada" && m.valor_total) fAgro.push({ data: m.data, valor: -m.valor_total });
-      else if (m.tipo === "saida" && m.valor_total) fAgro.push({ data: m.data, valor: m.valor_total });
+    for (const f of cxAgro.fluxos) {
+      if (f.aporte > 0) fAgro.push({ data: f.data, valor: -f.aporte });
+      if (f.saque > 0) fAgro.push({ data: f.data, valor: f.saque });
     }
-    for (const c of base.agro.custos) fAgro.push({ data: c.data, valor: -c.valor });
-    const agro = fAgro.length ? resumoFluxos(fAgro, dados.agro.valorRebanho || 0, hoje) : null;
+    const valorAgroHoje = (dados.agro.valorRebanho || 0) + cxAgro.saldo;
+    const agro = fAgro.length ? resumoFluxos(fAgro, valorAgroHoje, hoje) : null;
 
     const grupo = (lista, filtro) => {
       const ok = lista.filter(filtro).filter((x) => x.aplicado != null);
@@ -300,7 +300,7 @@
       ...fAgro,
     ];
     const final = ativos.filter((a) => a.aplicado != null).reduce((s, a) => s + a.valor_atual, 0)
-      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? dados.agro.valorRebanho || 0 : 0);
+      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0);
     return { ativos, titulos, classes, total: fl.length ? resumoFluxos(fl, final, hoje) : null,
       sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker) };
   }
@@ -332,7 +332,9 @@
     const agroEm = datasAgro.map((d) => [d, FC.agro.analisa({
       movs: movsAgro.filter((m) => m.data <= d), custos: (base.agro.custos || []).filter((c) => c.data <= d),
       pesagens: (base.agro.pesagens || []).filter((p) => p.data <= d) }, prefs.agro).valorRebanho || 0]);
-    const valorAgro = (d) => { let v = 0; for (const [dd, x] of agroEm) { if (dd > d) break; v = x; } return v; };
+    // + o dinheiro de vendas reinvestido que ainda não virou gado
+    const cxAgro = FC.agro.caixa(movsAgro, base.agro.custos || []);
+    const valorAgro = (d) => { let v = 0; for (const [dd, x] of agroEm) { if (dd > d) break; v = x; } return v + cxAgro.saldoEm(d); };
 
     // dinheiro que entrou até cada dia (aporte +, resgate/venda −)
     const fluxos = [];
@@ -345,13 +347,7 @@
       if (p != null) fluxos.push([e.data, e.q * p]);
     }
     for (const ls of titulos) for (const l of ls) fluxos.push([l.data, l.valor]);
-    for (const m of movsAgro) {
-      if (m.tipo === "compra") fluxos.push([m.data, m.valor_total + m.despesas]);
-      else if (m.tipo === "venda") fluxos.push([m.data, -(m.valor_total - m.despesas)]);
-      else if (m.tipo === "entrada" && m.valor_total) fluxos.push([m.data, m.valor_total]);
-      else if (m.tipo === "saida" && m.valor_total) fluxos.push([m.data, -m.valor_total]);
-    }
-    for (const c of base.agro.custos || []) fluxos.push([c.data, c.valor]);
+    for (const f of cxAgro.fluxos) if (f.aporte || f.saque) fluxos.push([f.data, f.aporte - f.saque]);
     fluxos.sort((a, b) => a[0].localeCompare(b[0]));
 
     const pontos = [];

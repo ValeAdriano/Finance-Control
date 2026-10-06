@@ -38,7 +38,7 @@
     const tt = FC.soma(caixa.titulos, (t) => t.valor);
     caixa.taxa_real = tt ? FC.soma(caixa.titulos, (t) => t.valor * t.real) / tt : 0;
 
-    if (dados.agro && dados.agro.valorRebanho > 0) pilares.agro = { valor: dados.agro.valorRebanho, dy: 0, titulos: [] };
+    if (dados.agro && dados.resumo.agro > 0) pilares.agro = { valor: dados.resumo.agro, dy: 0, titulos: [] };
     return pilares;
   }
 

@@ -86,7 +86,7 @@
   function normAporte(a) { return { ...a, quantidade: num(a.quantidade), preco: num(a.preco), valor: num(a.valor), taxa: num(a.taxa) }; }
   function normMov(m) {
     return { ...m, cabecas: Number(m.cabecas), peso_medio_kg: num(m.peso_medio_kg), preco_arroba: num(m.preco_arroba),
-             preco_cabeca: num(m.preco_cabeca), valor_total: num(m.valor_total) || 0, despesas: num(m.despesas) || 0 };
+             preco_cabeca: num(m.preco_cabeca), valor_total: num(m.valor_total) || 0, despesas: num(m.despesas) || 0, reinvestido: num(m.reinvestido) };
   }
 
   // ------------------------------------------------------------------ dados

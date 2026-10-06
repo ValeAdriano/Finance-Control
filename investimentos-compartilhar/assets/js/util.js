@@ -234,6 +234,27 @@
     return cru(`<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg>`);
   };
 
+  // foguinho roxo da sequência de aportes. Aceso, a chama dança e brilha;
+  // apagado, fica cinza e parado. Com pct, ganha o anel do mês em volta
+  // (quanto da meta já foi), no estilo dos anéis do WHOOP.
+  let seqFogo = 0;
+  FC.foguinho = function (tam = 24, { aceso = true, pct = null, extra = "" } = {}) {
+    const id = "fg" + ++seqFogo;
+    const anel = pct == null ? "" : (() => {
+      const c = 2 * Math.PI * 18, p = Math.max(0, Math.min(100, pct));
+      return `<svg class="anel-fogo" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" class="trilho"/>
+        <circle cx="20" cy="20" r="18" class="progresso" stroke="url(#${id}a)" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - p / 100)).toFixed(2)}"/>
+        <defs><linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c084fc"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs></svg>`;
+    })();
+    return cru(`<span class="fogo ${aceso ? "aceso" : "apagado"}${pct == null ? "" : " com-anel"}" style="--t:${tam}px" ${extra}>${anel}
+      <svg class="chama" viewBox="0 0 32 32" aria-hidden="true"><defs>
+        <linearGradient id="${id}e" x1="0.5" y1="0" x2="0.5" y2="1"><stop offset="0" stop-color="#c084fc"/><stop offset="0.55" stop-color="#a855f7"/><stop offset="1" stop-color="#6d28d9"/></linearGradient>
+        <linearGradient id="${id}i" x1="0.5" y1="0" x2="0.5" y2="1"><stop offset="0" stop-color="#f5f3ff"/><stop offset="1" stop-color="#d8b4fe"/></linearGradient></defs>
+        <g class="ch-ext"><path fill="url(#${id}e)" d="M16 2.5C17.5 7 23.5 10 24.5 17 25.3 23 21.3 28.5 16 28.5 10.7 28.5 6.7 24 7.3 18.5 7.7 14.8 9.8 12.6 11.2 10.2 11.7 12.6 12.6 14 13.9 14.6 13.6 10 14.6 6 16 2.5Z"/></g>
+        <g class="ch-int"><path fill="url(#${id}i)" d="M16 13.5C17 16.5 20.3 18.2 20.3 22.2 20.3 25 18.4 26.8 16 26.8 13.6 26.8 11.7 25 11.7 22.6 11.7 20.4 13 19.3 14 17.6 14.4 18.9 15 19.6 15.7 19.9 15.5 17.6 15.4 15.6 16 13.5Z"/></g>
+      </svg></span>`);
+  };
+
   // ---------------------------------------------------------------- DOM
   FC.$ = (sel, raiz = document) => raiz.querySelector(sel);
   FC.$$ = (sel, raiz = document) => Array.from(raiz.querySelectorAll(sel));

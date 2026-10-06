@@ -68,10 +68,70 @@
     let v = FC.soma(ap.filter((a) => a.tipo === "ativo" && pilarAtivo[a.ticker] === d.alvo), (a) => a.valor)
       + FC.soma(ap.filter((a) => a.tipo === "caixa" && !a.historico && (pilarRf[a.titulo] || "caixa") === d.alvo), (a) => a.valor);
     if (d.alvo === "agro") {
-      v += FC.soma(base.agro.movs.filter((m) => noMes(m) && m.tipo === "compra"), (m) => m.valor_total + m.despesas)
-        + FC.soma(base.agro.custos.filter(noMes), (c) => c.valor);
+      // só o dinheiro novo: o que veio do caixa de vendas reinvestidas não é aporte
+      v += aporteAgroNoMes(base, mes);
     }
     return v;
+  }
+
+  // aporte novo no agro dentro do mês (compras e custos além do caixa da atividade)
+  const cacheCaixa = new WeakMap();
+  function aporteAgroNoMes(base, mes) {
+    const movs = base.agro.movs || [];
+    let cx = cacheCaixa.get(movs);
+    if (!cx || cx.custos !== base.agro.custos) {
+      cx = { custos: base.agro.custos, r: FC.agro.caixa(movs, base.agro.custos || []) };
+      cacheCaixa.set(movs, cx);
+    }
+    return FC.soma(cx.r.fluxos.filter((f) => mesDe(f.data) === mes), (f) => f.aporte);
+  }
+
+  // tudo o que entrou em investimentos no mês, com ou sem plano
+  function investidoNoMes(base, mes) {
+    return FC.soma(base.aportes.filter((a) => a.data && mesDe(a.data) === mes && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor)
+      + aporteAgroNoMes(base, mes);
+  }
+
+  // a meta de aporte de um mês: o valor base do plano (sem dividendos)
+  function metaDoMes(plano, ganhos, mes) {
+    if (!plano) return 0;
+    if (plano.modo === "valor") return Number(plano.valor) || 0;
+    return (rendaDoMes(ganhos, mes).total * (Number(plano.percentual) || 0)) / 100;
+  }
+
+  // ---------------------------------------------------------------- sequência
+  // Meses seguidos batendo a meta do plano, estilo Duolingo. O mês atual
+  // soma quando já bateu e, enquanto não bate, não quebra nada. Mês sem
+  // meta (sem renda cadastrada) congela: não soma nem quebra.
+  function streak({ plano, ganhos = [], base, hoje = FC.datas.hoje() }) {
+    const atualMes = mesDe(hoje);
+    const datas = [...base.aportes.map((a) => a.data), ...(base.agro.movs || []).map((m) => m.data),
+      ...(base.agro.custos || []).map((c) => c.data), ...ganhos.map((g) => g.inicio)].filter(Boolean).sort();
+    const primeiro = datas.length ? mesDe(datas[0]) : atualMes;
+    const anterior = (m) => { const [a, n] = m.split("-").map(Number); return n === 1 ? `${a - 1}-12` : `${a}-${String(n - 1).padStart(2, "0")}`; };
+    const estadoDe = (mes) => {
+      const meta = metaDoMes(plano, ganhos, mes), investido = investidoNoMes(base, mes);
+      const batido = meta > 0 && investido >= meta - 0.5;
+      const estado = meta <= 0 ? "sem_meta" : batido ? "batido" : mes === atualMes ? "andamento" : "abaixo";
+      return { mes, meta, investido, pct: meta > 0 ? Math.min(100, (investido / meta) * 100) : 0, batido, estado };
+    };
+    const lista = [];
+    for (let m = atualMes; m >= primeiro; m = anterior(m)) lista.push(estadoDe(m));
+    // sequência atual: do mês atual para trás
+    let atual = 0;
+    for (const x of lista) {
+      if (x.estado === "batido") atual++;
+      else if (x.estado === "abaixo") break;
+    }
+    // recorde: a maior sequência em todo o histórico
+    let recorde = 0, corre = 0;
+    for (const x of [...lista].reverse()) {
+      if (x.estado === "batido") recorde = Math.max(recorde, ++corre);
+      else if (x.estado === "abaixo") corre = 0;
+    }
+    const meses = [];
+    for (let i = 0, m = atualMes; i < 12; i++, m = anterior(m)) meses.unshift(lista.find((x) => x.mes === m) || { mes: m, estado: "sem_meta", meta: 0, investido: 0, pct: 0 });
+    return { atual, recorde, mesAtual: lista[0], meses, tem_meta: lista.some((x) => x.meta > 0) };
   }
 
   // ---------------------------------------------------------------- plano do mês
@@ -141,5 +201,5 @@
     return saida.sort((x, y) => x.data.localeCompare(y.data));
   }
 
-  FC.salario = { dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+  FC.salario = { streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
 })();
