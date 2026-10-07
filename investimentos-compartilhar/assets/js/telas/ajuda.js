@@ -8,26 +8,28 @@
   // cada guia: resumo, partes da tela [ícone, nome, o que faz] e dicas
   const GUIAS = {
     inicio: {
-      resumo: "O retrato do seu dinheiro hoje: quanto você tem, como cresceu e onde está.",
+      resumo: "O retrato do seu dinheiro hoje: quanto você tem, quanto colocou, quanto ganhou e o que pede atenção.",
       partes: [
-        ["inicio", "Patrimônio", "Soma de tudo — bolsa, cripto, renda fixa e rebanho — com o preço de mercado de agora. Abaixo, a variação do dia e desde o início."],
-        ["projecoes", "Crescimento do patrimônio", "O patrimônio reconstruído dia a dia: posições × preço de cada dia, renda fixa rendendo aporte a aporte e o rebanho. A linha tracejada é o total que você anotava à parte. O TWR compara com o CDI do mesmo período."],
-        ["ativos", "Foguinho roxo", "Sua sequência: quantos meses seguidos você bateu a meta de aporte do plano. O anel em volta mostra quanto da meta deste mês já foi. Toque para ir ao Salário."],
+        ["inicio", "Quanto eu tenho", "Tudo o que você tem — bolsa, cripto, renda fixa e rebanho — a preço de agora, já sem o imposto de renda estimado: é o que ficaria com você se resgatasse tudo hoje. O valor bruto aparece logo abaixo."],
+        ["carteira", "Quanto eu coloquei e quanto ganhei", "Coloquei é o dinheiro que saiu do seu bolso (aportes menos o que já voltou em vendas, resgates e proventos). Ganhei é a diferença, em reais e em %."],
+        ["check", "Rendeu mais que o CDI?", "Uma frase compara o rendimento ao ano do seu dinheiro com o CDI e a inflação do mesmo período: verde se ganhou do CDI, amarelo se só da inflação, vermelho se nem da inflação. Com menos de 90 dias, compara o período sem anualizar. Em “Ver detalhes” ficam TIR, retorno no período, TWR, cada classe e os juros do dia."],
+        ["alerta", "Atenção", "Avisos sobre a carteira: muito dinheiro num só ativo ou setor, título vencendo, valor acima da garantia do FGC num mesmo banco, reserva de emergência abaixo da meta e exposição ao dólar."],
+        ["calendario", "Próximos 30 dias", "Títulos de renda fixa que vencem e proventos que vão cair na conta, por data."],
+        ["moeda", "Renda passiva", "Quanto os proventos rendem por mês (média de 12 meses) e quanto falta para a renda que você definiu em Ajustes → Objetivos."],
         ["ativos", "Alocação por pilar", "Quanto do total está em cada pilar comparado com a sua meta. A meta se ajusta em Ajustes → Metas de alocação."],
-        ["moeda", "Dividendos", "Quanto você recebeu, a média mensal e os próximos pagamentos anunciados."],
-        ["agro", "Agronegócio", "Cabeças no rebanho e o valor estimado do gado, quando você usa o Agro."],
-        ["check", "Mais aderentes aos seus critérios", "Os ativos da sua lista com as melhores notas nas quatro lentes de avaliação."],
+        ["projecoes", "Crescimento do patrimônio", "O patrimônio reconstruído dia a dia: posições × preço de cada dia, renda fixa rendendo aporte a aporte e o rebanho. A linha tracejada é o total que você anotava à parte. Dá para comparar com a Selic e o Ibovespa."],
+        ["presente", "Proventos por mês", "O que a carteira depositou em cada mês."],
       ],
-      dicas: ["Toque no olho do topo para borrar os valores em público.", "O botão de atualizar busca as cotações na hora; sem ele, o painel atualiza sozinho a cada minuto."],
+      dicas: ["Em Ajustes → Objetivos, informe o custo de vida e a renda que deseja: o painel passa a medir a reserva de emergência e o caminho para viver de renda.", "Ao editar um título de renda fixa, informe o banco, se é isento de IR e se é a sua reserva — os avisos do FGC e da reserva usam isso.", "Toque no olho do topo para borrar os valores em público."],
     },
     ativos: {
       resumo: "Tudo o que você tem ou acompanha na bolsa e em cripto, avaliado pelos seus critérios, e a renda fixa contra o CDI.",
       partes: [
-        ["ativos", "Minha lista", "Seus ativos com quantidade, preço médio, valor atual e o veredito: Atende, Zona cinzenta ou Não atende. Use o botão “+ Ativo” para cadastrar um novo."],
+        ["ativos", "Minha lista", "Seus ativos com quantidade, preço médio, valor atual e o veredito: dentro, perto ou fora dos seus critérios. Use o botão “+ Ativo” para cadastrar um novo."],
         ["info", "Detalhe do ativo", "Toque em um ativo para ver indicadores, evolução da posição e como a nota é formada nas quatro lentes. FIIs ganham um raio-x da CVM e uma análise própria do tipo: tijolo (vacância física e financeira, concentração em imóveis), papel (concentração em CRIs), fundo de fundos e híbrido."],
         ["moeda", "Pagadoras de dividendos", "Ranking de quem paga: frequência, meses em que paga, quanto do preço devolve por ano e há quantos anos paga sem falhar."],
         ["renda", "Renda fixa", "Seus títulos com taxa, vencimento e rendimento real (descontada a inflação). “+ Título” cadastra um novo."],
-        ["carteira", "Seu dinheiro investido", "Quanto você colocou, quanto vale e o ganho. O % é do período, com cada aporte na sua data (não é valor de hoje ÷ total aportado), e a TIR mostra a taxa ao ano."],
+        ["carteira", "Seu dinheiro investido", "Quanto saiu do seu bolso, quanto vale e o ganho, com um percentual só: ao ano (com cada aporte na sua data) ou, antes de 90 dias, no período. Retorno no período, TIR e cada classe ficam em “Ver detalhes”."],
       ],
       dicas: ["O campo “Analisar qualquer código” avalia um ticker sem cadastrar; se gostar, toque em Adicionar.", "Cripto usa a cotação em reais do CoinGecko; ações e FIIs, a da B3."],
     },
@@ -77,7 +79,7 @@
       partes: [
         ["carteira", "Ganhos", "Salário, pró-labore, extras, 13º… Fixos valem todo mês a partir do início; avulsos, só na data. Dá para marcar o dia de receber, como o 5º dia útil."],
         ["ativos", "Seu plano", "Percentual da renda (ou valor fixo) para investir e a divisão entre pilares, ativos ou títulos. Com reinvestimento ligado, os dividendos do mês entram no valor."],
-        ["ativos", "Sequência de aportes", "O foguinho roxo conta os meses seguidos em que você bateu a meta do plano. O mês atual não quebra a sequência enquanto está em andamento; mês sem renda cadastrada fica congelado."],
+        ["ativos", "Sequência de aportes", "Com o módulo “Sequência e vídeo” ligado em Ajustes, o foguinho roxo conta os meses seguidos em que você bateu a meta do plano. O mês atual não quebra a sequência enquanto está em andamento; mês sem renda cadastrada fica congelado."],
         ["check", "Guia do mês", "O planejado para cada destino, o que você já aportou e o que falta. Navegue entre os meses com as setas."],
         ["projecoes", "Últimos 6 meses", "Renda e quanto dela virou investimento, mês a mês."],
       ],
@@ -126,7 +128,8 @@
     ajustes: {
       resumo: "Conta, segurança e os critérios que o painel usa.",
       partes: [
-        ["simular", "Módulos", "Liga e desliga o que nem todo mundo usa: agronegócio, cripto, bolsa dos EUA, análise de setores e simulador. Desligar só tira dos menus; os dados ficam."],
+        ["alvo", "Objetivos", "Custo de vida por mês, quantos meses de reserva de emergência (6, se não mudar) e a renda passiva que você quer. O Início usa isso nos avisos e na barra de renda passiva."],
+        ["simular", "Módulos", "Liga e desliga o que nem todo mundo usa: agronegócio, cripto, bolsa dos EUA, análise de setores, simulador e a sequência de aportes com o vídeo de divulgação. Desligar só tira dos menus; os dados ficam."],
         ["cadeado", "Conta e segurança", "Nome, verificação em duas etapas, troca de senha e sair dos outros aparelhos."],
         ["olho", "Aparência", "Tema claro, escuro ou automático e o modo privado."],
         ["ativos", "Metas e regras", "Metas de alocação por pilar, o peso de cada lente e as faixas de cada indicador."],

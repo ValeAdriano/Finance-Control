@@ -22,6 +22,7 @@
     { chave: "exterior", nome: "Bolsa dos EUA", icone: "ativos", desc: "ações e ETFs negociados nos Estados Unidos", classes: ["acao_us", "etf_us"] },
     { chave: "renda", nome: "Análise de setores", icone: "renda", desc: "aba Renda: empresas de setores perenes pelos seus critérios de dividendo", rotas: ["renda"] },
     { chave: "simular", nome: "Simulador de compras", icone: "simular", desc: "aba Simular: o efeito de uma cesta na alocação antes de comprar", rotas: ["simular"] },
+    { chave: "engajamento", nome: "Sequência e vídeo", icone: "play", desc: "o foguinho da sequência de aportes e o vídeo de divulgação" },
   ];
   // sem escolha salva, liga o que a conta já usa
   FC.resolveModulos = function (salvos, base) {
@@ -34,6 +35,7 @@
       exterior: ativos.some((a) => a.classe === "acao_us" || a.classe === "etf_us"),
       renda: false,
       simular: false,
+      engajamento: false,
     };
   };
   const mods = () => (FC.estado && FC.estado.prefs && FC.estado.prefs.modulos) || {};
@@ -68,11 +70,16 @@
     vacancia_financeira: "Vac. financ.", concentracao: "Concentração",
   };
 
+  // descreve a distância dos SEUS critérios — não é recomendação
   FC.VEREDITO_CURTO = {
-    "atende seus critérios": "Atende",
-    "zona cinzenta": "Zona cinzenta",
-    "fora dos seus critérios": "Fora",
+    "Dentro dos seus critérios": "Nos critérios",
+    "Perto dos seus critérios": "Perto",
+    "Fora dos seus critérios": "Fora",
     "sem dados": "Sem dados",
+    // textos antigos, caso algum venha de dado salvo
+    "atende seus critérios": "Nos critérios",
+    "zona cinzenta": "Perto",
+    "fora dos seus critérios": "Fora",
   };
 
   FC.PADRAO_ALOCACAO = { acoes: 25, real_estate: 25, alternativos: 25, caixa: 25, agro: 0 };
@@ -228,9 +235,22 @@
     reinvestir_proventos: true,
     distribuicao_aporte: "rebalancear",
     valorizacao_real_anual: { acoes: 4, real_estate: 0.5, alternativos: 3.5, caixa: 0, agro: 3 },
-    cenarios: { pessimista: -4, otimista: 3 },
+    cenarios: { pessimista: null, otimista: null },   // vazio: os deltas de FC.projecao.CENARIOS
     macro_longo_prazo: { cdi: null, ipca: null },
   };
+
+  // ------------------------------------------------------------------ objetivos
+  // Guardados em preferencias.premissas.objetivos (sem coluna própria), junto
+  // com premissas.titulos = { [id]: { instituicao, isento, reserva } }.
+  FC.PADRAO_OBJETIVOS = { custo_vida_mensal: null, meses_reserva: 6, renda_desejada_mensal: null };
+  FC.objetivos = function (prefs) {
+    const o = { ...FC.PADRAO_OBJETIVOS, ...((((prefs || {}).premissas) || {}).objetivos || {}) };
+    if (!(o.meses_reserva > 0)) o.meses_reserva = 6;
+    // sem renda desejada, a meta é cobrir o custo de vida
+    if (!(o.renda_desejada_mensal > 0)) o.renda_desejada_mensal = o.custo_vida_mensal > 0 ? o.custo_vida_mensal : null;
+    return o;
+  };
+  FC.infoTitulo = (prefs, id) => ((((prefs || {}).premissas) || {}).titulos || {})[id] || {};
 
   // ------------------------------------------------------------------ agro
   FC.CATEGORIAS_GADO = {

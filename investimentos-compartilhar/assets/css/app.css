@@ -1185,3 +1185,7 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 .adm-filtros .campo { flex: 0 1 190px; }
 .adm-filtros .campo select, .adm-filtros .entrada { min-height: 40px; font-size: 15px; }
 .adm-filtros .botao { align-self: center; }
+
+/* conteúdo recolhido ("Ver detalhes") */
+.detalhes > summary { cursor: pointer; color: var(--acento); font-size: 14px; }
+.detalhes[open] > summary { margin-bottom: var(--e2); }

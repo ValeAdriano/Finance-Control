@@ -19,9 +19,31 @@
       distribuicao_aporte: d.distribuicao_aporte,
       reinvestir_proventos: !!d.reinvestir_proventos,
       valorizacao_real_anual: Object.fromEntries(FC.PILARES.filter((p) => p.chave !== "caixa").map((p) => [p.chave, n("val_" + p.chave) ?? (base.valorizacao_real_anual || {})[p.chave] ?? 0])),
-      cenarios: { pessimista: n("cen_pessimista") ?? -4, otimista: n("cen_otimista") ?? 3 },
+      // vazio cai no padrão do modelo (FC.projecao.CENARIOS)
+      cenarios: { pessimista: n("cen_pessimista"), otimista: n("cen_otimista") },
       macro_longo_prazo: { cdi: n("cdi_lp"), ipca: n("ipca_lp") },
     });
+  }
+
+  // o que muda em cada cenário, em português
+  const sinal = (v, suf) => (v > 0 ? "+" : v < 0 ? "−" : "") + fmt.num(Math.abs(v), Number.isInteger(v) ? 0 : 1) + suf;
+  const pp = (v) => sinal(v, " p.p.");
+  function explicaCenario(d) {
+    return `valorização real ${pp(d.valorizacao)} ao ano por pilar de renda variável, CDI real ${pp(d.juro_real)} nos pós-fixados, proventos ${sinal(d.dy, "%")}`;
+  }
+
+  function cenarios(p) {
+    const cols = [["Pessimista", p.pessimista, "neg"], ["Base", p.base, ""], ["Otimista", p.otimista, "pos"]];
+    return html`<section class="secao">
+      <div class="secao-topo"><h2>Três cenários</h2><span class="sub">em ${p.premissas.horizonte_anos} anos, em moeda de hoje</span></div>
+      <div class="cartao sem-pad rolagem"><table class="tabela"><thead><tr><th>Cenário</th><th class="n">Patrimônio final</th><th class="n">Renda mensal</th><th class="esconde-mob">O que muda</th></tr></thead>
+        <tbody>${cols.map(([nome, c, cls]) => html`<tr><td><b>${nome}</b></td><td class="n"><b class="${cls}">${fmt.brl(c.final, 0)}</b></td>
+          <td class="n">${fmt.brl(c.renda_mensal_final)}<span class="leg">por mês</span></td>
+          <td class="fraco esconde-mob" style="font-size:13px">${nome === "Base" ? "as suas premissas, como estão acima" : explicaCenario(c.deltas)}</td></tr>`)}</tbody></table></div>
+      <p class="texto-p mt2">O <b>base</b> é a aritmética das suas premissas. O <b>pessimista</b> e o <b>otimista</b> mexem nas três alavancas que mais pesam: a valorização real da renda variável (o campo “Pessimista/Otimista” acima; em branco vale ${pp(FC.projecao.CENARIOS.pessimista.valorizacao)} e ${pp(FC.projecao.CENARIOS.otimista.valorizacao)}),
+        o juro real do CDI nos títulos pós-fixados (${pp(FC.projecao.CENARIOS.pessimista.juro_real)} e ${pp(FC.projecao.CENARIOS.otimista.juro_real)}) e os proventos (${sinal(FC.projecao.CENARIOS.pessimista.dy, "%")} e ${sinal(FC.projecao.CENARIOS.otimista.dy, "%")} sobre o DY observado).
+        Prefixados e IPCA+ seguem a taxa contratada nos três. Não são probabilidades: são o mesmo plano com o mundo um pouco pior ou um pouco melhor.</p>
+    </section>`;
   }
 
   function resultado(p) {
@@ -47,11 +69,13 @@
           <div class="legenda-g"><span><i class="k1"></i>cenário base</span><span><i class="kbanda"></i>entre pessimista e otimista</span></div>
         </div>
       </section>
+      ${cenarios(p)}
       <div class="grade g2 secao">
         <div class="cartao"><h3>Renda de proventos</h3><p class="sub mb2">quanto a carteira deposita por mês, pelo DY que os seus ativos pagaram nos últimos 12 meses</p>
           <dl class="kpis mb2"><div class="kpi pequeno"><dt>Hoje</dt><dd>${fmt.brl(b.renda_mensal_hoje)}<small>por mês</small></dd></div>
-            <div class="kpi pequeno"><dt>Em ${p.premissas.horizonte_anos} anos</dt><dd>${fmt.brl(b.renda_mensal_final)}<small>por mês, em poder de compra de hoje</small></dd></div></dl>
-          ${FC.graficos.linhas({ series: [{ nome: "Provento mensal", pontos: b.renda, classe: "l2", area: false }], x: "anos", altura: 200 })}</div>
+            <div class="kpi pequeno"><dt>Em ${p.premissas.horizonte_anos} anos</dt><dd>${fmt.brl(b.renda_mensal_final)}<small>por mês, em poder de compra de hoje · entre ${fmt.brl(p.pessimista.renda_mensal_final, 0)} e ${fmt.brl(p.otimista.renda_mensal_final, 0)}</small></dd></div></dl>
+          ${FC.graficos.linhas({ series: [{ nome: "Provento mensal", pontos: b.renda, classe: "l2", area: false }],
+            banda: b.renda.length ? { inf: p.pessimista.renda, sup: p.otimista.renda } : null, x: "anos", altura: 200 })}</div>
         <div class="cartao"><h3>De onde vem o patrimônio</h3><p class="sub mb2">só a valorização depende de premissa; aportes são decisão sua e proventos vêm de dado observado</p>
           ${FC.graficos.composicao([{ valor: b.inicial, cor: "var(--sref)" }, { valor: b.aportado, cor: "var(--s1)" }, { valor: p.premissas.reinvestir_proventos ? b.proventos : 0, cor: "var(--s2)" }, { valor: b.valorizacao, cor: "var(--s3)" }])}
           <dl class="kpis mt3">
@@ -103,8 +127,8 @@
         <p class="rot fraco mt3 mb2" style="font-size:13px;font-weight:500">Valorização real ao ano, sem contar proventos (%)</p>
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
           ${FC.pilaresLigados().filter((p) => p.chave !== "caixa").map((p) => campo("val_" + p.chave, p.nome, (prem.valorizacao_real_anual || {})[p.chave] ?? 0))}
-          ${campo("cen_pessimista", "Pessimista (p.p.)", prem.cenarios.pessimista)}
-          ${campo("cen_otimista", "Otimista (p.p.)", prem.cenarios.otimista)}
+          ${campo("cen_pessimista", "Pessimista (p.p.)", (prem.cenarios || {}).pessimista, `vazio: ${fmt.num(FC.projecao.CENARIOS.pessimista.valorizacao)}`, `placeholder="${fmt.num(FC.projecao.CENARIOS.pessimista.valorizacao)}"`)}
+          ${campo("cen_otimista", "Otimista (p.p.)", (prem.cenarios || {}).otimista, `vazio: +${fmt.num(FC.projecao.CENARIOS.otimista.valorizacao)}`, `placeholder="${fmt.num(FC.projecao.CENARIOS.otimista.valorizacao)}"`)}
         </div>
         <p class="rot fraco mt3 mb2" style="font-size:13px;font-weight:500">Cenário macro de longo prazo — em branco usa o de hoje</p>
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
@@ -147,7 +171,10 @@
     });
     const rest = FC.$("#bt-restaurar", raiz);
     if (rest) rest.addEventListener("click", async () => {
-      try { await FC.db.gravaPrefs({ premissas: null }); rascunho = null; await C.depoisDeMudar("Premissas padrão restauradas"); } catch (err) { FC.ui.erro(err); }
+      // volta ao padrão sem apagar objetivos e dados dos títulos
+      const p = FC.estado.base.prefsBrutas.premissas || {};
+      const fica = p.objetivos || p.titulos ? { objetivos: p.objetivos, titulos: p.titulos } : null;
+      try { await FC.db.gravaPrefs({ premissas: fica }); rascunho = null; await C.depoisDeMudar("Premissas padrão restauradas"); } catch (err) { FC.ui.erro(err); }
     });
   };
 })();

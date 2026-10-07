@@ -13,6 +13,7 @@
     { id: "agro", nome: "Agro", icone: "agro" },
     { id: "aportes", nome: "Aportes", icone: "aportes" },
     { id: "dividendos", nome: "Dividendos", icone: "moeda" },
+    { id: "irpf", nome: "Imposto de renda", icone: "recibo" },
     { id: "salario", nome: "Salário", icone: "carteira" },
     { id: "renda", nome: "Renda", icone: "renda" },
     { id: "simular", nome: "Simular", icone: "simular" },
@@ -50,7 +51,8 @@
     return {
       alocacao_alvo: { ...FC.PADRAO_ALOCACAO, ...(brutas.alocacao_alvo || {}) },
       premissas: FC.mescla(FC.PADRAO_PREMISSAS, brutas.premissas),
-      premissas_salvas: !!brutas.premissas,
+      // objetivos e dados dos títulos moram no mesmo jsonb, mas não são premissas da projeção
+      premissas_salvas: !!brutas.premissas && Object.keys(brutas.premissas).some((k) => k !== "objetivos" && k !== "titulos"),
       regras: brutas.regras ? FC.mescla(FC.PADRAO_REGRAS, brutas.regras) : JSON.parse(JSON.stringify(FC.PADRAO_REGRAS)),
       renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
       agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),

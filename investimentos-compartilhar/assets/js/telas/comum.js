@@ -29,8 +29,10 @@
   // ---------------------------------------------------------------- sequência de aportes
   const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   const MES_LONGO = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  // só com o módulo "Sequência e vídeo" ligado (Ajustes → Módulos)
   C.sequencia = function () {
     const e = FC.estado;
+    if (!FC.modulo("engajamento")) return null;
     if (!e.base || !e.prefs.plano) return null;
     const st = FC.salario.streak({ plano: e.prefs.plano, ganhos: e.base.ganhos || [], base: e.base });
     return st.tem_meta ? st : null;
@@ -84,6 +86,29 @@
     FC.ui.aviso(`Sequência de ${st.atual} ${meses(st.atual)}! Meta do mês batida.`);
   };
 
+  // ---------------------------------------------------------------- premissas
+  // objetivos e dados extras dos títulos moram em preferencias.premissas.
+  // gravaPrefs sobrescreve o jsonb inteiro: sempre mescla com o que já está lá.
+  C.gravaPremissas = async function (parcial) {
+    const b = FC.estado.base;
+    const atuais = (b.prefsBrutas && b.prefsBrutas.premissas) || {};
+    const premissas = { ...atuais, ...parcial };
+    await FC.db.gravaPrefs({ premissas });
+    b.prefsBrutas = { ...(b.prefsBrutas || {}), premissas };
+    return premissas;
+  };
+  // grava (ou apaga, com null) o que se sabe de um título além da tabela
+  C.gravaInfoTitulo = function (id, info) {
+    const b = FC.estado.base;
+    const titulos = { ...(((b.prefsBrutas || {}).premissas || {}).titulos || {}) };
+    if (info) titulos[id] = { ...(titulos[id] || {}), ...info }; else delete titulos[id];
+    return C.gravaPremissas({ titulos });
+  };
+
+  // "ver detalhes": o número técnico fica recolhido
+  C.detalhes = (corpo, rotulo = "Ver detalhes") => html`<details class="detalhes mt2"><summary style="cursor:pointer;color:var(--acento);font-size:14px">${rotulo}</summary>
+    <div class="mt2">${corpo}</div></details>`;
+
   C.vazio = (emoji, titulo, texto, acao) => html`<div class="vazio">
     <div class="icone-grande">${icone(ICONE_VAZIO[emoji] || emoji, 26)}</div><h3 style="font-size:19px;margin-bottom:6px">${titulo}</h3>
     <p class="texto-p" style="margin:0 auto 16px">${texto}</p>${acao || ""}</div>`;
@@ -106,24 +131,32 @@
     const pc = d.resumo.por_classe || {};
     const fontes = [pc.cripto ? "cripto pelo CoinGecko" : "", pc.bolsa ? "bolsa pelo Yahoo Finance (atraso de ~15 min)" : "", rt.classes.renda_fixa ? "renda fixa pelo CDI/IPCA do Banco Central" : ""].filter(Boolean).join(", ");
     const pctTxt = (v) => (ok(v) ? `${fmt.delta(v, 2)}%` : "—");
+    // um número só para o cliente: ao ano (TIR) quando há 90 dias; antes, no período
+    const principal = ok(t.xirr) ? [t.xirr, "ao ano"] : ok(t.periodo_pct) ? [t.periodo_pct, "desde o primeiro aporte"] : null;
+    const colocou = t.aplicado - (t.devolvido || 0);
     return html`<section class="secao">
       <div class="secao-topo"><h2>Seu dinheiro investido</h2>
         <span class="sub">${e.spotEm ? `preços de ${FC.datas.ha(e.spotEm)}` : "buscando preços…"}${fontes ? " · " + fontes : ""}</span></div>
       <div class="cartao">
         <dl class="kpis">
-          <div class="kpi"><dt>Você colocou</dt><dd>${fmt.brl(t.aplicado)}<small>${t.devolvido > 0.005 ? `e já voltaram ${fmt.brlTexto(t.devolvido)} (vendas, resgates, proventos)` : "soma de cada aporte, na data dele"}</small></dd></div>
+          <div class="kpi"><dt>Você colocou</dt><dd>${fmt.brl(colocou)}<small>${t.devolvido > 0.005 ? `aportou ${fmt.brlTexto(t.aplicado)} e já voltaram ${fmt.brlTexto(t.devolvido)}` : "o que saiu do seu bolso"}</small></dd></div>
           <div class="kpi"><dt>Vale agora</dt><dd>${fmt.brl(t.valor_atual)}<small>preço de agora · renda fixa com rendimento</small></dd></div>
           <div class="kpi"><dt>Ganho</dt><dd class="${t.ganho >= 0 ? "pos" : "neg"}">${t.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(t.ganho))}
-            <small>${ok(t.periodo_pct) ? html`<b class="${t.periodo_pct >= 0 ? "pos" : "neg"}">${pctTxt(t.periodo_pct)}</b> no período${ok(t.xirr) ? html` · <b>${pctTxt(t.xirr)}</b> ao ano (TIR)` : ""}` : ""}</small></dd></div>
+            <small>${principal ? html`<b class="${principal[0] >= 0 ? "pos" : "neg"}">${pctTxt(principal[0])}</b> ${principal[1]}` : ""}</small></dd></div>
         </dl>
-        ${compacto && classes.length < 2 ? "" : html`<div class="lista mt3" style="box-shadow:none">${classes.map(([k, nome, cor]) => {
+        ${C.detalhes(html`
+        ${compacto && classes.length < 2 ? "" : html`<div class="lista" style="box-shadow:none">${classes.map(([k, nome, cor]) => {
           const c = rt.classes[k];
           return html`<div class="item"><span class="ponto-e" style="background:${cor};width:12px;height:12px"></span>
             <div class="principal"><div class="titulo">${nome}</div>
               <div class="detalhe">colocou ${fmt.brlTexto(c.aplicado)}${c.devolvido > 0.005 ? ` · voltou ${fmt.brlTexto(c.devolvido)}` : ""} · vale ${fmt.brlTexto(c.valor_atual)}${ok(c.xirr) ? ` · TIR ${pctTxt(c.xirr)} a.a.` : ""}</div></div>
             <div class="valores"><b class="${c.ganho >= 0 ? "pos" : "neg"}">${c.ganho >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(c.ganho))}</b><small>${pctTxt(c.periodo_pct)} no período</small></div></div>`;
         })}</div>`}
-        <p class="texto-p mt2">Cada aporte entra com a sua data: o retorno no período divide o ganho pelo capital médio que ficou aplicado (Modified Dietz), e a TIR é a taxa anual equivalente — aparece a partir de 90 dias de história.</p>
+        <dl class="kpis mt2">
+          <div class="kpi pequeno"><dt>No período</dt><dd class="${corPct(t.periodo_pct)}">${pctTxt(t.periodo_pct)}<small>${t.desde ? "desde " + FC.datas.br(t.desde) : ""}</small></dd></div>
+          <div class="kpi pequeno"><dt>TIR</dt><dd class="${corPct(t.xirr)}">${pctTxt(t.xirr)}<small>${ok(t.xirr) ? "ao ano" : "precisa de 90 dias"}</small></dd></div>
+        </dl>
+        <p class="texto-p mt2">Cada aporte entra com a sua data: o retorno no período divide o ganho pelo capital médio que ficou aplicado (Modified Dietz), e a TIR é a taxa anual equivalente — aparece a partir de 90 dias de história.</p>`)}
         ${rt.sem_custo.length ? html`<p class="texto-p mt1">Fora da conta: ${rt.sem_custo.join(", ")}, sem preço médio — sem o custo não dá para saber o ganho. Preencha em Investimentos → Editar.</p>` : ""}
         ${rt.sem_preco && rt.sem_preco.length ? html`<p class="texto-p mt1">Fora da conta por enquanto: ${rt.sem_preco.join(", ")}, sem cotação no momento.</p>` : ""}
       </div></section>`;
@@ -134,15 +167,26 @@
   // ---------------------------------------------------------------- rentabilidade
   const pctTxt = (v, casas = 2) => (FC.ok(v) ? `${fmt.delta(v, casas)}%` : "—");
   const corPct = (v) => (FC.ok(v) ? (v >= 0 ? "pos" : "neg") : "fraco");
-  // resumo consolidado: ganho, retorno no período e TIR ao ano
-  C.kpisRentab = (r, { titulo = "" } = {}) => !r ? "" : html`<dl class="kpis mb2 rentab-kpis">
+  // resumo consolidado: aplicado, ganho e UM percentual (ao ano, ou no
+  // período antes de 90 dias); Dietz e TIR ficam em "ver detalhes"
+  C.kpisRentab = (r, { titulo = "" } = {}) => {
+    if (!r) return "";
+    const anual = FC.ok(r.xirr);
+    const v = anual ? r.xirr : r.periodo_pct;
+    return html`<dl class="kpis mb2 rentab-kpis">
     <div class="kpi pequeno"><dt>Aplicado${titulo}</dt><dd>${r.aplicado != null ? fmt.brl(r.aplicado) : "—"}${r.devolvido > 0.005 ? html`<small>${fmt.brl(r.devolvido)} já voltou</small>` : ""}</dd></div>
     <div class="kpi pequeno"><dt>Ganho</dt><dd class="${corPct(r.ganho)}">${r.ganho != null ? html`${r.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(r.ganho))}` : "—"}</dd></div>
-    <div class="kpi pequeno"><dt>No período ${FC.ajuda("Ganho dividido pelo capital médio que ficou aplicado, ponderado pelo tempo de cada aporte (Modified Dietz). Não depende de quando você olha nem de quanto aportou de uma vez.")}</dt>
-      <dd class="${corPct(r.periodo_pct)}">${pctTxt(r.periodo_pct)}<small>${r.desde ? "desde " + FC.datas.br(r.desde) : ""}</small></dd></div>
-    <div class="kpi pequeno"><dt>TIR ao ano ${FC.ajuda("Taxa interna de retorno com as datas de cada aporte, resgate e provento (XIRR): a taxa anual que o seu dinheiro rendeu. Aparece a partir de 90 dias de história.")}</dt>
-      <dd class="${corPct(r.xirr)}">${FC.ok(r.xirr) ? pctTxt(r.xirr) : "—"}<small>${FC.ok(r.xirr) ? "a.a." : r.dias != null && r.dias < 90 ? "precisa de 90 dias" : ""}</small></dd></div>
-  </dl>`;
+    <div class="kpi pequeno"><dt>Rendeu ${FC.ajuda("Quanto o seu dinheiro rendeu por ano, contando a data de cada aporte, resgate e provento. Antes de 90 dias de história, mostra o rendimento no período, sem anualizar.")}</dt>
+      <dd class="${corPct(v)}">${pctTxt(v)}<small>${anual ? "ao ano" : r.desde ? "desde " + FC.datas.br(r.desde) : ""}</small></dd></div>
+  </dl>
+  <details class="detalhes mb2"><summary style="cursor:pointer;color:var(--acento);font-size:13.5px">Ver detalhes</summary>
+    <dl class="kpis mt1">
+      <div class="kpi pequeno"><dt>No período ${FC.ajuda("Ganho dividido pelo capital médio que ficou aplicado, ponderado pelo tempo de cada aporte (Modified Dietz).")}</dt>
+        <dd class="${corPct(r.periodo_pct)}">${pctTxt(r.periodo_pct)}<small>${r.desde ? "desde " + FC.datas.br(r.desde) : ""}</small></dd></div>
+      <div class="kpi pequeno"><dt>TIR ${FC.ajuda("Taxa interna de retorno com as datas de cada aporte, resgate e provento (XIRR). Aparece a partir de 90 dias de história.")}</dt>
+        <dd class="${corPct(r.xirr)}">${anual ? pctTxt(r.xirr) : "—"}<small>${anual ? "ao ano" : r.dias != null && r.dias < 90 ? "precisa de 90 dias" : ""}</small></dd></div>
+    </dl></details>`;
+  };
 
   // "E se cada aporte tivesse ido para a Selic ou o Ibovespa no mesmo dia?"
   C.comparaIndices = function (fluxos, valorAtual) {
@@ -436,6 +480,10 @@
   C.formRendaFixa = function (item) {
     const novo = !item;
     item = item || { tipo: "cdi", pilar: "caixa" };
+    // instituição, isenção e reserva ficam em premissas.titulos[id]
+    const info = novo ? {} : FC.infoTitulo(FC.estado.prefs, item.id);
+    const sugere = (nome) => !!(FC.alertas && FC.alertas.sugereIsento(nome));
+    const isento = info.isento != null ? !!info.isento : sugere(item.nome);
     const f = FC.ui.folha({
       titulo: novo ? "Novo título de renda fixa" : "Editar título",
       corpo: html`<form class="form" id="f-rf">
@@ -458,6 +506,13 @@
         <div class="campo"><label for="r-venc">Vencimento</label><input id="r-venc" name="vencimento" type="date" value="${item.vencimento || ""}"></div>
         <div class="campo"><label for="r-pilar">Pilar</label><select id="r-pilar" name="pilar">
           ${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}" ${item.pilar === p.chave ? "selected" : ""}>${p.nome}</option>`)}</select></div>
+        <div class="campo"><label for="r-inst">Instituição</label><input id="r-inst" name="instituicao" value="${info.instituicao || ""}" placeholder="Banco X" maxlength="60" autocomplete="off">
+          <span class="dica">o banco que emitiu o título — serve para conferir o limite de R$ 250 mil do FGC</span></div>
+        <div class="linha2">
+          <label class="check"><span class="interruptor"><input type="checkbox" name="isento" id="r-isento" ${isento ? "checked" : ""}><span></span></span>Isento de IR</label>
+          <label class="check"><span class="interruptor"><input type="checkbox" name="reserva" ${info.reserva ? "checked" : ""}><span></span></span>É reserva de emergência</label>
+        </div>
+        <span class="dica" style="font-size:12px;color:var(--ink-3)">LCI, LCA, CRI, CRA e poupança não pagam IR para pessoa física. A reserva é o dinheiro para imprevistos, que dá para resgatar a qualquer momento.</span>
         ${!novo ? (() => { const r = (FC.estado.dados.rendaFixa || []).find((x) => x.id === item.id); return r && r.rent ? html`<div class="mt2">${C.tabelaLotesRF(r.rent)}</div>` : ""; })() : ""}
         <div id="r-erro" class="mensagem erro" hidden></div>
       </form>`,
@@ -469,11 +524,23 @@
       FC.$("#r-dica", form).textContent = { cdi: "110 = 110% do CDI", selic: "100 = Tesouro Selic", ipca: "6,5 = IPCA + 6,5% ao ano", prefixado: "13,2 = 13,2% ao ano" }[FC.$("#r-tipo", form).value];
     };
     FC.$("#r-tipo", form).addEventListener("change", dica); dica();
+    // enquanto a pessoa não mexer, a isenção acompanha o nome (LCI, LCA…)
+    const cxIsento = FC.$("#r-isento", form);
+    let isentoMexido = info.isento != null;
+    cxIsento.addEventListener("change", () => { isentoMexido = true; });
+    FC.$("#r-nome", form).addEventListener("input", (e) => { if (!isentoMexido) cxIsento.checked = sugere(e.target.value); });
     FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
     const apagar = FC.$("[data-acao=apagar]", f.el);
     if (apagar) apagar.addEventListener("click", async () => {
       if (!(await FC.ui.confirma(`Remover ${item.nome}?`, { botao: "Remover", perigo: true }))) return;
-      try { await FC.db.apagar("renda_fixa", item.id); f.fechar(); await C.depoisDeMudar("Título removido"); } catch (e) { FC.ui.erro(e); }
+      try {
+        await FC.db.apagar("renda_fixa", item.id); f.fechar();
+        // tira o título apagado de premissas.titulos
+        if ((((FC.estado.base.prefsBrutas || {}).premissas || {}).titulos || {})[item.id]) {
+          try { await C.gravaInfoTitulo(item.id, null); } catch (e) { console.error(e); }
+        }
+        await C.depoisDeMudar("Título removido");
+      } catch (e) { FC.ui.erro(e); }
     });
     FC.$("[data-acao=salvar]", f.el).addEventListener("click", () => form.requestSubmit());
     form.addEventListener("submit", async (e) => {
@@ -483,9 +550,15 @@
         vencimento: d.vencimento || null, pilar: d.pilar, data_inicio: d.data_inicio || null };
       const erro = FC.$("#r-erro", form);
       if (!linha.nome) { erro.textContent = "Dê um nome ao título."; erro.hidden = false; return; }
+      const extra = { instituicao: (d.instituicao || "").trim(), isento: !!d.isento, reserva: !!d.reserva };
       try {
         await FC.ui.ocupado(FC.$("[data-acao=salvar]", f.el), async () => {
-          if (novo) await FC.db.inserir("renda_fixa", linha); else await FC.db.atualizar("renda_fixa", item.id, linha);
+          // título novo: o id só existe depois de criado
+          const salvo = novo ? await FC.db.inserir("renda_fixa", linha) : await FC.db.atualizar("renda_fixa", item.id, linha);
+          const id = (salvo && salvo.id) || item.id;
+          const antes = novo ? {} : info;
+          const mudou = ["instituicao", "isento", "reserva"].some((k) => (k === "instituicao" ? (antes[k] || "") : !!antes[k]) !== extra[k]);
+          if (id != null && (mudou || (novo && (extra.instituicao || extra.isento || extra.reserva)))) await C.gravaInfoTitulo(id, extra);
         });
         f.fechar();
         await C.depoisDeMudar(novo ? "Título adicionado" : "Título atualizado");

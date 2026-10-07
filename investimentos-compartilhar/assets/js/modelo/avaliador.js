@@ -217,8 +217,33 @@
   // tetos dele para ação defensiva: P/L até 15 e P/VP até 1,5 (15 × 1,5).
   // LPA e VPA saem da cotação e dos múltiplos (LPA = preço ÷ P/L,
   // VPA = preço ÷ P/VP). Não vale com prejuízo ou patrimônio negativo.
-  FC.graham = function (cotacao, pl, pvp) {
+  //
+  // Nem para banco, seguradora ou financeira: o patrimônio delas é capital
+  // regulatório e a dívida é a matéria-prima do negócio — LPA × VPA não
+  // mede o mesmo que numa indústria.
+  const SETOR_FINANCEIRO = /banc|segur|resseg|previd[eê]ncia|intermedi[aá]rios financeiros|financeira|cr[eé]dito e financiamento|capitaliza/i;
+  // raiz do código (4 letras) das financeiras listadas mais conhecidas, para
+  // quando a fonte não traz o setor
+  const RAIZ_FINANCEIRA = new Set(["BBAS", "ITUB", "BBDC", "SANB", "BPAC", "ABCB", "BRSR", "BMGB", "ITSA", "PINE", "BRBI", "BMEB",
+    "BAZA", "BEES", "BGIP", "BMIN", "BNBR", "BPAN", "BSLI", "BRIV", "MERC", "RPAD", "MODL", "CRIV", "BRGE",
+    "BBSE", "CXSE", "PSSA", "IRBR", "SULA", "WIZC", "APER"]);
+  // setor na aba Renda (Ajustes → Universo) para um ticker, se houver
+  function setorNaRenda(ticker) {
+    const cfg = (FC.estado && FC.estado.prefs && FC.estado.prefs.renda) || FC.PADRAO_RENDA || {};
+    for (const [setor, bloco] of Object.entries(cfg.setores || {})) if (bloco && bloco.empresas && ticker in bloco.empresas) return setor;
+    return null;
+  }
+  // info: { ticker, setor, subsetor } — qualquer um basta
+  FC.ehFinanceira = function (info = {}) {
+    const t = String(info.ticker || "").toUpperCase();
+    const setores = [info.setor, info.subsetor, t ? setorNaRenda(t) : null].filter(Boolean);
+    if (setores.some((s) => SETOR_FINANCEIRO.test(s))) return true;
+    return !!t && RAIZ_FINANCEIRA.has(t.slice(0, 4));
+  };
+
+  FC.graham = function (cotacao, pl, pvp, info) {
     if (!ok(cotacao) || cotacao <= 0) return null;
+    if (info && FC.ehFinanceira(info)) return { valor: null, motivo: "não se aplica a bancos e seguradoras" };
     if (!ok(pl) || !ok(pvp) || pl === 0 || pvp === 0) return { valor: null, motivo: "sem P/L ou P/VP na fonte" };
     if (pl < 0) return { valor: null, motivo: "a empresa teve prejuízo nos últimos 12 meses — a fórmula não se aplica" };
     if (pvp < 0) return { valor: null, motivo: "patrimônio líquido negativo — a fórmula não se aplica" };
@@ -342,25 +367,29 @@
 
     const score = somaPesos ? somaNotas / somaPesos : null;
     const fx = regras.vereditos;
-    let veredito, cor;
-    if (score == null) { veredito = "sem dados"; cor = "cinza"; }
-    else if (score >= fx.atende) { veredito = "atende seus critérios"; cor = "verde"; }
-    else if (score >= fx.observar) { veredito = "zona cinzenta"; cor = "amarelo"; }
-    else { veredito = "fora dos seus critérios"; cor = "vermelho"; }
+    // as chaves (atende/observar) e as cores ficam; o texto descreve a
+    // distância dos seus critérios, sem soar como recomendação
+    let veredito, cor, faixa;
+    if (score == null) { veredito = "sem dados"; cor = "cinza"; faixa = null; }
+    else if (score >= fx.atende) { veredito = "Dentro dos seus critérios"; cor = "verde"; faixa = "atende"; }
+    else if (score >= fx.observar) { veredito = "Perto dos seus critérios"; cor = "amarelo"; faixa = "observar"; }
+    else { veredito = "Fora dos seus critérios"; cor = "vermelho"; faixa = "fora"; }
 
     const comDado = metricas.filter((m) => m.valor != null);
     return {
       ticker, classe, perfil, segmento: valores.segmento || "", grupo_pares: grupo,
       preco: valores.cotacao ?? (h ? h.preco : null), moeda: h ? h.moeda : "BRL",
-      score, veredito, veredito_curto: FC.VEREDITO_CURTO[veredito], cor, metricas, avisos,
+      score, veredito, veredito_curto: FC.VEREDITO_CURTO[veredito], veredito_faixa: faixa, cor, metricas, avisos,
       conflitos: metricas.filter((m) => m.divergencia >= 25),
       destaques: [...comDado].sort((a, b) => b.peso - a.peso).slice(0, 3),
       max_52s: h ? h.max_52s : null, min_52s: h ? h.min_52s : null,
       serie_preco: h ? h.precos : [],
       cambio: h ? h.cambio : null,
       tipo_rotulo: FC.CLASSE_ROTULO[perfil] || FC.CLASSE_ROTULO[classe] || classe,
-      // Graham só faz sentido para ação brasileira (lucro e patrimônio contábeis)
-      graham: classe === "acao_br" ? FC.graham(valores.cotacao, valores.pl, valores.pvp) : null,
+      // Graham só faz sentido para ação brasileira (lucro e patrimônio
+      // contábeis) e fora de bancos e seguradoras
+      graham: classe === "acao_br" ? FC.graham(valores.cotacao, valores.pl, valores.pvp,
+        { ticker, setor: valores.setor, subsetor: valores.subsetor || valores.segmento }) : null,
       cvm: cvm || null,
     };
   }

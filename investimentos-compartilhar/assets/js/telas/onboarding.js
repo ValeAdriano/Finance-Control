@@ -23,7 +23,7 @@
       </svg></div>`,
 
     investimentos: () => html`<div class="ob-cena ob-lista">
-      ${[["ITSA4", "Ações", "verde", "Atende", "+1,2%"], ["HGLG11", "FII", "amarelo", "Zona cinzenta", "−0,4%"], ["BTC", "Cripto", "azul", "Na carteira", "+3,8%"], ["Tesouro IPCA+", "Renda fixa", "cinza", "Contratado", "IPCA+6%"]]
+      ${[["ITSA4", "Ações", "verde", "Nos critérios", "+1,2%"], ["HGLG11", "FII", "amarelo", "Perto", "−0,4%"], ["BTC", "Cripto", "azul", "Na carteira", "+3,8%"], ["Tesouro IPCA+", "Renda fixa", "cinza", "Contratado", "IPCA+6%"]]
         .map(([t, c, cor, v, d], i) => html`<div class="ob-linha-item" style="--i:${i}"><div><b>${t}</b><small>${c}</small></div>${FC.pilula(cor, v)}<span class="ob-var ${d.startsWith("−") ? "neg" : "pos"}">${d}</span></div>`)}
     </div>`,
 
@@ -72,7 +72,7 @@
     return [
       { cena: "boasVindas", titulo: nome ? `Olá, ${nome}!` : "Boas-vindas ao Finance Control", texto: "Tudo o que você investe num lugar só: bolsa, cripto, renda fixa e até o gado. Em um minuto, veja o que dá para fazer." },
       { cena: "patrimonio", titulo: "Seu patrimônio, sempre atualizado", texto: "O Início soma tudo com preços de mercado a cada minuto e guarda uma foto por dia. O gráfico mostra quanto você cresceu no mês, no ano ou desde o começo." },
-      { cena: "investimentos", titulo: "Cada ativo avaliado", texto: "Em Investimentos, cadastre o que tem ou acompanha. O painel busca cotações e dá um veredito olhando o histórico do ativo, suas regras, os pares e a renda fixa." },
+      { cena: "investimentos", titulo: "Cada ativo avaliado", texto: "Em Investimentos, cadastre o que tem ou acompanha. O painel busca cotações e mostra se cada um está dentro, perto ou fora dos seus critérios, olhando o histórico do ativo, suas regras, os pares e a renda fixa. É uma régua sua, não uma recomendação." },
       { cena: "aportes", titulo: "Aportes em dois toques", texto: "Registre cada compra e repita os aportes de sempre informando só quantidade e valor. No Agro, controle compra, venda, custos e o rebanho atual." },
       { cena: "renda", titulo: "Salário, plano e dividendos", texto: "Cadastre seus ganhos, defina quanto investir e para onde. O guia do mês mostra o que falta aportar, e Dividendos mostra quanto cada ativo paga e quando cai." },
       { cena: "projecoes", titulo: "Onde isso vai dar", texto: "Projeções usa seu plano, reinveste os proventos e mostra três cenários em reais de hoje. Em Simular, teste mudanças antes de fazer." },

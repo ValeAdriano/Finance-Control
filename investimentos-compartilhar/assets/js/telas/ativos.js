@@ -28,7 +28,7 @@
       <div class="valores" style="min-width:92px"><b>${fmt.preco(a.preco)}</b><small class="${FC.ok(a.variacao_dia) ? (a.variacao_dia >= 0 ? "pos" : "neg") : ""}">${FC.ok(a.variacao_dia) ? fmt.delta(a.variacao_dia, 2) + "% hoje" : "preço"}</small></div>
       <div class="valores esconde-mob graham-col" title="Preço justo de Graham e a margem de segurança">
         ${g && g.valor != null ? html`<b>${fmt.preco(g.valor)}</b><small class="${g.margem >= 0 ? "pos" : "neg"}">${fmt.delta(g.margem, 0)}% Graham</small>`
-          : g ? html`<small class="muito-fraco" title="${g.motivo}">Graham n/a</small>` : html`<small class="muito-fraco">—</small>`}
+          : g ? html`<small class="muito-fraco" title="${g.motivo}">${/bancos/.test(g.motivo || "") ? "Graham não se aplica" : "Graham n/a"}</small>` : html`<small class="muito-fraco">—</small>`}
       </div>
       <div class="valores esconde-mob" style="min-width:120px">
         ${p ? html`<b>${fmt.brl(p.atual)}</b><small>${fmt.qtd(p.quantidade)} ${FC.unidade(a, p.quantidade)}${ok(rt && rt.periodo_pct) ? html` · <span class="${rt.periodo_pct >= 0 ? "pos" : "neg"}" title="cada compra com a sua data">${fmt.delta(rt.periodo_pct)}%</span>` : ""}</small>`
@@ -56,22 +56,33 @@
     return html`<div class="lista">${ativos.map(linhaAtivo)}</div>`;
   }
 
+  // líquido estimado de IR/IOF, se o módulo de impostos estiver carregado
+  function impostoDo(r) {
+    if (!FC.impostos || typeof FC.impostos.titulo !== "function") return null;
+    try {
+      const meta = ((FC.estado.prefs.premissas || {}).titulos || {})[r.id];
+      return FC.impostos.titulo(r, meta) || null;
+    } catch (e) { console.error(e); return null; }
+  }
+
   function rendaFixa(d) {
+    const impostos = Object.fromEntries(d.rendaFixa.map((r) => [r.id, impostoDo(r)]));
+    const algumIsento = Object.values(impostos).some((t) => t && t.isento);
     return html`<section class="secao">
       <div class="secao-topo"><h2>Renda fixa</h2>
-        <span class="sub">${ok(d.macro.cdi) ? `comparada ao CDI de hoje (${fmt.num(d.macro.cdi)}%)` : "CDBs, Tesouro e caixa"}</span>
+        <span class="sub">${ok(d.macro.cdi) ? `taxa bruta comparada ao CDI de hoje (${fmt.num(d.macro.cdi)}%)` : "CDBs, Tesouro e caixa"}</span>
         <div class="direita"><button class="botao sec pequeno" data-novo="rf">${icone("aportes", 16)} Título</button></div></div>
       ${d.rendaFixa.length ? html`<div class="lista">${d.rendaFixa.map((r) => html`
         <div class="item clicavel" data-rf="${r.id}" role="button" tabindex="0">
           <span style="color:var(--verde)">${icone("moeda", 26)}</span>
           <div class="principal"><div class="titulo">${r.nome}</div>
             <div class="detalhe">${r.base}${r.vencimento ? " · vence " + FC.datas.br(r.vencimento) : ""}${ok(r.real) ? " · real " + fmt.num(r.real) + "% a.a." : ""}</div></div>
-          <div class="esconde-mob">${FC.pilula(r.cor, r.leitura)}</div>
-          <div class="valores"><b>${fmt.brl(r.valor_aplicado)}</b>${r.rent && r.rent.aplicado > 0
+          <div class="esconde-mob" title="comparação bruta, antes de IR${impostos[r.id] && impostos[r.id].isento ? " — título isento: a comparação justa é com o CDI líquido de IR" : ""}">${FC.pilula(r.cor, ok(r.premio_cdi) ? r.leitura + (impostos[r.id] && impostos[r.id].isento ? " (bruto; isento)" : " (bruto)") : r.leitura)}</div>
+          <div class="valores"><b>${fmt.brl(r.valor_aplicado)}</b>${impostos[r.id] ? html`<small>${impostos[r.id].isento ? "isento de IR" : ok(impostos[r.id].liquido) ? html`líquido ~${fmt.brl(impostos[r.id].liquido)}` : ""}</small>` : ""}${r.rent && r.rent.aplicado > 0
             ? html`<small>aplicou ${fmt.brl(r.rent.aplicado)} · <span class="${r.rent.ganho >= 0 ? "pos" : "neg"}">${r.rent.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(r.rent.ganho))}</span></small>`
             : html`<small>${ok(r.nominal) ? fmt.num(r.nominal) + "% a.a." : ""}</small>`}</div>
           <span class="chevron">${icone("chevron", 18)}</span></div>`)}</div>
-        <p class="texto-p mt2">O valor de cada título é o que ele vale hoje: cada aporte rende da própria data, pela própria taxa, com o CDI, a Selic ou o IPCA de cada dia útil (valor bruto, antes de IR). A comparação ao lado é a foto de hoje. Um título IPCA+ rende menos que o CDI enquanto a Selic está alta e a inflação baixa, e a relação se inverte no cenário oposto.</p>`
+        <p class="texto-p mt2">O valor de cada título é o que ele vale hoje: cada aporte rende da própria data, pela própria taxa, com o CDI, a Selic ou o IPCA de cada dia útil (valor bruto, antes de IR${FC.impostos ? "; o líquido ao lado é uma estimativa de IR e IOF se você resgatasse hoje" : ""}). A comparação com o CDI ao lado é bruta e é a foto de hoje.${algumIsento ? " Nos títulos isentos de IR (LCI, LCA, debêntures incentivadas), a comparação justa é com o CDI líquido de IR, que rende menos que o CDI bruto." : ""} Um título IPCA+ rende menos que o CDI enquanto a Selic está alta e a inflação baixa, e a relação se inverte no cenário oposto.</p>`
         : html`<div class="lista">${C.vazio("🏦", "Nenhum título", "Cadastre CDBs, Tesouro Direto ou a conta remunerada para eles entrarem no patrimônio e na alocação.", html`<button class="botao" data-novo="rf">Adicionar título</button>`)}</div>`}
     </section>`;
   }

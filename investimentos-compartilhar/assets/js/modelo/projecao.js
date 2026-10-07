@@ -10,6 +10,20 @@
   const mensal = (a) => Math.pow(1 + a / 100, 1 / MESES) - 1;
   const real = (nom, ipca) => ((1 + nom / 100) / (1 + ipca / 100) - 1) * 100;
 
+  // Cenários: o base usa as suas premissas; pessimista e otimista mexem em
+  // três alavancas, sempre em termos reais:
+  //   valorizacao — p.p. ao ano na valorização real de cada pilar que não é
+  //                 caixa (ações, FIIs, alternativos, agro). O campo
+  //                 "Pessimista/Otimista (p.p.)" da tela substitui este valor.
+  //   juro_real   — p.p. ao ano no juro real do CDI/Selic (só títulos
+  //                 pós-fixados; prefixado e IPCA+ seguem o contratado)
+  //   dy          — % sobre o DY observado (−20 = paga 20% menos proventos)
+  const CENARIOS = {
+    pessimista: { valorizacao: -2, juro_real: -1.5, dy: -20 },
+    otimista: { valorizacao: 2, juro_real: 1.5, dy: 20 },
+  };
+  const NEUTRO = { valorizacao: 0, juro_real: 0, dy: 0 };
+
   function perfilDosPilares(dados, macroLp, ipca) {
     const pilares = {};
     for (const a of dados.ativos) {
@@ -35,7 +49,7 @@
       else if (r.tipo === "ipca") nominal = ((1 + ipca / 100) * (1 + taxa / 100) - 1) * 100;
       else nominal = taxa;
       caixa.valor += aplic;
-      caixa.titulos.push({ nome: r.nome, valor: aplic, real: real(nominal, ipca), nominal });
+      caixa.titulos.push({ nome: r.nome, valor: aplic, real: real(nominal, ipca), nominal, posfixado: r.tipo === "cdi" || r.tipo === "selic" });
     }
     const tt = FC.soma(caixa.titulos, (t) => t.valor);
     caixa.taxa_real = tt ? FC.soma(caixa.titulos, (t) => t.valor * t.real) / tt : 0;
@@ -63,20 +77,30 @@
     return Object.fromEntries(ks.map((k) => [k, faltas[k] / sf]));
   }
 
-  function simula(pilares, prem, alvos, ajuste) {
+  // juro real do caixa no cenário: o pós-fixado anda com o CDI real
+  function taxaCaixa(caixa, dj) {
+    if (!caixa) return 0;
+    if (!dj) return caixa.taxa_real || 0;
+    const tt = FC.soma(caixa.titulos, (t) => t.valor);
+    return tt ? FC.soma(caixa.titulos, (t) => t.valor * (t.real + (t.posfixado ? dj : 0))) / tt : 0;
+  }
+
+  function simula(pilares, prem, alvos, delta = NEUTRO) {
+    const dv = Number(delta.valorizacao) || 0, dj = Number(delta.juro_real) || 0;
+    const kDy = 1 + (Number(delta.dy) || 0) / 100;
     const meses = Math.round(Number(prem.horizonte_anos) || 20) * MESES;
     const aporte = Number(prem.aporte_mensal) || 0;
     const reinveste = !!prem.reinvestir_proventos;
     const modo = prem.distribuicao_aporte || "rebalancear";
     const val = prem.valorizacao_real_anual || {};
     const saldos = Object.fromEntries(Object.entries(pilares).map(([k, p]) => [k, p.valor]));
-    const dy = Object.fromEntries(Object.entries(pilares).map(([k, p]) => [k, p.dy || 0]));
+    const dy = Object.fromEntries(Object.entries(pilares).map(([k, p]) => [k, (p.dy || 0) * kDy]));
     // se não há nenhum pilar (carteira vazia), o aporte cria os pilares da meta
     if (!Object.keys(saldos).length) for (const k of Object.keys(alvos)) if (Number(alvos[k]) > 0) { saldos[k] = 0; dy[k] = 0; }
     // pilar que o plano manda aportar e que você ainda não tem: começa do zero
     if (modo === "plano" && prem._pesos_plano) for (const k of Object.keys(prem._pesos_plano)) if (!(k in saldos)) { saldos[k] = 0; dy[k] = 0; }
     const fator = Object.fromEntries(Object.keys(saldos).map((k) => [k,
-      k === "caixa" ? mensal((pilares.caixa || {}).taxa_real || 0) : mensal((Number(val[k]) || 0) + ajuste)]));
+      k === "caixa" ? mensal(taxaCaixa(pilares.caixa, dj)) : mensal((Number(val[k]) || 0) + dv)]));
 
     const pat = [], renda = [];
     let aportado = 0, prov = 0;
@@ -99,7 +123,9 @@
       patrimonio: pat, renda, final, inicial, aportado, proventos: prov,
       valorizacao: final - inicial - aportado - (reinveste ? prov : 0),
       renda_mensal_final: renda.length ? renda.at(-1)[1] : 0,
-      renda_mensal_hoje: Object.keys(pilares).filter((k) => k !== "caixa").reduce((s, k) => s + (pilares[k].valor * (dy[k] || 0)) / 100 / MESES, 0),
+      // hoje é observado: não muda com o cenário
+      renda_mensal_hoje: Object.keys(pilares).filter((k) => k !== "caixa").reduce((s, k) => s + (pilares[k].valor * (pilares[k].dy || 0)) / 100 / MESES, 0),
+      deltas: { valorizacao: dv, juro_real: dj, dy: Number(delta.dy) || 0 },
     };
   }
 
@@ -115,10 +141,15 @@
     const macroLp = { cdi, ipca, juro_real: real(cdi, ipca) };
     const alvos = dados.alocacao_alvo || {};
     const pilares = perfilDosPilares(dados, macroLp, ipca);
+    // o campo da tela (p.p. de valorização), quando preenchido, vale sobre o padrão
     const cen = prem.cenarios || {};
-    const base = simula(pilares, prem, alvos, 0);
-    const pess = simula(pilares, prem, alvos, Number(cen.pessimista ?? -3));
-    const otim = simula(pilares, prem, alvos, Number(cen.otimista ?? 3));
+    const deltas = Object.fromEntries(Object.entries(CENARIOS).map(([nome, d]) => {
+      const v = cen[nome] != null && cen[nome] !== "" && Number.isFinite(Number(cen[nome])) ? Number(cen[nome]) : d.valorizacao;
+      return [nome, { ...d, valorizacao: v }];
+    }));
+    const base = simula(pilares, prem, alvos);
+    const pess = simula(pilares, prem, alvos, deltas.pessimista);
+    const otim = simula(pilares, prem, alvos, deltas.otimista);
     const val = prem.valorizacao_real_anual || {};
     const ordem = FC.PILARES.map((p) => p.chave);
     const resumo = Object.entries(pilares).map(([k, p]) => k === "caixa"
@@ -129,12 +160,12 @@
     const rv = resumo.filter((l) => l.chave !== "caixa" && l.valor > 0).map((l) => l.total);
     return {
       usando_plano: usandoPlano,
-      base, pessimista: pess, otimista: otim, pilares: resumo, macro_lp: macroLp,
+      base, pessimista: pess, otimista: otim, cenarios: deltas, pilares: resumo, macro_lp: macroLp,
       usando_macro_de_hoje: lp.cdi == null, premissas: prem,
       alerta_caixa: !!caixa && caixa.valor > 0 && rv.length > 0 && caixa.total > Math.max(...rv),
       titulos_caixa: caixa ? caixa.titulos : [], caixa_real: caixa ? caixa.total : 0,
     };
   }
 
-  FC.projecao = { projeta };
+  FC.projecao = { projeta, CENARIOS };
 })();

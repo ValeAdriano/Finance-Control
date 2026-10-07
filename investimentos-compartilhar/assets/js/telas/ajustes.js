@@ -28,6 +28,9 @@
     const tema = FC.local.ler("tema", "auto");
     const alvos = prefs.alocacao_alvo;
     const r = prefs.regras;
+    // objetivos: o salvo (para os campos) e o resolvido com os padrões
+    const objSalvo = ((b.prefsBrutas || {}).premissas || {}).objetivos || {};
+    const obj = FC.objetivos(prefs);
 
     raiz.innerHTML = String(html`<div class="estreita">
       ${C.cabecalho("Ajustes", "Conta, segurança e os critérios que o painel aplica.")}
@@ -41,6 +44,21 @@
         <div class="item clicavel" id="aj-apresentacao"><span style="color:var(--acento)">${icone("info", 20)}</span>
           <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
       </div>`)}
+
+      ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
+        <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+          <div class="campo"><label for="ob-custo">Custo de vida por mês (R$)</label>
+            <input id="ob-custo" name="custo_vida_mensal" inputmode="decimal" value="${objSalvo.custo_vida_mensal ? fmt.num(objSalvo.custo_vida_mensal, 2) : ""}" placeholder="0,00">
+            <span class="dica">quanto você gasta num mês normal</span></div>
+          <div class="campo"><label for="ob-meses">Meses de reserva</label>
+            <input id="ob-meses" name="meses_reserva" inputmode="numeric" value="${obj.meses_reserva}" placeholder="6">
+            <span class="dica">quantos meses a reserva de emergência deve cobrir</span></div>
+          <div class="campo"><label for="ob-renda">Renda passiva desejada por mês (R$)</label>
+            <input id="ob-renda" name="renda_desejada_mensal" inputmode="decimal" value="${objSalvo.renda_desejada_mensal ? fmt.num(objSalvo.renda_desejada_mensal, 2) : ""}" placeholder="igual ao custo de vida">
+            <span class="dica">quanto quer receber de proventos para viver de renda</span></div>
+        </div>
+        <div class="flex entre mt2 quebra"><span id="ob-reserva" class="fraco"></span><button class="botao" type="submit">Salvar objetivos</button></div>
+      </form>`)}
 
       ${grupo("Módulos", "ligue só o que você usa; o resto sai dos menus", html`<div class="lista" id="aj-modulos">
         ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
@@ -124,8 +142,8 @@
           ${[["historica", "Histórico"], ["regra", "Seu alvo"], ["pares", "Pares"], ["macro", "Renda fixa"]].map(([k, v]) => html`<div class="campo"><label for="pl-${k}">${v}</label><input id="pl-${k}" name="pl_${k}" inputmode="decimal" value="${r.pesos_lentes[k]}"></div>`)}
         </div>
         <div class="form mt2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-          <div class="campo"><label for="v-atende">“Atende” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
-          <div class="campo"><label for="v-observar">“Zona cinzenta” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
+          <div class="campo"><label for="v-atende">“Dentro dos seus critérios” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
+          <div class="campo"><label for="v-observar">“Perto dos seus critérios” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
           <div class="campo"><label for="v-janela">Janela do histórico (anos)</label><input id="v-janela" name="janela" inputmode="numeric" value="${r.janela_historico_anos}"></div>
         </div>
         <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Faixas de cada indicador (avançado)</summary>
@@ -184,6 +202,28 @@
       catch (err) { FC.ui.erro(err); }
     });
     FC.$("#aj-sair", raiz).addEventListener("click", () => FC.sair());
+
+    // ---- objetivos (em premissas.objetivos, mesclando com o resto das premissas)
+    const fo = FC.$("#f-objetivos", raiz);
+    const lerObjetivos = () => {
+      const d = FC.dadosDoForm(fo);
+      const custo = FC.lerNum(d.custo_vida_mensal), renda = FC.lerNum(d.renda_desejada_mensal);
+      const meses = Math.round(FC.lerNum(d.meses_reserva) || 6);
+      return { custo_vida_mensal: custo > 0 ? custo : null, meses_reserva: Math.max(1, Math.min(36, meses)),
+        renda_desejada_mensal: renda > 0 ? renda : null };
+    };
+    const previaReserva = () => {
+      const o = lerObjetivos();
+      FC.$("#ob-reserva", raiz).textContent = o.custo_vida_mensal ? `Reserva ideal: ${fmt.brlTexto(o.custo_vida_mensal * o.meses_reserva, 0)}` : "";
+    };
+    fo.addEventListener("input", previaReserva); previaReserva();
+    fo.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await FC.ui.ocupado(FC.$("button[type=submit]", fo), () => C.gravaPremissas({ objetivos: lerObjetivos() }));
+        await C.depoisDeMudar("Objetivos salvos");
+      } catch (err) { FC.ui.erro(err); }
+    });
 
     // ---- módulos
     FC.$$("[data-modulo]", raiz).forEach((cx) => cx.addEventListener("change", async () => {

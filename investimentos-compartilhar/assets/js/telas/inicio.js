@@ -57,7 +57,16 @@
       </div></section>`;
   }
 
-  function proventos(r) {
+  // proventos lançados em Aportes; sem eles, os pagos calculados pela posição
+  function proventos(r, div) {
+    if ((!r || r.n_meses < 2) && div) {
+      const meses = div.serie.filter((m) => !m.futuro).map((m) => ({ mes: m.mes, total: m.total, itens: m.itens }));
+      while (meses.length && !(meses[0].total > 0)) meses.shift();
+      if (meses.length >= 2) {
+        const total = FC.soma(meses, (m) => m.total), ult = meses.slice(-3);
+        r = { meses, total, ultimo: meses.at(-1).total, media_recente: FC.soma(ult, (m) => m.total) / ult.length, n_meses: meses.length };
+      }
+    }
     if (!r || r.n_meses < 2) return "";
     return html`<section class="secao">
       <div class="secao-topo"><h2>Proventos por mês</h2><span class="sub">o que a carteira deposita sem você vender nada</span></div>
@@ -181,7 +190,7 @@
     const trechoAnot = (antesAnot ? [antesAnot] : []).concat(dentroAnot);
 
     // rendimento = variação do patrimônio menos o dinheiro que entrou no período
-    let rend = null, serieRend = [], twrPer = null, cdiPer = null;
+    let rend = null, serieRend = [], cdiPer = null;
     const p0 = trecho[0], p1 = trecho.at(-1);
     if (trecho.length >= 2) {
       const fluxo = p1.fluxo - p0.fluxo;
@@ -189,7 +198,6 @@
       const capital = p0.valor + Math.max(0, fluxo);
       rend = { abs, pct: capital > 0 ? (abs / capital) * 100 : null };
       serieRend = trecho.map((p) => [p.data, p.valor - p0.valor - (p.fluxo - p0.fluxo)]);
-      twrPer = FC.rentab.twr(trecho);
       const ix = FC.estado.mercado.indices;
       if (ix) cdiPer = (ix.fator("cdi", 100, p0.data, p1.data).f - 1) * 100;
     }
@@ -267,7 +275,7 @@
           <div class="kpi"><dt>Rendimento no período</dt><dd class="${rend ? (rend.abs >= 0 ? "pos" : "neg") : "fraco"}">${rend ? html`${rend.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(rend.abs))}` : "—"}
             <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" + (provPer > 0.005 ? `, com ${fmt.brlTexto(provPer)} de proventos` : "") : "sem dias suficientes"}</small></dd></div>
           <div class="kpi pequeno"><dt>Aportes no período</dt><dd>${Math.abs(fluxoPer) > 0.005 ? html`${fluxoPer >= 0 ? "+" : "−"}${fmt.brl(Math.abs(fluxoPer))}` : fmt.brl(0)}<small>${fluxoPer < 0 ? "saiu mais do que entrou" : "dinheiro novo que entrou"}</small></dd></div>
-          ${FC.ok(twrPer) ? html`<div class="kpi pequeno"><dt>TWR ${FC.ajuda("Retorno ponderado pelo tempo: encadeia o rendimento de cada dia e ignora o tamanho dos aportes. É a medida para comparar a carteira com o CDI ou o Ibovespa.")}</dt><dd class="${twrPer >= 0 ? "pos" : "neg"}">${fmt.delta(twrPer, 2)}%<small>${FC.ok(cdiPer) ? `CDI no período: ${fmt.num(cdiPer, 2)}%` : ""}</small></dd></div>` : ""}
+          ${FC.ok(cdiPer) ? html`<div class="kpi pequeno"><dt>CDI no período</dt><dd>${fmt.num(cdiPer, 2)}%<small>para comparar com o rendimento</small></dd></div>` : ""}
           <div class="kpi pequeno"><dt>Patrimônio ${p1 && p1.data === hoje ? "agora" : "no fim"}</dt><dd>${fmt.brl(p1 ? p1.valor : (trechoAnot.at(-1) || {}).valor || 0)}<small>${trecho.length >= 2 ? (() => { const v = p1.valor - p0.valor; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>
         </dl>
         ${refs.some((r) => r.carregando) ? html`<p class="texto-p mb2">Buscando o histórico do Ibovespa…</p>` : ""}
@@ -281,20 +289,180 @@
       </div></section>`;
   }
 
-  function dividendos(d) {
-    if (!FC.estado.proventos) return "";
-    const r = FC.dividendos.analisa(d, FC.estado.base, FC.estado.proventos);
-    if (!r.porAtivo.length || !(r.resumo.mensal_estimado > 0 || r.proximos.length)) return "";
-    const prox = r.proximos.find((p) => p.pagamento) || r.proximos[0];
+  // ---- topo: quanto tenho, quanto coloquei, quanto ganhei
+  // o IR vem de FC.impostos quando o módulo existe; sem ele, valores brutos
+  function resumoIR(d) {
+    if (typeof FC.impostos === "undefined" || !FC.impostos.resumo) return null;
+    try { return FC.impostos.resumo(d, FC.estado.base); } catch (err) { console.error(err); return null; }
+  }
+
+  // a TIR contra o CDI e a inflação do mesmo período; com menos de 90 dias,
+  // tudo no período, sem anualizar
+  function comparativo(t) {
+    if (!t || !t.desde) return null;
+    const hoje = FC.datas.hoje(), dias = FC.datas.dias(t.desde, hoje);
+    const anual = ok(t.xirr) && dias >= 90;
+    const meu = anual ? t.xirr : t.periodo_pct;
+    if (!ok(meu) || dias < 1) return null;
+    const ix = FC.estado.mercado && FC.estado.mercado.indices;
+    let cdi = null, ipca = null;
+    if (ix && !ix.vazio) {
+      const taxa = (f) => (anual ? (Math.pow(f, 365 / dias) - 1) * 100 : (f - 1) * 100);
+      try {
+        const fc = ix.fator("cdi", 100, t.desde, hoje).f, fi = ix.fator("ipca", 0, t.desde, hoje).f;
+        // fator 1 num período longo = série sem dados, não juro zero
+        if (fc !== 1 || dias < 5) cdi = taxa(fc);
+        if (fi !== 1 || dias < 5) ipca = taxa(fi);
+      } catch (err) { console.error(err); }
+    }
+    return { meu, anual, dias, cdi, ipca, desde: t.desde };
+  }
+
+  function frase(c) {
+    if (!c) return "";
+    const n = (v) => fmt.num(v, 1) + "%";
+    const quando = c.anual ? "ao ano" : `nos ${fmt.int(c.dias)} dias desde ${FC.datas.br(c.desde)}`;
+    if (!ok(c.cdi) || !ok(c.ipca)) return html`<div class="mensagem info mt3">${icone("info", 18)}<span>Seu dinheiro rendeu <b>${n(c.meu)}</b> ${quando}.</span></div>`;
+    const cls = c.meu >= c.cdi ? "ok" : c.meu >= c.ipca ? "alerta" : "erro";
+    const leitura = cls === "ok" ? "Você está ganhando do CDI." : cls === "alerta" ? "Ganhou da inflação, mas ficou abaixo do CDI." : "Ficou abaixo da inflação: o dinheiro perdeu poder de compra.";
+    return html`<div class="mensagem ${cls} mt3">${icone(cls === "ok" ? "check" : cls === "alerta" ? "info" : "alerta", 18)}<span>
+      Seu dinheiro rendeu <b>${n(c.meu)}</b> ${quando}. O CDI rendeu <b>${n(c.cdi)}</b> e a inflação <b>${n(c.ipca)}</b> no mesmo período.
+      ${c.anual ? "" : "Com menos de 90 dias de história, os números são do período, sem anualizar."} ${leitura}</span></div>`;
+  }
+
+  function topo(d, imp, seq) {
+    const r = d.resumo, t = d.rentab && d.rentab.total;
+    const bruto = imp && ok(imp.bruto) ? imp.bruto : r.patrimonio;
+    const tenho = imp && ok(imp.liquido) ? imp.liquido : bruto;
+    const temIR = !!imp && ok(imp.ir_estimado) && imp.ir_estimado > 0.005;
+    const colocou = t ? t.aplicado - (t.devolvido || 0) : null;
+    const ganho = t ? (imp && ok(imp.ganho_liquido) ? imp.ganho_liquido : t.ganho) : null;
+    const ganhoPct = ok(ganho) && colocou > 0.005 ? (ganho / colocou) * 100 : null;
+    const dica = imp
+      ? "Estimativa do que ficaria com você se resgatasse tudo hoje: o patrimônio a preço de agora menos o imposto de renda sobre o ganho (e o IOF, nos primeiros 30 dias). Isenções, como LCI, LCA e ações até o limite mensal, já entram na conta."
+      : "Soma de tudo a preço de agora: bolsa, cripto, renda fixa com rendimento e rebanho. Ainda sem descontar o imposto de renda.";
+    return html`<div class="cartao heroi">
+      <p class="rotulo">Quanto eu tenho ${FC.ajuda(dica)}</p>
+      <p class="valor"><span class="rs" data-conta="${tenho}">${fmt.brlTexto(tenho)}</span></p>
+      ${temIR ? html`<p class="fraco" style="font-size:13px;margin:-8px 0 14px">líquido estimado · bruto <span class="rs">${fmt.brlTexto(bruto)}</span>, IR estimado <span class="rs">${fmt.brlTexto(imp.ir_estimado)}</span></p>` : ""}
+      ${t ? html`<dl class="kpis mb3">
+        <div class="kpi"><dt>Quanto eu coloquei</dt><dd>${fmt.brl(colocou)}<small>${t.devolvido > 0.005 ? `o que saiu do bolso, já descontados ${fmt.brlTexto(t.devolvido, 0)} que voltaram` : "o que saiu do seu bolso"}</small></dd></div>
+        <div class="kpi"><dt>Quanto ganhei</dt><dd class="${ganho >= 0 ? "pos" : "neg"}">${ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(ganho))}
+          <small>${ok(ganhoPct) ? html`<b class="${ganhoPct >= 0 ? "pos" : "neg"}">${fmt.delta(ganhoPct, 1)}%</b> sobre o que você colocou` : ""}${imp && ok(imp.ganho_liquido) ? ", já sem IR" : ""}</small></dd></div>
+      </dl>` : ""}
+      <div class="chips">
+        ${r.bolsa || !r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s1)"></span>Bolsa <b class="rs">${fmt.brlTexto(r.bolsa)}</b></span>` : ""}
+        ${r.renda_fixa ? html`<span class="chip"><span class="ponto" style="background:var(--s2)"></span>Renda fixa <b class="rs">${fmt.brlTexto(r.renda_fixa)}</b></span>` : ""}
+        ${r.agro ? html`<span class="chip"><span class="ponto" style="background:var(--s5)"></span>Agro <b class="rs">${fmt.brlTexto(r.agro)}</b></span>` : ""}
+        ${r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s3)"></span>Cripto <b class="rs">${fmt.brlTexto(r.cripto)}</b></span>` : ""}
+        ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
+        ${seq ? C.chipSequencia(seq) : ""}
+      </div>
+    </div>`;
+  }
+
+  // "ver detalhes": as medidas técnicas, por classe, e os juros do dia
+  const CLASSES_RT = [["bolsa", "Ações, FIIs e ETFs", "var(--s1)"], ["cripto", "Cripto", "var(--s3)"],
+    ["renda_fixa", "Renda fixa", "var(--s2)"], ["agro", "Agronegócio", "var(--s5)"]];
+  function detalhesTecnicos(d, imp) {
+    const rt = d.rentab, t = rt && rt.total;
+    const p = (v) => (ok(v) ? `${fmt.delta(v, 2)}%` : "—");
+    const cor = (v) => (ok(v) ? (v >= 0 ? "pos" : "neg") : "fraco");
+    let twr = null;
+    try { const s = serieDoPainel(d).pontos; if (s.length >= 2) twr = FC.rentab.twr(s); } catch (err) { console.error(err); }
+    const classes = t ? CLASSES_RT.filter(([k]) => rt.classes[k] && (k !== "agro" || FC.modulo("agro"))) : [];
+    return C.detalhes(html`
+      ${t ? html`<dl class="kpis">
+        <div class="kpi pequeno"><dt>TIR ${FC.ajuda("Taxa interna de retorno com a data de cada aporte, resgate e provento (XIRR): a taxa anual que o dinheiro rendeu. Aparece a partir de 90 dias.")}</dt>
+          <dd class="${cor(t.xirr)}">${p(t.xirr)}<small>${ok(t.xirr) ? "ao ano" : "precisa de 90 dias"}</small></dd></div>
+        <div class="kpi pequeno"><dt>No período ${FC.ajuda("Ganho dividido pelo capital médio que ficou aplicado, ponderado pelo tempo de cada aporte (Modified Dietz).")}</dt>
+          <dd class="${cor(t.periodo_pct)}">${p(t.periodo_pct)}<small>desde ${FC.datas.br(t.desde)}</small></dd></div>
+        <div class="kpi pequeno"><dt>TWR ${FC.ajuda("Retorno ponderado pelo tempo: encadeia o rendimento de cada dia e ignora o tamanho dos aportes. É a medida usada por fundos para comparar com o CDI ou o Ibovespa.")}</dt>
+          <dd class="${cor(twr)}">${p(twr)}<small>pela série diária do painel</small></dd></div>
+      </dl>` : ""}
+      ${classes.length ? html`<div class="lista mt2" style="box-shadow:none">${classes.map(([k, nome, c]) => {
+        const x = rt.classes[k], ir = imp && imp.por_classe && imp.por_classe[k];
+        return html`<div class="item"><span class="ponto-e" style="background:${c};width:12px;height:12px"></span>
+          <div class="principal"><div class="titulo">${nome}</div>
+            <div class="detalhe">colocou ${fmt.brlTexto(x.aplicado - (x.devolvido || 0))} · vale ${fmt.brlTexto(x.valor_atual)}${ir && ir.ir > 0.005 ? ` · IR estimado ${fmt.brlTexto(ir.ir)}` : ""}</div></div>
+          <div class="valores"><b class="${x.ganho >= 0 ? "pos" : "neg"}">${x.ganho >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(x.ganho))}</b>
+            <small>${ok(x.xirr) ? `${p(x.xirr)} ao ano` : `${p(x.periodo_pct)} no período`}</small></div></div>`;
+      })}</div>` : ""}
+      ${imp && imp.notas && imp.notas.length ? html`<ul class="texto-p mt2" style="padding-left:18px">${imp.notas.map((n) => html`<li>${n}</li>`)}</ul>` : ""}
+      <div class="mt3">${macro(d.macro)}</div>
+      <p class="texto-p mt2">A frase de cima usa a TIR (o rendimento ao ano, com a data de cada aporte) e compara com o CDI e o IPCA acumulados desde o primeiro aporte. Os valores ainda não descontam o IR, que aparece no total líquido.</p>
+      <p class="texto-p mt1"><a href="#/irpf">Relatório para a declaração do IR ${icone("chevron", 12)}</a></p>`);
+  }
+
+  // ---- alertas: os altos primeiro; três à vista, o resto recolhido
+  const NIVEL = { alto: ["alerta", "var(--vermelho)"], medio: ["alerta", "var(--amarelo)"], info: ["info", "var(--acento)"] };
+  function itemAlerta(a) {
+    const [ic, cor] = NIVEL[a.nivel] || NIVEL.info;
+    const miolo = html`<span style="color:${cor};flex:none">${icone(ic, 20)}</span>
+      <div class="principal"><div class="titulo" style="white-space:normal">${a.titulo}</div><div class="detalhe" style="white-space:normal">${a.texto}</div></div>`;
+    return a.link ? html`<a class="item clicavel" href="${a.link}" style="color:inherit;text-decoration:none">${miolo}<span class="chevron">${icone("chevron", 18)}</span></a>`
+      : html`<div class="item">${miolo}</div>`;
+  }
+  function alertas(lista) {
+    if (!lista.length) return "";
+    const vis = lista.slice(0, 3), resto = lista.slice(3);
     return html`<section class="secao">
-      <div class="secao-topo"><h2>Dividendos</h2><span class="sub">o que suas ações e FIIs depositam</span>
-        <div class="direita"><a class="botao texto pequeno" href="#/dividendos">Abrir ${icone("chevron", 14)}</a></div></div>
-      <a class="cartao clicavel" href="#/dividendos" style="display:block;color:inherit;text-decoration:none">
+      <div class="secao-topo"><h2>Atenção</h2><span class="sub">o que merece um olhar na sua carteira</span></div>
+      <div class="lista">${vis.map(itemAlerta)}</div>
+      ${resto.length ? C.detalhes(html`<div class="lista">${resto.map(itemAlerta)}</div>`, `Ver mais ${resto.length} ${resto.length === 1 ? "aviso" : "avisos"}`) : ""}
+    </section>`;
+  }
+
+  // ---- próximos 30 dias: vencimentos de renda fixa e proventos a receber
+  function proximos30(d, div) {
+    const hoje = FC.datas.hoje(), lim = FC.datas.soma(hoje, 30);
+    const itens = [];
+    for (const t of d.rendaFixa || []) {
+      if (!t.vencimento || t.vencimento < hoje || t.vencimento > lim || !(t.valor_aplicado > 0.005)) continue;
+      let valor = t.valor_aplicado, liq = false;
+      if (typeof FC.impostos !== "undefined" && FC.impostos.titulo) {
+        try { const x = FC.impostos.titulo(t, FC.infoTitulo(FC.estado.prefs, t.id)); if (x && ok(x.liquido)) { valor = x.liquido; liq = true; } } catch (err) { console.error(err); }
+      }
+      itens.push({ data: t.vencimento, titulo: t.nome, detalhe: liq ? "vence · valor líquido estimado" : "vence · valor estimado", valor, ic: "calendario" });
+    }
+    for (const p of (div && div.proximos) || []) {
+      if (!p.pagamento || p.pagamento < hoje || p.pagamento > lim) continue;
+      itens.push({ data: p.pagamento, titulo: p.ticker, detalhe: `${p.tipo ? String(p.tipo).toLowerCase() : "provento"} a receber`, valor: p.valor, ic: "moeda" });
+    }
+    if (!itens.length) return "";
+    itens.sort((a, b) => a.data.localeCompare(b.data));
+    const quando = (iso) => { const n = FC.datas.dias(hoje, iso); return n === 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`; };
+    return html`<section class="secao">
+      <div class="secao-topo"><h2>Próximos 30 dias</h2><span class="sub">dinheiro que deve cair na conta</span></div>
+      <div class="lista">${itens.map((x) => html`<div class="item">
+        <span style="color:${x.ic === "moeda" ? "var(--verde)" : "var(--acento)"}">${icone(x.ic, 20)}</span>
+        <div class="principal"><div class="titulo">${x.titulo}</div><div class="detalhe">${x.detalhe} · ${FC.datas.br(x.data)}</div></div>
+        <div class="valores"><b>${fmt.brl(x.valor)}</b><small>${quando(x.data)}</small></div></div>`)}</div>
+    </section>`;
+  }
+
+  // ---- renda passiva: proventos por mês contra a renda que se quer
+  function rendaPassiva(div) {
+    if (!div) return "";
+    const res = div.resumo;
+    const media = res.recebido_12m > 0 ? res.recebido_12m / 12 : 0;
+    const mensal = media > 0 ? media : res.mensal_estimado || 0;
+    const alvo = FC.objetivos(FC.estado.prefs).renda_desejada_mensal;
+    if (!(mensal > 0) && !alvo) return "";
+    const pct = alvo ? Math.min(100, (mensal / alvo) * 100) : null;
+    return html`<section class="secao">
+      <div class="secao-topo"><h2>Renda passiva</h2><span class="sub">o que a carteira deposita sem você vender nada</span>
+        <div class="direita"><a class="botao texto pequeno" href="#/dividendos">Dividendos ${icone("chevron", 14)}</a></div></div>
+      <div class="cartao">
         <dl class="kpis">
-          <div class="kpi"><dt>Por mês (estimado)</dt><dd class="pos">${fmt.brl(r.resumo.mensal_estimado)}</dd></div>
-          <div class="kpi"><dt>Próximos 30 dias</dt><dd>${fmt.brl(r.resumo.proximos_30d)}</dd></div>
-          ${prox ? html`<div class="kpi"><dt>Próximo pagamento</dt><dd>${prox.ticker} <span class="rs">${fmt.brlTexto(prox.valor)}</span><small>${prox.pagamento ? "em " + FC.datas.br(prox.pagamento) : "data com " + FC.datas.br(prox.data_com)}</small></dd></div>` : ""}
-        </dl></a></section>`;
+          <div class="kpi"><dt>Você recebe por mês ${FC.ajuda("Média mensal dos proventos dos últimos 12 meses, já sem o IR do JCP. Sem pagamentos no período, a estimativa pelos proventos de cada ativo.")}</dt>
+            <dd class="pos">${fmt.brl(mensal)}<small>${media > 0 ? "média dos últimos 12 meses, líquida" : "estimado pelos proventos de 12 meses"}</small></dd></div>
+          ${alvo ? html`<div class="kpi"><dt>Sua meta</dt><dd>${fmt.brl(alvo)}<small>por mês, para viver de renda</small></dd></div>` : ""}
+        </dl>
+        ${alvo ? html`<div class="trilha mt3" style="height:10px;border-radius:5px" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%;background:var(--verde)"></i></div>
+          <p class="texto-p mt1"><b>${fmt.num(pct, pct < 10 ? 1 : 0)}%</b> do caminho para viver de renda${pct < 100 ? html` · faltam <span class="rs">${fmt.brlTexto(alvo - mensal)}</span> por mês` : " — meta alcançada!"}</p>`
+        : html`<p class="texto-p mt2">Quanto você quer receber por mês para viver de renda? <a href="#/ajustes">Defina em Ajustes → Objetivos</a> e acompanhe aqui o caminho.</p>`}
+      </div></section>`;
   }
 
   function melhores(d) {
@@ -339,37 +507,33 @@
 
   FC.telas.inicio = async function (raiz) {
     const d = FC.estado.dados;
-    const r = d.resumo;
     const vazio = !d.ativos.length && !d.rendaFixa.length && !d.agro.tem_dados;
     const nome = ((FC.auth.usuario.user_metadata || {}).nome || "").trim();
     const seq = C.sequencia();
+    const t = d.rentab && d.rentab.total;
+    const imp = resumoIR(d);
+    // proventos: uma análise só, usada por próximos 30 dias, renda passiva e gráfico
+    let div = null;
+    try { if (FC.estado.proventos) div = FC.dividendos.analisa(d, FC.estado.base, FC.estado.proventos); } catch (err) { console.error(err); }
+    let avisos = [];
+    try { if (FC.alertas) avisos = FC.alertas.calcula(d, FC.estado.base, FC.estado.prefs); } catch (err) { console.error(err); }
 
     raiz.innerHTML = String(html`
       ${C.estadoMercado()}
       <p class="fraco" style="font-size:15px;margin-bottom:8px">${saudacao()}${nome ? ", " + nome : ""}.</p>
-      <div class="cartao heroi">
-        <p class="rotulo">Patrimônio</p>
-        <p class="valor"><span class="rs" data-conta="${r.patrimonio}">${fmt.brlTexto(r.patrimonio)}</span></p>
-        <div class="chips">
-          ${r.bolsa || !r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s1)"></span>Bolsa <b class="rs">${fmt.brlTexto(r.bolsa)}</b></span>` : ""}
-          ${r.renda_fixa ? html`<span class="chip"><span class="ponto" style="background:var(--s2)"></span>Renda fixa <b class="rs">${fmt.brlTexto(r.renda_fixa)}</b></span>` : ""}
-          ${r.agro ? html`<span class="chip"><span class="ponto" style="background:var(--s5)"></span>Agro <b class="rs">${fmt.brlTexto(r.agro)}</b></span>` : ""}
-          ${r.cripto ? html`<span class="chip"><span class="ponto" style="background:var(--s3)"></span>Cripto <b class="rs">${fmt.brlTexto(r.cripto)}</b></span>` : ""}
-          ${d.rentab && d.rentab.total && FC.ok(d.rentab.total.periodo_pct) ? html`<span class="chip" title="ganho ÷ capital médio aplicado, cada aporte com a sua data">Rendimento <b class="${d.rentab.total.periodo_pct >= 0 ? "pos" : "neg"}">${fmt.delta(d.rentab.total.periodo_pct)}%</b>${FC.ok(d.rentab.total.xirr) ? html` · ${fmt.delta(d.rentab.total.xirr)}% a.a.` : ""}</span>` : ""}
-          ${seq ? C.chipSequencia(seq) : ""}
-          ${r.variacao_hoje ? html`<span class="chip">Hoje <b class="${r.variacao_hoje >= 0 ? "pos" : "neg"} rs">${r.variacao_hoje >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(r.variacao_hoje))}</b></span>` : ""}
-        </div>
-      </div>
+      ${topo(d, imp, seq)}
+      ${t ? frase(comparativo(t)) : ""}
+      ${t ? detalhesTecnicos(d, imp) : html`<div class="mt3">${macro(d.macro)}</div>`}
       ${retrospectivas()}
-      <div class="mt3">${macro(d.macro)}</div>
       ${vazio ? comecar() : ""}
-      ${C.resumoInvestido(d, { compacto: true })}
+      ${alertas(avisos)}
+      ${proximos30(d, div)}
+      ${rendaPassiva(div)}
       ${alocacao(d)}
       ${crescimento(d)}
-      ${dividendos(d)}
+      ${proventos(d.historico.renda_mensal, div)}
       ${agroResumo(d.agro)}
       ${melhores(d)}
-      ${proventos(d.historico.renda_mensal)}
       ${d.atualizado ? html`<p class="texto-p mt4 centro" style="margin-inline:auto">Preços atualizados ${FC.datas.ha(FC.estado.spotEm) || "—"} (a cada minuto com o app aberto) · cripto pelo CoinGecko, bolsa pelo Yahoo Finance, fundamentos pelo Fundamentus e juros pelo Banco Central.</p>` : ""}
     `);
 

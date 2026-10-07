@@ -55,8 +55,9 @@
               <td><b>${l.nome}</b><span class="leg">${l.ticker}${l.tenho ? " · na carteira" : ""}</span></td>
               <td class="n">${fmt.num(l.cotacao)}${ok(l.variacao_dia) ? html`<span class="leg ${l.variacao_dia >= 0 ? "pos" : "neg"}">${fmt.delta(l.variacao_dia, 2)}% hoje</span>` : ""}</td>
               <td class="n">${pct(l.lucro_preco)}</td>
-              <td class="n">${ok(l.preco_justo) ? html`<b>${fmt.num(l.preco_justo)}</b><span class="leg">${Math.abs(l.desconto) < 0.5 ? "na cota" : l.desconto > 0 ? fmt.num(l.desconto, 0) + "% acima da cota" : fmt.num(-l.desconto, 0) + "% abaixo"}</span>` : "—"}</td>
-              <td class="n">${l.graham && l.graham.valor != null ? html`<b>${fmt.num(l.graham.valor)}</b><span class="leg ${l.graham.margem >= 0 ? "pos" : "neg"}">${fmt.delta(l.graham.margem, 0)}% margem</span>` : html`<span class="leg" title="${l.graham ? l.graham.motivo : ""}">n/a</span>`}</td>
+              <td class="n">${ok(l.preco_justo) && l.justo_nao_confiavel ? html`<span class="muito-fraco" style="text-decoration:line-through">${fmt.num(l.preco_justo)}</span><span class="leg neg" title="${l.justo_nao_confiavel}">não confiável</span>`
+                : ok(l.preco_justo) ? html`<b>${fmt.num(l.preco_justo)}</b><span class="leg">${Math.abs(l.desconto) < 0.5 ? "na cota" : l.desconto > 0 ? fmt.num(l.desconto, 0) + "% acima da cota" : fmt.num(-l.desconto, 0) + "% abaixo"}</span>` : "—"}</td>
+              <td class="n">${l.graham && l.graham.valor != null ? html`<b>${fmt.num(l.graham.valor)}</b><span class="leg ${l.graham.margem >= 0 ? "pos" : "neg"}">${fmt.delta(l.graham.margem, 0)}% margem</span>` : html`<span class="leg" title="${l.graham ? l.graham.motivo : ""}">${l.graham && /bancos/.test(l.graham.motivo || "") ? "não se aplica" : "n/a"}</span>`}</td>
               <td class="n ${l.testes.divida === false ? "neg" : ""}">${l.sem_ebitda ? html`<span class="muito-fraco">n/a</span>` : ok(l.dl_ebitda) ? fmt.num(l.dl_ebitda, 1) + "x" : "—"}</td>
               <td class="n"><span class="${l.testes.payout === false ? "neg" : ""}">${pct(l.payout, 0)}</span>${ok(l.payout_vs_setor) ? html`<span class="leg">${fmt.delta(l.payout_vs_setor, 0)} p.p.</span>` : ""}</td>
               <td class="n"><b>${pct(l.dy)}</b>${ok(l.dy_vs_setor) ? html`<span class="leg">${fmt.delta(l.dy_vs_setor)} p.p. vs setor</span>` : ""}</td>
@@ -114,7 +115,8 @@
       ${blocos.map((b) => html`<div id="setor-${b.setor.replace(/\W/g, "")}">${tabela(b, criterios)}</div>`)}
 
       <p class="texto-p mt4"><b>L/P</b> é o inverso do P/L, lido como rendimento. <b>Payout</b> = DY × P/L. A linha cinza é a <b>mediana</b>, não a média: um payout de 250% num ano de venda de ativo estragaria a referência dos vizinhos.
-        Banco não tem EBITDA, então o critério de dívida não se aplica a ele (n/a).</p>
+        Banco não tem EBITDA, então o critério de dívida não se aplica a ele (n/a); o preço justo de Graham também não se aplica a bancos e seguradoras.
+        Quando o dividendo passa do lucro (payout acima de 100% ou prejuízo), o preço justo pelo DY aparece riscado: aquele dividendo não se sustenta e o teste de preço fica de fora.</p>
     `);
 
     const form = FC.$("#f-crit", raiz);
@@ -178,10 +180,10 @@
             <div class="lista mt2">
               ${[["Payout", "dividendo ÷ lucro", pct(l.payout, 0), l.payout == null ? "sem dado" : l.payout > 100 ? "distribui mais do que lucra" : "cabe dentro do lucro", l.testes.payout],
                  ["Lucro sobre preço", "inverso do P/L", pct(l.lucro_preco), `cada R$ 100 na ação geram ${ok(l.lucro_preco) ? fmt.num(l.lucro_preco) : "—"} de lucro ao ano`, l.testes.lucrativa],
-                 ["Preço justo", `para DY de ${pct(l.dy_alvo)}`, ok(l.preco_justo) ? fmt.num(l.preco_justo) : "—", ok(l.desconto) ? (l.desconto >= 0 ? `cota ${fmt.num((1 - l.cotacao / l.preco_justo) * 100, 0)}% abaixo do preço que daria o yield` : `precisaria cair ${fmt.num(-l.desconto, 0)}% para dar o yield`) : "sem dividendo em 12 meses", l.testes.preco],
+                 ["Preço justo", `para DY de ${pct(l.dy_alvo)}`, ok(l.preco_justo) ? fmt.num(l.preco_justo) : "—", l.justo_nao_confiavel ? `não confiável: ${l.justo_nao_confiavel}` : ok(l.desconto) ? (l.desconto >= 0 ? `cota ${fmt.num((1 - l.cotacao / l.preco_justo) * 100, 0)}% abaixo do preço que daria o yield` : `precisaria cair ${fmt.num(-l.desconto, 0)}% para dar o yield`) : "sem dividendo em 12 meses", l.testes.preco],
                  ["Dívida líquida / EBITDA", "alavancagem", l.sem_ebitda ? "n/a" : ok(l.dl_ebitda) ? fmt.num(l.dl_ebitda, 1) + "x" : "—", l.sem_ebitda ? "banco não tem EBITDA" : ok(l.dl_ebitda) ? (l.dl_ebitda < 0 ? "caixa líquido" : `${fmt.num(l.dl_ebitda, 1)} anos de geração de caixa`) : "múltiplos indisponíveis", l.testes.divida]]
                 .map(([t, s2, v, leit, teste]) => html`<div class="item"><div class="principal"><div class="titulo">${t}</div><div class="detalhe">${s2} · ${leit}</div></div>
-                  <div class="valores"><b>${v}</b></div>${teste == null ? FC.pilula("cinza", "n/a") : teste ? FC.pilula("verde", "passa") : FC.pilula("vermelho", "reprovado")}</div>`)}
+                  <div class="valores"><b>${v}</b></div>${t === "Preço justo" && l.justo_nao_confiavel ? FC.pilula("amarelo", "não confiável") : teste == null ? FC.pilula("cinza", "n/a") : teste ? FC.pilula("verde", "passa") : FC.pilula("vermelho", "reprovado")}</div>`)}
             </div>` : ""}`);
         FC.animar(f.corpo);
         FC.$$("[data-anos]", f.corpo).forEach((bt) => bt.addEventListener("click", () => { anos = Number(bt.dataset.anos); setTimeout(pinta, 200); }));

@@ -52,7 +52,8 @@
           dl_ebitda: semEbitda ? null : dividaSobreEbitda(d),
           sem_ebitda: semEbitda, dy: dy || null, pl: pl || null, pvp: d.pvp, roe: d.roe,
           liquidez: liq, liquido: liq >= liqMin,
-          graham: FC.graham(cot, d.pl, d.pvp),
+          // banco e seguradora: Graham não se aplica (o setor da Renda decide)
+          graham: FC.graham(cot, d.pl, d.pvp, { ticker, setor, subsetor: d.subsetor || d.setor }),
         });
       }
     }
@@ -71,9 +72,13 @@
       const justo = l.dividendo ? (l.dividendo / alvo) * 100 : null;
       l.preco_justo = justo;
       l.desconto = justo && l.cotacao ? (justo / l.cotacao - 1) * 100 : null;
+      // dividendo acima do lucro (payout > 100% ou lucro ≤ 0) não se repete:
+      // o preço justo calculado com ele não é confiável e o teste fica de fora
+      l.justo_nao_confiavel = justo != null && (!(l.pl > 0) || (l.payout != null && l.payout > 100))
+        ? "dividendo maior que o lucro — não se sustenta" : null;
       l.testes = {
         payout: l.payout == null ? null : l.payout <= payoutMax,
-        preco: justo == null ? null : l.cotacao <= justo,
+        preco: justo == null || l.justo_nao_confiavel ? null : l.cotacao <= justo,
         divida: l.sem_ebitda || l.dl_ebitda == null ? null : l.dl_ebitda <= dlMax,
         liquidez: l.liquido,
         lucrativa: !!(l.pl && l.pl > 0),
