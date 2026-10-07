@@ -57,7 +57,7 @@ async function doCache(chave: string, validadeMs: number) {
     .select("dados, atualizado_em").eq("chave", chave).maybeSingle();
   if (!data) return null;
   const idade = Date.now() - new Date(data.atualizado_em).getTime();
-  return { dados: data.dados, fresco: idade < validadeMs };
+  return { dados: data.dados, fresco: idade < validadeMs, em: data.atualizado_em as string };
 }
 
 async function guarda(chave: string, dados: unknown) {
@@ -70,21 +70,32 @@ async function guarda(chave: string, dados: unknown) {
 // (velho é melhor que nada — a tela mostra a data).
 async function comCache<T>(chave: string, validadeMs: number, forcar: boolean,
                            buscar: () => Promise<T>): Promise<T> {
+  return (await comCacheInfo(chave, validadeMs, forcar, buscar)).dados;
+}
+
+// O mesmo, dizendo se o dado é velho (a fonte falhou e voltou o guardado)
+// e quando ele foi guardado.
+async function comCacheInfo<T>(chave: string, validadeMs: number, forcar: boolean,
+                               buscar: () => Promise<T>): Promise<{ dados: T; velho: boolean; em: string | null }> {
   const c = await doCache(chave, validadeMs);
-  if (c && c.fresco && !forcar) return c.dados as T;
+  if (c && c.fresco && !forcar) return { dados: c.dados as T, velho: false, em: c.em };
   try {
     const novo = await buscar();
     await guarda(chave, novo);
-    return novo;
+    return { dados: novo, velho: false, em: new Date().toISOString() };
   } catch (e) {
-    if (c) return c.dados as T;
+    if (c) return { dados: c.dados as T, velho: true, em: c.em };
     throw e;
   }
 }
 
 async function baixa(url: string, latin1 = false): Promise<string> {
   const r = await fetch(url, { headers: { "User-Agent": UA, "Accept": "*/*" } });
-  if (!r.ok) throw new Error(`${r.status} em ${new URL(url).host}`);
+  if (!r.ok) {
+    // guarda o status e o começo da resposta (o BCB diz "Value(s) not found" no 404)
+    const corpo = await r.text().catch(() => "");
+    throw Object.assign(new Error(`${r.status} em ${new URL(url).host}`), { status: r.status, corpo: corpo.slice(0, 200) });
+  }
   const bytes = new Uint8Array(await r.arrayBuffer());
   return new TextDecoder(latin1 ? "iso-8859-1" : "utf-8").decode(bytes);
 }
@@ -187,8 +198,10 @@ function simbolo(ticker: string, classe: string) {
   return NA_B3.has(classe) && !t.endsWith(".SA") && !t.startsWith("^") ? t + ".SA" : t;
 }
 
-function iso(ts: number) {
-  return new Date(ts * 1000).toISOString().slice(0, 10);
+// o Yahoo marca a barra na abertura do pregão local (BRL=X vem às 23:00
+// UTC do dia anterior): a data sai no fuso da bolsa (gmtoffset, em segundos)
+function iso(ts: number, offset = 0) {
+  return new Date((ts + offset) * 1000).toISOString().slice(0, 10);
 }
 
 // O Yahoo às vezes publica um dia com a escala errada (1,07 em vez de
@@ -199,15 +212,21 @@ function semOutliers(p: [string, number][], janela = 11, tol = 0.5) {
   const meio = Math.floor(janela / 2);
   const limpos: [string, number][] = [];
   for (let i = 0; i < p.length; i++) {
-    const ini = Math.max(0, i - meio);
+    // nas pontas a janela desliza (não encolhe): no fim, os últimos 11 dias
+    const ini = Math.max(0, Math.min(i - meio, p.length - janela));
     const viz = p.slice(ini, ini + janela).map((x) => x[1]).sort((a, b) => a - b);
     const med = viz[Math.floor(viz.length / 2)];
-    if (med && Math.abs(p[i][1] / med - 1) <= tol) limpos.push(p[i]);
+    if (med && Math.abs(p[i][1] / med - 1) <= tol) { limpos.push(p[i]); continue; }
+    // nos últimos dias a mediana ainda não "viu" o movimento: fica se um
+    // vizinho confirma o novo patamar (salto de 2+ dias é real; o isolado sai)
+    const perto = (j: number) => j >= 0 && j < p.length && Math.abs(p[i][1] / p[j][1] - 1) <= tol;
+    if (i >= p.length - meio && (perto(i - 1) || perto(i + 1))) limpos.push(p[i]);
   }
   return { precos: limpos, descartados: p.length - limpos.length };
 }
 
-async function serieYahoo(ticker: string, classe: string, anos: number) {
+// série na moeda em que o Yahoo publica (AAPL em dólar)
+async function serieYahooBruta(ticker: string, classe: string, anos: number) {
   const sym = simbolo(ticker, classe);
   let txt = "";
   for (const host of ["query1", "query2"]) {
@@ -221,14 +240,15 @@ async function serieYahoo(ticker: string, classe: string, anos: number) {
   }
   const res = JSON.parse(txt).chart.result[0];
   const meta = res.meta;
+  const off = Number(meta.gmtoffset) || 0;
   const ts: number[] = res.timestamp ?? [];
   const fech: (number | null)[] = res.indicators?.quote?.[0]?.close ?? [];
   const brutos: [string, number][] = [];
-  ts.forEach((t, i) => { if (fech[i] != null) brutos.push([iso(t), Number(fech[i]!.toPrecision(8))]); });
+  ts.forEach((t, i) => { if (fech[i] != null) brutos.push([iso(t, off), Number(fech[i]!.toPrecision(8))]); });
   const { precos, descartados } = semOutliers(brutos);
 
   const divs = Object.values(res.events?.dividends ?? {})
-    .map((d: any) => [iso(d.date), d.amount] as [string, number])
+    .map((d: any) => [iso(d.date, off), d.amount] as [string, number])
     .sort((a, b) => a[0].localeCompare(b[0]));
 
   const corte = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
@@ -245,39 +265,53 @@ async function serieYahoo(ticker: string, classe: string, anos: number) {
   };
 }
 
+// ------------------------------------------------------------------ câmbio
+// Tudo sai daqui em reais. O que o Yahoo publica em outra moeda (ação
+// americana, cripto em dólar — o Yahoo não tem mais BTC-BRL) é convertido
+// pelo câmbio de CADA dia, não pelo de hoje — senão o histórico misturaria
+// a variação da moeda com a do ativo.
+function parCambio(moeda: string) {
+  if (moeda === "GBp") return { par: "GBPBRL=X", fator: 0.01 };   // Londres cota em pence
+  return { par: moeda === "USD" ? "BRL=X" : `${moeda.toUpperCase()}BRL=X`, fator: 1 };
+}
+
+async function serieYahoo(ticker: string, classe: string, anos: number, forcar = false) {
+  const s = await serieYahooBruta(ticker, classe, anos);
+  if (!s.moeda || s.moeda === "BRL") return s;
+  const { par, fator } = parCambio(s.moeda);
+  const fx: any = await comCache(`yahoo:${par}:${anos}y:brl`, 6 * HORA, forcar, () => serieYahooBruta(par, "moeda", anos));
+  const cambio = fx.precos as [string, number][];
+  if (!cambio.length) throw new Error("câmbio indisponível");
+  // câmbio do dia, ou do último dia útil antes dele (cripto negocia no fim de semana)
+  const emReais = (lista: [string, number][]) => {
+    let j = 0;
+    return lista.map(([d, p]) => {
+      while (j + 1 < cambio.length && cambio[j + 1][0] <= d) j++;
+      return [d, Number((p * fator * cambio[j][1]).toPrecision(10))] as [string, number];
+    });
+  };
+  const precos = emReais(s.precos), dividendos = emReais(s.dividendos);
+  const hojeFx = fx.preco || cambio.at(-1)![1];
+  const corte = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const ano = precos.filter(([d]) => d >= corte).map(([, p]) => p);
+  const u200 = precos.slice(-200).map(([, p]) => p);
+  return {
+    ...s, precos, dividendos, moeda: "BRL", moeda_origem: s.moeda, cambio: hojeFx * fator,
+    preco: s.preco != null ? s.preco * fator * hojeFx : precos.at(-1)?.[1] ?? null,
+    media_200d: u200.length >= 100 ? u200.reduce((a, b) => a + b, 0) / u200.length : null,
+    max_52s: ano.length ? Math.max(...ano) : null,
+    min_52s: ano.length ? Math.min(...ano) : null,
+  };
+}
+
 // ------------------------------------------------------------------ cripto
-// O Yahoo não tem mais os pares em real (BTC-BRL dá 404). A cripto vem em
-// dólar e é convertida pelo câmbio de CADA dia (BRL=X), não pelo de hoje —
-// senão o histórico misturaria a variação da moeda com a da cripto.
 function simboloCripto(ticker: string) {
   return ticker.includes("-") ? ticker : ticker + "-USD";
 }
 
 async function serieCripto(ticker: string, anos: number, forcar: boolean) {
-  const [usd, fx] = await Promise.all([
-    serieYahoo(simboloCripto(ticker), "cripto", anos),
-    comCache(`yahoo:BRL=X:${anos}y`, 6 * HORA, forcar, () => serieYahoo("BRL=X", "moeda", anos)),
-  ]);
-  const cambio = (fx as any).precos as [string, number][];
-  if (!cambio.length) throw new Error("câmbio indisponível");
-  // câmbio do dia, ou do último dia útil antes dele (cripto negocia no fim de semana)
-  let j = 0;
-  const cotacaoEm = (d: string) => {
-    while (j + 1 < cambio.length && cambio[j + 1][0] <= d) j++;
-    return cambio[j][1];
-  };
-  const precos = usd.precos.map(([d, p]) => [d, Number((p * cotacaoEm(d)).toPrecision(10))] as [string, number]);
-  const hojeFx = (fx as any).preco || cambio.at(-1)![1];
-  const corte = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
-  const ano = precos.filter(([d]) => d >= corte).map(([, p]) => p);
-  const u200 = precos.slice(-200).map(([, p]) => p);
-  return {
-    ...usd, precos, dividendos: [], moeda: "BRL", moeda_origem: "USD", cambio: hojeFx,
-    preco: usd.preco != null ? usd.preco * hojeFx : precos.at(-1)?.[1] ?? null,
-    media_200d: u200.length >= 100 ? u200.reduce((a, b) => a + b, 0) / u200.length : null,
-    max_52s: ano.length ? Math.max(...ano) : null,
-    min_52s: ano.length ? Math.min(...ano) : null,
-  };
+  const s = await serieYahoo(simboloCripto(ticker), "cripto", anos, forcar);
+  return { ...s, dividendos: [] };
 }
 
 async function emLotes<T, R>(itens: T[], n: number, f: (x: T) => Promise<R>) {
@@ -307,11 +341,15 @@ const SERIES_INDICES: Record<string, number> = { cdi: 12, selic: 11, ipca: 433 }
 const INICIO_INDICES = "2015-01-01";
 const brData = (iso: string) => { const [a, m, d] = iso.split("-"); return `${d}/${m}/${a}`; };
 
-// o BCB oscila (502, conexão recusada): tenta de novo antes de desistir
+// o BCB oscila (502, conexão recusada): tenta de novo antes de desistir.
+// 404 "Value(s) not found" é só "nada novo no período": lista vazia, sem retentativa.
 async function baixaComRetentativa(url: string, tentativas = 3): Promise<string> {
   let erro: unknown = null;
   for (let k = 0; k < tentativas; k++) {
-    try { return await baixa(url); } catch (e) { erro = e; await new Promise((r) => setTimeout(r, 800 * (k + 1) * (k + 1))); }
+    try { return await baixa(url); } catch (e: any) {
+      if (e?.status === 404 && /not found/i.test(String(e.corpo || ""))) return "[]";
+      erro = e; await new Promise((r) => setTimeout(r, 800 * (k + 1) * (k + 1)));
+    }
   }
   throw erro;
 }
@@ -402,6 +440,30 @@ async function lerIndices(desde: string) {
 // publicado, vale o último valor (estimativa).
 // Sem nenhum dado na tabela, vale a taxa anual de hoje do Banco Central
 // (idx.reserva, do macro) — melhor uma estimativa que rendimento zero.
+// dias úteis: sem fim de semana e sem feriado bancário nacional (o mesmo
+// calendário de assets/js/util.js)
+const somaDias = (iso: string, n: number) => new Date(Date.parse(iso + "T12:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+function pascoa(ano: number) {     // algoritmo de Meeus/Jones/Butcher
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+}
+const cacheFeriados: Record<number, Set<string>> = {};
+function feriados(ano: number) {
+  if (cacheFeriados[ano]) return cacheFeriados[ano];
+  const p = pascoa(ano);
+  const fixos = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "12-25"].map((d) => `${ano}-${d}`);
+  if (ano >= 2024) fixos.push(`${ano}-11-20`);          // Consciência Negra, feriado nacional desde 2024
+  const moveis = [somaDias(p, -48), somaDias(p, -47), somaDias(p, -2), somaDias(p, 60)]; // Carnaval, Sexta Santa, Corpus Christi
+  return (cacheFeriados[ano] = new Set([...fixos, ...moveis]));
+}
+function ehUtil(iso: string) {
+  const dow = new Date(iso + "T12:00:00Z").getUTCDay();
+  return dow !== 0 && dow !== 6 && !feriados(Number(iso.slice(0, 4))).has(iso);
+}
+
 const aoDia = (anual: number | null | undefined) => (anual == null ? 0 : (Math.pow(1 + anual / 100, 1 / 252) - 1) * 100);
 const aoMes = (anual: number | null | undefined) => (anual == null ? 0 : (Math.pow(1 + anual / 100, 1 / 12) - 1) * 100);
 
@@ -410,12 +472,9 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
   const cal = idx.cdi;
   const ultimoCal = cal.length ? cal.at(-1)![0] : "0000";
   const diasUteis: string[] = (cal as [string, number][]).filter(([d]) => d >= de && d < ate).map(([d]) => d);
-  // depois do último dia publicado: dias de semana, com o último valor
-  const umDia = 86400000;
-  let d = Date.parse((ultimoCal >= de ? ultimoCal : de) + "T12:00:00Z") + (ultimoCal >= de ? umDia : 0);
-  for (; new Date(d).toISOString().slice(0, 10) < ate; d += umDia) {
-    const dow = new Date(d).getUTCDay();
-    if (dow !== 0 && dow !== 6) diasUteis.push(new Date(d).toISOString().slice(0, 10));
+  // depois do último dia publicado: dias úteis do calendário (feriados fora), com o último valor
+  for (let d = ultimoCal >= de ? somaDias(ultimoCal, 1) : de; d < ate; d = somaDias(d, 1)) {
+    if (ehUtil(d)) diasUteis.push(d);
   }
   let f = 1;
   if (indexador === "cdi" || indexador === "selic") {
@@ -428,10 +487,16 @@ function fatorRF(indexador: string, taxa: number, de: string, ate: string, idx: 
     f = Math.pow(1 + taxa / 100, diasUteis.length / 252);
   } else if (indexador === "ipca") {
     const ipca = new Map((idx.ipca as [string, number][]).map(([d, v]) => [d.slice(0, 7), v])), ultimo = idx.ipca.length ? idx.ipca.at(-1)![1] : aoMes((idx.reserva || {}).ipca_12m);
+    // dias úteis do mês INTEIRO: os publicados e, depois do último, os do
+    // calendário até o fim do mês — senão o IPCA do mês entraria em poucos dias
     const porMes: Record<string, number> = {};
     for (const [d] of cal) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1;
+    const fimEst = somaDias(ate.slice(0, 7) + "-28", 4).slice(0, 7) + "-01";   // 1º dia do mês seguinte a "ate"
+    for (let d = cal.length ? somaDias(ultimoCal, 1) : de.slice(0, 7) + "-01"; d < fimEst; d = somaDias(d, 1)) {
+      if (ehUtil(d)) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1;
+    }
     for (const d of diasUteis) {
-      const m = d.slice(0, 7), du = d > ultimoCal ? 21 : porMes[m] || 21;
+      const m = d.slice(0, 7), du = porMes[m] || 21;
       f *= Math.pow(1 + (ipca.get(m) ?? ultimo) / 100, 1 / du) * Math.pow(1 + taxa / 100, 1 / 252);
     }
   }
@@ -498,14 +563,16 @@ async function cotacoesCripto(tickers: string[]) {
   const lista = [...new Set(Object.values(ids))].sort();
   const saida: Record<string, unknown> = {};
   if (lista.length) {
-    const d: any = await comCache(`coingecko:preco:${lista.join(",")}`, 60 * 1000, false, async () =>
+    const c = await comCacheInfo(`coingecko:preco:${lista.join(",")}`, 60 * 1000, false, async () =>
       JSON.parse(await baixa(`https://api.coingecko.com/api/v3/simple/price?ids=${lista.join(",")}` +
         `&vs_currencies=brl&include_24hr_change=true&include_last_updated_at=true`)));
+    const d: any = c.dados;
     for (const [t, id] of Object.entries(ids)) {
       const x = d[id];
       if (x && x.brl != null) {
         saida[t] = { preco: x.brl, variacao_dia: x.brl_24h_change ?? null,
-          quando: x.last_updated_at ? new Date(x.last_updated_at * 1000).toISOString() : null, fonte: "CoinGecko" };
+          quando: x.last_updated_at ? new Date(x.last_updated_at * 1000).toISOString() : null, fonte: "CoinGecko",
+          ...(c.velho ? { velho: true, cache_em: c.em } : {}) };
       }
     }
   }
@@ -513,15 +580,32 @@ async function cotacoesCripto(tickers: string[]) {
 }
 
 // ------------------------------------------------------------------ cotação de agora
-async function cotacaoYahoo(ticker: string, classe: string) {
-  return comCache(`spot:${simbolo(ticker, classe)}`, 60 * 1000, false, async () => {
+// Sempre em reais: fora do BRL, converte pelo câmbio de agora (a variação
+// do dia junta a do ativo e a da moeda). A chave ":brl" separa do cache
+// antigo, que guardava o preço na moeda de origem.
+// Se a fonte falhar e voltar o guardado, sai marcado {velho, cache_em}.
+async function cotacaoYahoo(ticker: string, classe: string): Promise<any> {
+  const sym = simbolo(ticker, classe);
+  const r = await comCacheInfo(`spot:${sym}:brl`, 60 * 1000, false, async () => {
     const d = JSON.parse(await baixa(`https://query1.finance.yahoo.com/v8/finance/chart/` +
-      `${encodeURIComponent(simbolo(ticker, classe))}?range=1d&interval=1d`));
+      `${encodeURIComponent(sym)}?range=1d&interval=1d`));
     const m = d.chart.result[0].meta;
     const ant = m.chartPreviousClose ?? m.previousClose;
-    return { preco: m.regularMarketPrice, variacao_dia: ant ? (m.regularMarketPrice / ant - 1) * 100 : null,
+    let preco = m.regularMarketPrice, variacao = ant ? (m.regularMarketPrice / ant - 1) * 100 : null;
+    const extra: Record<string, unknown> = {};
+    if (m.currency && m.currency !== "BRL") {
+      const { par, fator } = parCambio(m.currency);
+      const fx = await cotacaoYahoo(par, "moeda");
+      // câmbio velho não vira preço "novo" no cache: cai no guardado (marcado velho)
+      if (fx.velho || fx.preco == null) throw new Error("câmbio indisponível");
+      preco = preco * fator * fx.preco;
+      if (variacao != null && fx.variacao_dia != null) variacao = ((1 + variacao / 100) * (1 + fx.variacao_dia / 100) - 1) * 100;
+      Object.assign(extra, { moeda_origem: m.currency, cambio: fx.preco * fator });
+    }
+    return { preco, variacao_dia: variacao, ...extra,
       quando: m.regularMarketTime ? new Date(m.regularMarketTime * 1000).toISOString() : null, fonte: "Yahoo Finance" };
   });
+  return r.velho ? { ...(r.dados as any), velho: true, cache_em: r.em } : r.dados;
 }
 
 async function cotacoes(itens: { ticker: string; classe: string }[]) {
@@ -529,18 +613,11 @@ async function cotacoes(itens: { ticker: string; classe: string }[]) {
   const bolsa = itens.filter((i) => i.classe !== "cripto");
   const saida: Record<string, any> = {};
   try { Object.assign(saida, await cotacoesCripto(cripto)); } catch (_) { /* cai no Yahoo abaixo */ }
-  // cripto que o CoinGecko não achou: Yahoo em dólar × câmbio de agora
-  const faltam = cripto.filter((t) => !saida[t]);
-  if (faltam.length) {
+  // cripto que o CoinGecko não achou: Yahoo em dólar × câmbio de agora (convertido em cotacaoYahoo)
+  for (const t of cripto.filter((t) => !saida[t])) {
     try {
-      const fx = await cotacaoYahoo("BRL=X", "moeda");
-      for (const t of faltam) {
-        try {
-          const u = await cotacaoYahoo(simboloCripto(t), "cripto");
-          saida[t] = { ...u, preco: u.preco * fx.preco, fonte: "Yahoo Finance (USD × câmbio)" };
-        } catch (e) { saida[t] = { erro: String(e).slice(0, 120) }; }
-      }
-    } catch (e) { for (const t of faltam) saida[t] = { erro: "câmbio indisponível" }; }
+      saida[t] = { ...await cotacaoYahoo(simboloCripto(t), "cripto"), fonte: "Yahoo Finance (USD × câmbio)" };
+    } catch (e) { saida[t] = { erro: String(e).slice(0, 120) }; }
   }
   await emLotes(bolsa, 8, async (i) => {
     const t = i.ticker.toUpperCase();
@@ -608,7 +685,7 @@ async function proventos(itens: { ticker: string; classe: string }[]) {
       if (i.classe === "acao_br" || i.classe === "fii") {
         saida[t] = await proventosB3(t, i.classe);
       } else if (i.classe !== "cripto") {
-        const s: any = await comCache(`yahoo:${simbolo(t, i.classe)}:5y`, 12 * HORA, false, () => serieYahoo(t, i.classe, 5));
+        const s: any = await comCache(`yahoo:${simbolo(t, i.classe)}:5y:brl`, 12 * HORA, false, () => serieYahoo(t, i.classe, 5));
         saida[t] = { fonte: "Yahoo Finance (só data com)", lista: (s.dividendos || []).map(([d, v]: [string, number]) =>
           ({ data_com: d, pagamento: null, valor: v, tipo: "Dividendo" })) };
       }
@@ -626,6 +703,33 @@ function hojeBrasil() {
   return new Date(Date.now() - 3 * HORA).toISOString().slice(0, 10);
 }
 
+// Quantidade e custo de uma posição, como posicao() do app: base primeiro,
+// depois compras e vendas por data (no mesmo dia, compra antes de venda).
+// A venda tira a mesma fração da quantidade e do custo (o preço médio não
+// muda). Custo só quando se conhece o de todas as cotas; senão null.
+type Evento = { data: string; q: number; preco: unknown };
+function posicaoServidor(qBase: number, pmBase: number | null, eventos: Evento[]) {
+  const ev = [...eventos].sort((a, b) => a.data.localeCompare(b.data) || Number(a.q < 0) - Number(b.q < 0));
+  let q = qBase, qt = qBase, custo = 0, qCusto = 0;
+  if (pmBase && qBase) { custo = qBase * pmBase; qCusto = qBase; }
+  for (const e of ev) {
+    q += e.q;
+    if (e.q > 0) {
+      qt += e.q;
+      const p = e.preco == null || e.preco === "" ? NaN : Number(e.preco);
+      if (Number.isFinite(p)) { custo += e.q * p; qCusto += e.q; }
+    } else if (e.q < 0 && qt > 1e-12) {
+      const fr = Math.min(1, -e.q / qt);
+      custo -= custo * fr; qCusto -= qCusto * fr; qt += e.q;
+    }
+  }
+  const completo = qCusto >= q - 1e-9;
+  return { q, custo: completo && custo ? custo : null };
+}
+
+// preço que voltou do cache porque a fonte falhou, guardado há mais de 3 dias
+const precoVelho = (c: any) => !!c?.velho && (!c.cache_em || Date.now() - Date.parse(c.cache_em) > 3 * 24 * HORA);
+
 async function registroDiario() {
   try { await atualizaIndices(); } catch { /* o registro segue com o que já tem */ }
   const idx: Record<string, any> = await lerIndices("2015-01-01");
@@ -642,28 +746,27 @@ async function registroDiario() {
         admin.from("renda_fixa").select("*").eq("user_id", uid),
         admin.from("patrimonio_historico").select("agro").eq("user_id", uid).order("data", { ascending: false }).limit(1).maybeSingle(),
       ]);
-      const reg: Record<string, { q: number; c: number }> = {};
+      const reg: Record<string, Evento[]> = {};
       const importados = new Set<string>();
       for (const a of aportes || []) {
         if (a.tipo !== "ativo" || !a.ticker) continue;
-        const r = (reg[a.ticker] = reg[a.ticker] || { q: 0, c: 0 });
-        r.q += Number(a.quantidade); r.c += Number(a.quantidade) * Number(a.preco);
+        (reg[a.ticker] = reg[a.ticker] || []).push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: a.preco });
         if (a.origem) importados.add(a.ticker);
       }
       const carteira = (ativos || []).filter((a: any) => a.lista === "carteira" || reg[a.ticker]);
       const precos = await cotacoes(carteira.map((a: any) => ({ ticker: a.ticker, classe: a.classe })));
       const linhas: any[] = [];
       const porPilar: Record<string, number> = {};
+      const semPreco: string[] = [];
       let rv = 0, cripto = 0, investido = 0;
       for (const a of carteira) {
         const base = importados.has(a.ticker) ? 0 : Number(a.quantidade) || 0;
         const pm = importados.has(a.ticker) ? null : a.preco_medio != null ? Number(a.preco_medio) : null;
-        const r = reg[a.ticker] || { q: 0, c: 0 };
-        const q = base + r.q;
+        const { q, custo } = posicaoServidor(base, pm, reg[a.ticker] || []);
+        if (!(q > 1e-12)) continue;
         const p = precos[a.ticker]?.preco;
-        if (!(q > 1e-12) || p == null) continue;
+        if (p == null || precoVelho(precos[a.ticker])) { semPreco.push(a.ticker); continue; }
         const valor = q * p;
-        const custo = (base && !pm) ? null : (base * (pm || 0) + r.c);
         linhas.push({ ticker: a.ticker, classe: a.classe, pilar: a.pilar, quantidade: q, preco: p, valor, custo });
         porPilar[a.pilar] = (porPilar[a.pilar] || 0) + valor;
         if (a.classe === "cripto") cripto += valor; else rv += valor;
@@ -678,13 +781,32 @@ async function registroDiario() {
       const agro = Number(ultimo?.agro) || 0;
       if (agro) porPilar.agro = (porPilar.agro || 0) + agro;
       const patrimonio = rv + cripto + rfTotal + agro;
-      const linha = { user_id: uid, data: hojeBrasil(), registrado_em: new Date().toISOString(), origem: "automatico",
-        patrimonio, renda_variavel: rv, cripto, renda_fixa: rfTotal, agro, investido, por_pilar: porPilar, ativos: linhas };
-      const { error } = await admin.from("patrimonio_historico").upsert(linha, { onConflict: "user_id,data" });
+      const hoje = hojeBrasil();
+      // ativo sem preço (ou com preço velho): a foto sairia menor que a realidade — não grava
+      if (semPreco.length) {
+        await admin.from("log_sistema").insert({ user_id: uid, origem: "automatico", evento: "registro_diario",
+          detalhe: { gravado: false, motivo: "ativo sem preço", sem_preco: semPreco } });
+        resultado.push({ uid, gravado: false, sem_preco: semPreco });
+        continue;
+      }
+      // a foto do app (ou importada) do dia vale mais que a automática: nunca sobrescreve
+      const { data: existente, error: erroLe } = await admin.from("patrimonio_historico").select("origem")
+        .eq("user_id", uid).eq("data", hoje).maybeSingle();
+      if (erroLe) throw erroLe;
+      if (existente && existente.origem !== "automatico") {
+        resultado.push({ uid, gravado: false, motivo: `já há foto do dia (${existente.origem})` });
+        continue;
+      }
+      const linha = { user_id: uid, data: hoje, registrado_em: new Date().toISOString(), origem: "automatico",
+        patrimonio, renda_variavel: rv, cripto, renda_fixa: rfTotal, agro, investido: investido || null,
+        por_pilar: porPilar, ativos: linhas };
+      // atualiza só a automática; sem linha, insere sem sobrescrever (se o app gravar no meio, fica a do app)
+      const { error } = existente
+        ? await admin.from("patrimonio_historico").update(linha).eq("user_id", uid).eq("data", hoje).eq("origem", "automatico")
+        : await admin.from("patrimonio_historico").upsert(linha, { onConflict: "user_id,data", ignoreDuplicates: true });
       if (error) throw error;
-      const semPreco = carteira.filter((a: any) => precos[a.ticker]?.preco == null).map((a: any) => a.ticker);
       await admin.from("log_sistema").insert({ user_id: uid, origem: "automatico", evento: "registro_diario",
-        detalhe: { patrimonio, ativos: linhas.length, sem_preco: semPreco } });
+        detalhe: { patrimonio, ativos: linhas.length } });
       resultado.push({ uid, patrimonio, ativos: linhas.length });
     } catch (e) {
       await admin.from("log_sistema").insert({ user_id: uid, origem: "automatico", evento: "erro",
@@ -732,8 +854,8 @@ Deno.serve(async (req) => {
         if (!t) return [t, { erro: "ticker vazio" }] as const;
         try {
           const s = it.classe === "cripto"
-            ? await comCache(`cripto:${simboloCripto(t)}:${anos}y`, HORA, forcar, () => serieCripto(t, anos, forcar))
-            : await comCache(`yahoo:${simbolo(t, it.classe)}:${anos}y`, 6 * HORA, forcar,
+            ? await comCache(`cripto:${simboloCripto(t)}:${anos}y:brl`, HORA, forcar, () => serieCripto(t, anos, forcar))
+            : await comCache(`yahoo:${simbolo(t, it.classe)}:${anos}y:brl`, 6 * HORA, forcar,  // ":brl": já em reais
               () => serieYahoo(t, it.classe, anos));
           return [t, s] as const;
         } catch (e) {
@@ -787,7 +909,7 @@ Deno.serve(async (req) => {
       const [cdi, ibov] = await Promise.all([
         comCache(`bcb:cdi_diario:${anos}y`, 12 * HORA, forcar, () => cdiDiario(anos))
           .catch(() => []),
-        comCache(`yahoo:^BVSP:${anos}y`, 12 * HORA, forcar, () => serieYahoo("^BVSP", "indice", anos))
+        comCache(`yahoo:^BVSP:${anos}y:brl`, 12 * HORA, forcar, () => serieYahoo("^BVSP", "indice", anos))
           .then((s: any) => s.precos).catch(() => []),
       ]);
       return resposta({ cdi, ibov });
