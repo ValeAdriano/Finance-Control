@@ -57,28 +57,6 @@
       </div></section>`;
   }
 
-  function evolucao(h) {
-    if (!h.pontos || h.pontos.length < 3) return "";
-    const ganhoPct = h.custo_final ? (h.ganho / h.custo_final) * 100 : null;
-    return html`<section class="secao">
-      <div class="secao-topo"><h2>Evolução da carteira</h2><span class="sub">reconstruída dos seus aportes desde ${FC.datas.mesAno(h.primeiro)}</span></div>
-      <div class="cartao">
-        <dl class="kpis mb3">
-          <div class="kpi"><dt>Valor hoje</dt><dd>${fmt.brl(h.valor_final)}</dd></div>
-          <div class="kpi"><dt>Você colocou</dt><dd>${fmt.brl(h.custo_final)}</dd></div>
-          <div class="kpi"><dt>Ganho</dt><dd class="${h.ganho >= 0 ? "pos" : "neg"}">${fmt.brl(h.ganho)}${ok(ganhoPct) ? html`<small>${fmt.delta(ganhoPct)}% sobre o que entrou</small>` : ""}</dd></div>
-          ${h.total_proventos ? html`<div class="kpi"><dt>Proventos recebidos</dt><dd>${fmt.brl(h.total_proventos)}<small>${h.proventos.length} pagamentos</small></dd></div>` : ""}
-        </dl>
-        ${FC.graficos.linhas({ series: [
-          { nome: "Valor da carteira", pontos: h.pontos.map((p) => [p.data, p.valor]), classe: "l1", area: true },
-          { nome: "Você colocou", pontos: h.pontos.map((p) => [p.data, p.custo]), classe: "lref" },
-        ], altura: 280 })}
-        <div class="legenda-g"><span><i class="k1"></i>valor da carteira</span><span><i class="kref"></i>quanto você colocou</span></div>
-        <p class="texto-p mt2">A distância entre as linhas é o ganho. Sozinha, a linha do valor confundiria crescimento por aporte com crescimento por rendimento.
-          ${h.so_caixa ? " Por enquanto só há aportes de renda fixa, que entram pelo valor aplicado." : h.rendimento_rf > 1 ? html` A renda fixa entra pelo principal aportado, por isso a curva fica ${fmt.brl(h.rendimento_rf)} abaixo do patrimônio.` : ""}</p>
-      </div></section>`;
-  }
-
   function proventos(r) {
     if (!r || r.n_meses < 2) return "";
     return html`<section class="secao">
@@ -295,7 +273,6 @@
       ${dividendos(d)}
       ${agroResumo(d.agro)}
       ${melhores(d)}
-      ${evolucao(d.historico)}
       ${proventos(d.historico.renda_mensal)}
       ${d.atualizado ? html`<p class="texto-p mt4 centro" style="margin-inline:auto">Preços atualizados ${FC.datas.ha(FC.estado.spotEm) || "—"} (a cada minuto com o app aberto) · cripto pelo CoinGecko, bolsa pelo Yahoo Finance, fundamentos pelo Fundamentus e juros pelo Banco Central.</p>` : ""}
     `);
