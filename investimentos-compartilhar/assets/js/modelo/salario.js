@@ -141,16 +141,34 @@
     const div = plano.reinvestir_dividendos ? dividendosDoMes : 0;
     const total = valorBase + div;
     const somaPct = FC.soma(plano.destinos, (d) => d.pct) || 0;
-    const destinos = plano.destinos.map((d) => {
-      const valor = somaPct ? (total * (Number(d.pct) || 0)) / somaPct : 0;
-      const aportado = aportadoNoMes(d, base, mes);
-      return { ...d, rotulo: rotuloDestino(d), pilar: pilarDoDestino(d, base), valor, aportado,
-        falta: Math.max(0, valor - aportado), feito: valor > 0 ? Math.min(100, (aportado / valor) * 100) : 0 };
+    const brutos = plano.destinos.map((d) => ({ ...d, rotulo: rotuloDestino(d), pilar: pilarDoDestino(d, base),
+      valor: somaPct ? (total * (Number(d.pct) || 0)) / somaPct : 0, bruto: aportadoNoMes(d, base, mes) }));
+    // o aporte conta primeiro no destino mais específico (ativo/título); no
+    // pilar que o contém entra só o que passou do planejado para ele
+    const destinos = brutos.map((d) => {
+      let aportado = d.bruto;
+      if (d.tipo === "pilar") {
+        for (const x of brutos) if (x.tipo !== "pilar" && x.pilar === d.alvo) aportado -= Math.min(x.bruto, x.valor);
+        aportado = Math.max(0, aportado);
+      }
+      return { ...d, aportado, falta: Math.max(0, d.valor - aportado), feito: d.valor > 0 ? Math.min(100, (aportado / d.valor) * 100) : 0 };
     });
-    const aportadoTotal = FC.soma(destinos, (d) => d.aportado);
+    // cumprido: o que foi a cada destino até o planejado dele — excesso num
+    // destino não cobre a falta de outro. O total real fica em "investido".
+    const aportadoTotal = FC.soma(destinos, (d) => Math.min(d.valor, d.aportado));
     return { mes, renda, valor_base: valorBase, dividendos: div, total, destinos, soma_pct: somaPct,
-      aportado: aportadoTotal, falta: FC.soma(destinos, (d) => d.falta),
+      aportado: aportadoTotal, investido: investidoNoMes(base, mes), falta: FC.soma(destinos, (d) => d.falta),
       sobra_renda: renda.total - valorBase };
+  }
+
+  // proventos pagos no mês (os que o plano reinveste): pelos proventos
+  // carregados ou, sem eles, pelos lançados à mão
+  function dividendosDoMes({ dados, base, proventos }, mes) {
+    if (proventos && dados) {
+      const r = FC.dividendos.analisa(dados, base, proventos);
+      return FC.soma(r.pagamentos.filter((p) => p.status === "pago" && p.quando.slice(0, 7) === mes), (p) => p.valor);
+    }
+    return FC.soma(base.aportes.filter((a) => a.tipo === "provento" && a.data && a.data.slice(0, 7) === mes), (a) => a.valor);
   }
 
   // o plano no formato da projeção: aporte mensal e peso de cada pilar
@@ -201,5 +219,5 @@
     return saida.sort((x, y) => x.data.localeCompare(y.data));
   }
 
-  FC.salario = { streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+  FC.salario = { streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
 })();

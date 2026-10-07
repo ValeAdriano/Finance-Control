@@ -115,8 +115,9 @@
 
   function sanitiza(chave, valor) {
     if (!ok(valor)) return [null, false, null];
-    if (NEGATIVO_E_RUIM.has(chave) && valor <= 0) return [null, true, null];
+    // zero primeiro: no Fundamentus é "não informado", não reprovação
     if (ZERO_E_AUSENTE.has(chave) && valor === 0) return [null, false, null];
+    if (NEGATIVO_E_RUIM.has(chave) && valor <= 0) return [null, true, null];
     const fx = PLAUSIVEL[chave];
     if (fx && !(fx[0] <= valor && valor <= fx[1])) return [null, false, `valor implausível na fonte: ${FC.fmt.num(valor)}`];
     return [valor, false, null];
@@ -187,9 +188,9 @@
   }
 
   // P/VP histórico APROXIMADO: o VPA de hoje projetado para trás
-  function seriePvp(h, pvpHoje) {
-    if (!pvpHoje || !h.precos.length || !h.preco) return [];
-    const vpa = h.preco / pvpHoje;
+  // (vpa vem da cotação e do P/VP da própria fonte, antes do preço ao vivo)
+  function seriePvp(h, vpa) {
+    if (!(vpa > 0) || !h.precos.length) return [];
     return h.precos.filter((_, i) => !(i % 5)).map(([d, p]) => [d, p / vpa]);
   }
 
@@ -251,18 +252,27 @@
     if (!h) h = null;
 
     const valores = valoresAtuais(ticker, classe, universo, h);
+    const vpaFonte = ok(valores.pvp) && valores.pvp > 0 && valores.cotacao > 0 ? valores.cotacao / valores.pvp : null;
     if (agora && ok(agora.preco) && ok(valores.cotacao) && valores.cotacao > 0) {
       const k = agora.preco / valores.cotacao;
-      if (ok(valores.dy) && valores.dy_calculado !== valores.dy) valores.dy = valores.dy / k;
+      const dyEraCalculado = valores.dy_calculado === valores.dy;
       if (ok(valores.pl)) valores.pl = valores.pl * k;
       if (ok(valores.pvp)) valores.pvp = valores.pvp * k;
       valores.cotacao = agora.preco;
+      // o que sai do histórico (cache de 1 h) também passa para o preço de agora
+      if (h && h.preco > 0) {
+        const kh = agora.preco / h.preco;
+        if (ok(valores.dy_calculado)) valores.dy_calculado = valores.dy_calculado / kh;
+        if (h.max_52s) valores.dist_maxima_52s = (1 - agora.preco / h.max_52s) * 100;
+        if (h.media_200d) valores.premio_media_200d = (agora.preco / h.media_200d - 1) * 100;
+      }
+      if (ok(valores.dy)) valores.dy = dyEraCalculado ? valores.dy_calculado : valores.dy / k;
     }
     if (!Object.keys(valores).length) return { ticker, classe, erro: "ativo não encontrado nas fontes" };
     // FII: a concentração que importa depende do tipo (imóvel, CRI ou FII)
     const cvm = classe === "fii" ? (universo.fiis[ticker] || {}).cvm : null;
     if (cvm) {
-      if (valores.vacancia == null && cvm.vacancia_fisica_cvm > 0) valores.vacancia = cvm.vacancia_fisica_cvm;
+      if (!(valores.vacancia > 0) && cvm.vacancia_fisica_cvm > 0) valores.vacancia = cvm.vacancia_fisica_cvm;
       valores.vacancia_financeira = cvm.vacancia_financeira ?? null;
       valores.concentracao = perfil === "fii_papel" ? (cvm.cri || {}).maior
         : perfil === "fii_fof" ? (cvm.fii || {}).maior
@@ -270,7 +280,7 @@
         : cvm.maior_imovel ?? null;          // tijolo: só a concentração dos imóveis
     }
 
-    const series = h ? { dy: serieDy(h), pvp: seriePvp(h, valores.pvp), premio_media_200d: seriePremioMedia(h) } : {};
+    const series = h ? { dy: serieDy(h), pvp: seriePvp(h, vpaFonte), premio_media_200d: seriePremioMedia(h) } : {};
     const [grupo, pares] = grupoDePares(ticker, classe, perfil, universo, regras);
     const macro = universo.macro || {};
     const pesos = regras.pesos_lentes;

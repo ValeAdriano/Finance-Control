@@ -19,13 +19,14 @@
   const ts = (x) => (typeof x === "string" ? new Date(x.slice(0, 10) + "T12:00:00Z").getTime() : x);
 
   function escalaNice(lo, hi, n = 4) {
-    if (lo === hi) { hi = lo + (Math.abs(lo) || 1); lo = lo - (Math.abs(lo) || 1) * 0.1; }
+    // série plana (inclusive com ruído de ponto flutuante): abre a escala
+    if (!(hi - lo > 1e-9 * Math.max(1, Math.abs(lo)))) { hi = lo + (Math.abs(lo) || 1); lo = lo - (Math.abs(lo) || 1) * 0.1; }
     const bruto = (hi - lo) / n;
     const mag = Math.pow(10, Math.floor(Math.log10(bruto)));
     const passo = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((p) => p >= bruto) || bruto;
     const ini = Math.floor(lo / passo) * passo, fim = Math.ceil(hi / passo) * passo;
     const ticks = [];
-    for (let v = ini; v <= fim + passo / 2; v += passo) ticks.push(Number(v.toFixed(10)));
+    for (let v = ini, k = 0; v <= fim + passo / 2 && k < 50; v += passo, k++) ticks.push(Number(v.toFixed(10)));
     return { lo: ini, hi: fim, ticks };
   }
 

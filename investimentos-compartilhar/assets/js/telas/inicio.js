@@ -81,7 +81,7 @@
           <div class="kpi"><dt>${icone("boi", 16)} Rebanho</dt><dd>${fmt.int(ag.total)}<small>cabeças</small></dd></div>
           <div class="kpi"><dt>Valor estimado</dt><dd>${fmt.brl(ag.valorRebanho, 0)}</dd></div>
           <div class="kpi"><dt>Resultado da atividade</dt><dd class="${ag.financeiro.resultado >= 0 ? "pos" : "neg"}">${fmt.brl(ag.financeiro.resultado, 0)}
-            ${ok(ag.financeiro.retorno_pct) ? html`<small>${fmt.delta(ag.financeiro.retorno_pct)}% sobre o investido</small>` : ""}</dd></div>
+            ${ok(ag.financeiro.retorno_pct) ? html`<small>${fmt.delta(ag.financeiro.retorno_pct)}% sobre o capital aportado</small>` : ""}</dd></div>
         </dl></a></section>`;
   }
 
@@ -118,12 +118,17 @@
   // série reconstruída (cara de calcular): uma vez por montagem da carteira
   const cacheSerie = new WeakMap();
   function serieDoPainel(d) {
-    if (cacheSerie.has(d)) return cacheSerie.get(d);
     const e = FC.estado;
+    // refaz quando os proventos chegam depois da montagem
+    const c = cacheSerie.get(d);
+    if (c && c.proventos === e.proventos) return c.r;
+    // proventos pagos entram como dinheiro que voltou (rendimento e TWR os contam)
+    let pagamentos = [];
+    try { if (e.proventos) pagamentos = FC.dividendos.analisa(d, e.base, e.proventos).pagamentos; } catch (err) { console.error(err); }
     let r = { pontos: [], inicio: null };
-    try { r = FC.rentab.serieDiaria(e.base, e.mercado, e.mercado.indices, e.prefs, d.resumo.patrimonio > 0 ? d.resumo.patrimonio : null); }
+    try { r = FC.rentab.serieDiaria(e.base, e.mercado, e.mercado.indices, e.prefs, d.resumo.patrimonio > 0 ? d.resumo.patrimonio : null, pagamentos); }
     catch (err) { console.error(err); }
-    cacheSerie.set(d, r);
+    cacheSerie.set(d, { proventos: e.proventos, r });
     return r;
   }
 
@@ -188,7 +193,9 @@
       const ix = FC.estado.mercado.indices;
       if (ix) cdiPer = (ix.fator("cdi", 100, p0.data, p1.data).f - 1) * 100;
     }
-    const fluxoPer = trecho.length >= 2 ? p1.fluxo - p0.fluxo : 0;
+    // aportes: o fluxo sem os proventos pagos (que saem do fluxo como dinheiro que voltou)
+    const provPer = trecho.length >= 2 ? (p1.proventos || 0) - (p0.proventos || 0) : 0;
+    const fluxoPer = trecho.length >= 2 ? p1.fluxo - p0.fluxo + provPer : 0;
 
     // referências ligadas
     const cmp = comparar(), refs = [];
@@ -258,7 +265,7 @@
         ${seletor}
         <dl class="kpis mb3">
           <div class="kpi"><dt>Rendimento no período</dt><dd class="${rend ? (rend.abs >= 0 ? "pos" : "neg") : "fraco"}">${rend ? html`${rend.abs >= 0 ? "+" : "−"}${fmt.brl(Math.abs(rend.abs))}` : "—"}
-            <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" : "sem dias suficientes"}</small></dd></div>
+            <small>${rend && FC.ok(rend.pct) ? fmt.delta(rend.pct, 2) + "% sem contar aportes" + (provPer > 0.005 ? `, com ${fmt.brlTexto(provPer)} de proventos` : "") : "sem dias suficientes"}</small></dd></div>
           <div class="kpi pequeno"><dt>Aportes no período</dt><dd>${Math.abs(fluxoPer) > 0.005 ? html`${fluxoPer >= 0 ? "+" : "−"}${fmt.brl(Math.abs(fluxoPer))}` : fmt.brl(0)}<small>${fluxoPer < 0 ? "saiu mais do que entrou" : "dinheiro novo que entrou"}</small></dd></div>
           ${FC.ok(twrPer) ? html`<div class="kpi pequeno"><dt>TWR ${FC.ajuda("Retorno ponderado pelo tempo: encadeia o rendimento de cada dia e ignora o tamanho dos aportes. É a medida para comparar a carteira com o CDI ou o Ibovespa.")}</dt><dd class="${twrPer >= 0 ? "pos" : "neg"}">${fmt.delta(twrPer, 2)}%<small>${FC.ok(cdiPer) ? `CDI no período: ${fmt.num(cdiPer, 2)}%` : ""}</small></dd></div>` : ""}
           <div class="kpi pequeno"><dt>Patrimônio ${p1 && p1.data === hoje ? "agora" : "no fim"}</dt><dd>${fmt.brl(p1 ? p1.valor : (trechoAnot.at(-1) || {}).valor || 0)}<small>${trecho.length >= 2 ? (() => { const v = p1.valor - p0.valor; return html`<span class="rs">${v >= 0 ? "+" : "−"}${fmt.brlTexto(Math.abs(v))}</span> no período, com aportes`; })() : ""}</small></dd></div>

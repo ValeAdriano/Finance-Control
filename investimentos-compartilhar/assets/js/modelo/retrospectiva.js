@@ -358,8 +358,12 @@
   function montaRecap(per) {
     const e = FC.estado, d = e.dados, base = e.base, prefs = e.prefs, hoje = FC.datas.hoje();
     const antes = FC.datas.soma(per.ini, -1);
+    // proventos pagos: entram na série como dinheiro que voltou ao bolso,
+    // então o rendimento do período já os conta (queda na data-ex + provento = 0)
+    let pagamentos = [];
+    try { pagamentos = FC.dividendos.analisa(d, base, e.proventos || {}).pagamentos; } catch (err) { console.error(err); }
     let pontos = [];
-    try { pontos = FC.rentab.serieDiaria(base, e.mercado, e.mercado.indices, prefs, d.resumo.patrimonio).pontos; } catch (err) { console.error(err); }
+    try { pontos = FC.rentab.serieDiaria(base, e.mercado, e.mercado.indices, prefs, d.resumo.patrimonio, pagamentos).pontos; } catch (err) { console.error(err); }
     const ponto = (dia) => { let r = null; for (const p of pontos) { if (p.data > dia) break; r = p; } return r; };
     const p0 = ponto(antes), p1 = ponto(per.fim) || pontos.at(-1);
     const noPer = pontos.filter((p) => p.data >= per.ini && p.data <= per.fim);
@@ -381,7 +385,12 @@
     if (pl && pl.destinos && pl.destinos.length) {
       let planejado = 0, aportado = 0;
       for (let m = per.ini.slice(0, 7); m <= per.fim.slice(0, 7); m = FC.datas.soma(m + "-28", 5).slice(0, 7)) {
-        try { const g = FC.salario.planoDoMes({ plano: pl, ganhos: base.ganhos || [], base, mes: m }); planejado += g.total; aportado += g.aportado; } catch (err) { /* segue */ }
+        // a mesma conta do Salário: dividendos do mês e cumprido por destino
+        try {
+          const dv = FC.salario.dividendosDoMes({ dados: d, base, proventos: e.proventos }, m);
+          const g = FC.salario.planoDoMes({ plano: pl, ganhos: base.ganhos || [], base, mes: m, dividendosDoMes: dv });
+          planejado += g.total; aportado += g.aportado;
+        } catch (err) { /* segue */ }
       }
       if (planejado > 0) plano = { planejado, cumprido_pct: Math.min(100, (aportado / planejado) * 100) };
     }
@@ -398,8 +407,7 @@
     // ---- proventos pagos no período
     let div = { total: 0, pagamentos: 0, maior: null };
     try {
-      const a = FC.dividendos.analisa(d, base, e.proventos || {});
-      const pagos = a.pagamentos.filter((p) => p.status === "pago" && dentro(p.pagamento || p.quando));
+      const pagos = pagamentos.filter((p) => p.status === "pago" && dentro(p.pagamento || p.quando));
       const porT = {};
       for (const p of pagos) porT[p.ticker] = (porT[p.ticker] || 0) + p.valor;
       const top = Object.entries(porT).sort((x, y) => y[1] - x[1])[0];

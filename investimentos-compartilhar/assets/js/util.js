@@ -88,12 +88,14 @@
   FC.unidade = (a, q) => (a && a.classe === "cripto" ? (a.ticker || "").split("-")[0].replace(/\d+$/, "") : q === 1 ? "cota" : "cotas");
   FC.ok = ok;
 
-  // número digitado em formulário (aceita vírgula decimal)
+  // número digitado em formulário (aceita vírgula decimal, "R$" e ponto de
+  // milhar: "5.000" é cinco mil, "1.234,56" e "0.5" também valem)
   FC.lerNum = function (txt) {
     if (txt == null) return null;
-    let s = String(txt).trim();
+    let s = String(txt).trim().replace(/R\$/g, "").replace(/[\s ]/g, "").replace(/[−–]/g, "-");
     if (!s) return null;
     if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+    else if (/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
     const v = Number(s);
     return Number.isFinite(v) ? v : null;
   };

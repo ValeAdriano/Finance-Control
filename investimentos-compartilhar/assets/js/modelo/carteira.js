@@ -215,8 +215,16 @@
         resultado: atu - inv, variacao: inv ? (atu / inv - 1) * 100 : null,
         sem_custo: ps.filter((a) => !a.posicao.custo).map((a) => a.ticker), n: ps.length };
     }
-    // quanto a carteira andou hoje, pela variação do dia de cada posição
-    const hojeAbs = FC.soma(comPos.filter((a) => ok(a.variacao_dia)), (a) => a.posicao.atual - a.posicao.atual / (1 + a.variacao_dia / 100));
+    // quanto a carteira andou hoje, pela variação do dia de cada posição;
+    // cotas compradas hoje não estavam lá no fechamento de ontem
+    const diaHoje = FC.datas.hoje();
+    const hojeAbs = FC.soma(comPos.filter((a) => ok(a.variacao_dia)), (a) => {
+      const reg = registrados[a.ticker];
+      const qHoje = reg ? FC.soma(reg.eventos.filter((e) => e.data === diaHoje && e.q > 0), (e) => e.q) : 0;
+      const fr = a.posicao.quantidade > 0 ? Math.max(0, a.posicao.quantidade - qHoje) / a.posicao.quantidade : 0;
+      const v = a.posicao.atual * fr;
+      return v - v / (1 + a.variacao_dia / 100);
+    });
     const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado);
 
     const proventos = aportes.filter((a) => a.tipo === "provento").sort((a, b) => b.data.localeCompare(a.data));

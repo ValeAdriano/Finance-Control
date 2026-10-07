@@ -126,6 +126,13 @@
     let modo = modoInicial, rv = rvInicial;
     const rend = Number(cfg.rendimento_carcaca) || 52;
     const campo = (n) => FC.lerNum((FC.$(`[name=${n}]`, form) || {}).value);
+    // outra entrada sem valor: estimada como o valor do rebanho (peso
+    // informado ou atual da categoria × cotação) — entra como capital, não lucro
+    function estimaEntrada(cab, peso) {
+      const cat = FC.$("[name=categoria]", form).value;
+      const kg = peso || ((FC.estado.dados.agro.peso || {})[cat] || {}).kg || FC.PESO_TIPICO[cat];
+      return Math.round((cab || 0) * FC.agro.valorCabeca(cat, kg, cfg) * 100) / 100;
+    }
 
     // compra/entrada: quanto sai do caixa do agro e quanto é aporte novo
     function caixaDaCompra(custo) {
@@ -164,12 +171,14 @@
       FC.$$("[data-modo]", form).forEach((c) => { c.style.display = c.dataset.modo === modo ? "" : "none"; });
       const res = FC.$("#m-resumo", form);
       if (res) {
-        const valor = FC.agro.valorDaOperacao({ modo, cabecas: cab, peso_medio_kg: peso, preco_arroba: campo("preco_arroba"), preco_cabeca: campo("preco_cabeca"), valor_total: campo("valor_total") }, rend);
+        let valor = FC.agro.valorDaOperacao({ modo, cabecas: cab, peso_medio_kg: peso, preco_arroba: campo("preco_arroba"), preco_cabeca: campo("preco_cabeca"), valor_total: campo("valor_total") }, rend);
+        const estimado = tipo === "entrada" && !(valor > 0) && cab > 0;
+        if (estimado) valor = estimaEntrada(cab, peso);
         const desp = campo("despesas") || 0;
         const totArr = cab && peso ? cab * FC.agro.arrobas(peso, rend) : null;
         const liquido = tipo === "venda" ? valor - desp : valor + desp;
         res.innerHTML = String(html`<dl class="kpis" style="gap:8px 28px">
-          <div class="kpi pequeno"><dt>Valor da operação</dt><dd>${fmt.brl(valor)}</dd></div>
+          <div class="kpi pequeno"><dt>${estimado ? "Valor estimado" : "Valor da operação"}</dt><dd>${fmt.brl(valor)}</dd></div>
           ${totArr ? html`<div class="kpi pequeno"><dt>Arrobas</dt><dd>${fmt.num(totArr, 1)} @</dd></div>` : ""}
           ${cab && valor ? html`<div class="kpi pequeno"><dt>Por cabeça</dt><dd>${fmt.brl(valor / cab)}</dd></div>` : ""}
           ${totArr && valor ? html`<div class="kpi pequeno"><dt>Por @</dt><dd>${fmt.brl(valor / totArr)}</dd></div>` : ""}
@@ -235,6 +244,7 @@
         linha.valor_total = FC.agro.valorDaOperacao({ modo, cabecas: cab, peso_medio_kg: peso, preco_arroba: FC.lerNum(d.preco_arroba), preco_cabeca: FC.lerNum(d.preco_cabeca), valor_total: FC.lerNum(d.valor_total) }, rend);
         if (modo === "arroba") linha.preco_arroba = FC.lerNum(d.preco_arroba);
         if (modo === "cabeca") linha.preco_cabeca = FC.lerNum(d.preco_cabeca);
+        if (tipo === "entrada" && !(linha.valor_total > 0)) linha.valor_total = estimaEntrada(cab, peso);
         if (comPreco && !(linha.valor_total > 0)) return FC.ui.aviso(modo === "arroba" && !peso ? "Para fechar por @, informe o peso médio." : "Informe o preço.", "erro");
       }
       linha.reinvestido = tipo === "venda" ? Math.round(reinvestidoDe(Math.max(0, linha.valor_total - linha.despesas)) * 100) / 100 : null;
@@ -474,7 +484,7 @@
             <div class="kpi"><dt>Recebido em vendas</dt><dd>${fmt.brl(fin.receita_vendas, 0)}<small>${fmt.int(fin.cab_vendidas)} cabeças, já sem as despesas</small></dd></div>
             <div class="kpi"><dt>Rebanho hoje</dt><dd>${fmt.brl(ag.valorRebanho, 0)}<small>estimado pela arroba</small></dd></div>
             <div class="kpi"><dt>Resultado ${FC.ajuda("Recebido em vendas + valor estimado do rebanho − tudo o que foi investido. É o ganho econômico, mesmo sem ter vendido tudo.")}</dt>
-              <dd class="${fin.resultado >= 0 ? "pos" : "neg"}">${fmt.brl(fin.resultado, 0)}${ok(fin.retorno_pct) ? html`<small>${fmt.delta(fin.retorno_pct)}% sobre o investido</small>` : ""}</dd></div>
+              <dd class="${fin.resultado >= 0 ? "pos" : "neg"}">${fmt.brl(fin.resultado, 0)}${ok(fin.retorno_pct) ? html`<small>${fmt.delta(fin.retorno_pct)}% sobre o capital aportado</small>` : ""}</dd></div>
           </dl>
           <hr class="sep">
           <dl class="kpis">

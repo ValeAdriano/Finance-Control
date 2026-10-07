@@ -8,7 +8,8 @@
   // DL/EBITDA pelos múltiplos: EV/EBIT − P/EBIT = DL/EBIT
   function dividaSobreEbitda(d) {
     const { p_ebit, ev_ebit, ev_ebitda } = d;
-    if (![p_ebit, ev_ebit, ev_ebitda].every(ok) || !ev_ebit) return null;
+    // zero no Fundamentus é "não informado": sem os três, não há conta
+    if (![p_ebit, ev_ebit, ev_ebitda].every((v) => ok(v) && v !== 0)) return null;
     return (ev_ebit - p_ebit) * (ev_ebitda / ev_ebit);
   }
 
@@ -28,10 +29,12 @@
   }
 
   function analisa(acoes, cfg, criterios) {
-    const payoutMax = Number(criterios.payout_maximo) || 100;
-    const dlMax = Number(criterios.dl_ebitda_maximo) || 3;
-    const liqMin = (Number(criterios.liquidez_minima) || 0) * 1e6;
-    const dyFixo = Number(criterios.dy_desejado) || 6;
+    // 0 digitado é um critério válido; só o vazio cai no padrão
+    const num = (v, padrao) => (v != null && v !== "" && Number.isFinite(Number(v)) ? Number(v) : padrao);
+    const payoutMax = num(criterios.payout_maximo, 100);
+    const dlMax = num(criterios.dl_ebitda_maximo, 3);
+    const liqMin = num(criterios.liquidez_minima, 0) * 1e6;
+    const dyFixo = num(criterios.dy_desejado, 6) || 6;
     const porSetor = (criterios.alvo || "setor") === "setor";
 
     const linhas = [];
@@ -111,10 +114,12 @@
     const p = h.precos || [];
     if (p.length < 2) return [];
     if (!reinvestir) return normaliza(p);
-    const divs = Object.fromEntries(h.dividendos || []);
-    let cotas = 1;
+    // proventos do mesmo dia somam; os de dia sem pregão entram no pregão seguinte
+    const divs = (h.dividendos || []).slice().sort((a, b) => a[0].localeCompare(b[0]));
+    let cotas = 1, k = 0;
     return normaliza(p.map(([d, preco]) => {
-      const v = divs[d];
+      let v = 0;
+      while (k < divs.length && divs[k][0] <= d) v += Number(divs[k++][1]) || 0;
       if (v && preco) cotas += (cotas * v) / preco;
       return [d, cotas * preco];
     }));

@@ -313,37 +313,68 @@
   }
 
   // ---------------------------------------------------------------- rebanho no tempo
-  // As cabeças entram em lotes (compra, nascimento, outra entrada) e saem
-  // na ordem em que entraram (venda, morte, outra saída). Cada pedaço de
-  // lote vira um segmento {de, ate, n, v0, v1}: valor por cabeça na entrada
-  // e na saída, com uma reta entre os dois.
-  function curvaDoRebanho(movs, valorHoje, hoje) {
-    const ordem = { compra: 0, nascimento: 0, entrada: 0, venda: 1, morte: 1, saida: 1 };
+  // As cabeças entram em lotes por categoria (compra, nascimento, outra
+  // entrada), mudam de categoria com o lote (reclassificação) e saem na
+  // ordem em que entraram (venda, morte, outra saída) — da própria
+  // categoria e, se faltar, de onde o animal veio, como em FC.agro.analisa.
+  // Cada pedaço de lote vira um segmento {de, ate, n, v0, v1}: valor por
+  // cabeça na entrada e na saída, com uma reta entre os dois.
+  // "ag" é o resultado de FC.agro.analisa (valor de hoje por categoria).
+  function curvaDoRebanho(movs, ag, hoje) {
+    const ordem = { compra: 0, nascimento: 0, entrada: 0, reclassificacao: 1, venda: 2, morte: 2, saida: 2 };
     const ms = (movs || []).filter((m) => m.tipo in ordem && m.cabecas > 0)
       .sort((a, b) => a.data.localeCompare(b.data) || ordem[a.tipo] - ordem[b.tipo] || String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
-    const abertos = [], segs = [];
+    const ORIGEM = FC.agro.ORIGEM || {};
+    const abertos = {}, segs = [];
+    const lotes = (c) => (abertos[c] = abertos[c] || []);
+    const tem = (c) => (abertos[c] || []).reduce((s, l) => s + l.n, 0);
+    // tira n cabeças de uma categoria, dos lotes mais antigos primeiro
+    const tira = (c, n, fecha) => {
+      const ls = lotes(c);
+      while (n > 0 && ls.length) {
+        const l = ls[0], q = Math.min(n, l.n);
+        fecha(l, q);
+        l.n -= q; n -= q;
+        if (l.n <= 0) ls.shift();
+      }
+    };
     for (const m of ms) {
       if (ordem[m.tipo] === 0) {
+        const vt = m.valor_total || m.valor_estimado;
         const v0 = m.tipo === "compra" ? (m.valor_total + m.despesas) / m.cabecas
-          : m.tipo === "nascimento" ? 0 : m.valor_total ? m.valor_total / m.cabecas : null;
-        abertos.push({ de: m.data, n: m.cabecas, v0 });
+          : m.tipo === "nascimento" ? 0 : vt ? vt / m.cabecas : null;
+        lotes(m.categoria).push({ de: m.data, n: m.cabecas, v0 });
+        continue;
+      }
+      if (m.tipo === "reclassificacao") {
+        // o lote leva a data e o valor de entrada para a categoria nova
+        const dest = lotes(m.categoria_destino);
+        tira(m.categoria, Math.min(m.cabecas, tem(m.categoria)), (l, q) => dest.push({ de: l.de, n: q, v0: l.v0 }));
+        dest.sort((a, b) => a.de.localeCompare(b.de));
         continue;
       }
       // morte e saída sem valor: a cabeça some pelo valor que tinha (perda no dia)
       const v1 = m.tipo === "venda" ? Math.max(0, m.valor_total - m.despesas) / m.cabecas
         : m.tipo === "saida" && m.valor_total ? m.valor_total / m.cabecas : null;
+      const fecha = (l, q) => segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1 });
+      const antes = (ORIGEM[m.categoria] || []).slice().reverse();
+      const cats = [m.categoria, ...antes, ...Object.keys(abertos).filter((c) => c !== m.categoria && !antes.includes(c))];
       let falta = m.cabecas;
-      while (falta > 0 && abertos.length) {
-        const l = abertos[0], q = Math.min(falta, l.n);
-        segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1 });
-        l.n -= q; falta -= q;
-        if (l.n <= 0) abertos.shift();
+      for (const c of cats) {
+        const q = Math.min(falta, tem(c));
+        if (q > 0) { tira(c, q, fecha); falta -= q; }
+        if (falta <= 0) break;
       }
     }
-    // quem ainda está no pasto termina hoje no valor pela arroba
-    const cab = abertos.reduce((s, l) => s + l.n, 0);
+    // quem ainda está no pasto termina hoje no valor pela arroba da sua categoria
+    const valorHoje = typeof ag === "number" ? ag : (ag && ag.valorRebanho) || 0;
+    const porCatHoje = {};
+    for (const c of (ag && ag.porCategoria) || []) if (c.cabecas > 0) porCatHoje[c.categoria] = c.valor / c.cabecas;
+    const cab = Object.keys(abertos).reduce((s, c) => s + tem(c), 0);
     const porCabHoje = cab ? valorHoje / cab : 0;
-    for (const l of abertos) segs.push({ de: l.de, ate: hoje, n: l.n, v0: l.v0, v1: porCabHoje, aberto: true });
+    for (const [c, ls] of Object.entries(abertos)) {
+      for (const l of ls) if (l.n > 0) segs.push({ de: l.de, ate: hoje, n: l.n, v0: l.v0, v1: porCatHoje[c] ?? porCabHoje, aberto: true });
+    }
     for (const g of segs) {
       if (g.v0 == null && g.v1 == null) g.v0 = g.v1 = porCabHoje;
       else if (g.v0 == null) g.v0 = g.v1;
@@ -364,8 +395,11 @@
   // ---------------------------------------------------------------- série diária
   // O patrimônio reconstruído dia a dia: posições × preço de cada dia +
   // renda fixa rendendo + o rebanho no valor do app. "fluxo" acumula o
-  // dinheiro que entrou, para separar aporte de rendimento.
-  function serieDiaria(base, mercado, ix, prefs, valorHoje) {
+  // dinheiro que entrou, para separar aporte de rendimento. Proventos pagos
+  // (FC.dividendos.analisa(...).pagamentos) saem do fluxo na data de
+  // pagamento — o dinheiro voltou ao bolso e conta como rendimento;
+  // "proventos" acumula só eles.
+  function serieDiaria(base, mercado, ix, prefs, valorHoje, pagamentos = []) {
     const hoje = D().hoje(), hist = (mercado && mercado.historicos) || {}, spot = (mercado && mercado.spot) || {};
     const eventos = [];       // {data, ticker, q, custo}
     for (const a of base.ativos) for (const e of eventosDoAtivo(a, base.aportes)) eventos.push({ ...e, ticker: a.ticker });
@@ -387,7 +421,7 @@
     // reais que se conhecem dela — o que custou ao entrar e o que rendeu ao
     // sair (ou, se ainda está no pasto, o valor de hoje pela arroba).
     // Avaliar o passado pela arroba de hoje inventaria saltos na venda.
-    const valorRebanho = curvaDoRebanho(movsAgro, FC.agro.analisa(base.agro, prefs.agro).valorRebanho || 0, hoje);
+    const valorRebanho = curvaDoRebanho(movsAgro, FC.agro.analisa(base.agro, prefs.agro), hoje);
     // + o dinheiro de vendas reinvestido que ainda não virou gado
     const cxAgro = FC.agro.caixa(movsAgro, base.agro.custos || []);
     const valorAgro = (d) => valorRebanho(d) + cxAgro.saldoEm(d);
@@ -403,16 +437,17 @@
       if (p != null) fluxos.push([e.data, e.q * p]);
     }
     for (const ls of titulos) for (const l of ls) fluxos.push([l.data, l.valor]);
+    for (const p of pagamentos || []) if (p.status === "pago" && p.valor && (p.pagamento || p.data_com)) fluxos.push([p.pagamento || p.data_com, -p.valor, true]);
     for (const f of cxAgro.fluxos) if (f.aporte || f.saque) fluxos.push([f.data, f.aporte - f.saque]);
     fluxos.sort((a, b) => a[0].localeCompare(b[0]));
 
     const pontos = [];
     const pos = {};
-    let ie = 0, ifl = 0, acum = 0;
+    let ie = 0, ifl = 0, acum = 0, prov = 0;
     const evs = eventos.slice().sort((a, b) => a.data.localeCompare(b.data));
     for (let d = inicio; d <= hoje; d = D().soma(d, 1)) {
       while (ie < evs.length && evs[ie].data <= d) { pos[evs[ie].ticker] = (pos[evs[ie].ticker] || 0) + evs[ie].q; ie++; }
-      while (ifl < fluxos.length && fluxos[ifl][0] <= d) { acum += fluxos[ifl][1]; ifl++; }
+      while (ifl < fluxos.length && fluxos[ifl][0] <= d) { acum += fluxos[ifl][1]; if (fluxos[ifl][2]) prov -= fluxos[ifl][1]; ifl++; }
       let v = 0, faltou = false;
       for (const [t, q] of Object.entries(pos)) {
         if (q <= 1e-12) continue;
@@ -422,7 +457,7 @@
       }
       for (const ls of titulos) v += valorTituloEm(ls, ix, d);
       v += valorAgro(d);
-      pontos.push({ data: d, valor: v, fluxo: acum, incompleto: faltou });
+      pontos.push({ data: d, valor: v, fluxo: acum, proventos: prov, incompleto: faltou });
     }
     // o ponto de hoje usa os preços de agora, igual ao patrimônio do topo
     if (valorHoje != null && pontos.length) pontos.at(-1).valor = valorHoje;

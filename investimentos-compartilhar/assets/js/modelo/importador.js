@@ -14,6 +14,7 @@
     s = s.replace(/[^\d,.]/g, "");
     if (!s) return null;
     if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+    else if (/^[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");   // "1.000" = mil
     const v = Number(s);
     return Number.isFinite(v) ? (neg ? -v : v) : null;
   }
@@ -128,6 +129,9 @@
   // ---------------------------------------------------------------- corretora
   const COMPRA = ["compra", "c", "credito", "aquisicao"];
   const VENDA = ["venda", "v", "debito", "alienacao"];
+  // a palavra inteira (ou "compra à vista" etc.): "cancelamento" e
+  // "credito jcp" não são compra
+  const eMov = (mov, lista) => lista.some((x) => mov === x || (x.length > 1 && x !== "credito" && x !== "debito" && mov.startsWith(x + " ")));
   function leCorretora(linhas) {
     if (!linhas.length) return [];
     const cols = Object.keys(linhas[0]);
@@ -151,8 +155,8 @@
       if (!preco && total && q) preco = Math.abs(total) / Math.abs(q);
       if (!preco) continue;
       const mov = cT ? (r[cT] || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "") : "compra";
-      if (VENDA.some((v) => mov.startsWith(v))) q = -Math.abs(q);
-      else if (mov && !COMPRA.some((c) => mov.startsWith(c))) continue;
+      if (eMov(mov, VENDA)) q = -Math.abs(q);
+      else if (mov && !eMov(mov, COMPRA)) continue;
       const n = vez(d, ticker, q, preco);
       saida.push({ tipo: "ativo", ticker, quantidade: Math.abs(q), preco: Math.abs(preco), data: d, venda: q < 0,
         observacao: ("importado · " + (mov || "compra")).slice(0, 120), origem: origem("corretora", d, ticker, q, preco, n) });
@@ -178,7 +182,8 @@
       const desc = r[cS] || "";
       const d = data(r[cD]);
       if (!d) continue;
-      const ent = num(r[cE]) || 0, sai = num(r[cX]) || 0;
+      // as colunas já dizem o sentido: sinal no texto não inverte nada
+      const ent = Math.abs(num(r[cE]) || 0), sai = Math.abs(num(r[cX]) || 0);
       const m = RE_TICKER.exec(desc);
       if (tit === "COMPRA DE ATIVO B3" && m && sai) compras.push({ data: d, ticker: m[1], valor: sai });
       else if (tit === "ESTORNO COMPRA ATIVO" && m && ent) estornos.push({ data: d, ticker: m[1], valor: ent });

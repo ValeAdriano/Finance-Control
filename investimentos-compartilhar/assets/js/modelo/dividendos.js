@@ -52,7 +52,7 @@
       const p = proventos[a.ticker];
       const lista = (p && p.lista) || [];
 
-      let recebido12 = 0, porAcao12 = 0, n12 = 0;
+      let recebido12 = 0, porAcao12 = 0, brutoPorAcao12 = 0, n12 = 0;
       const datas12 = new Set();
       for (const pr of lista) {
         const futuro = pr.data_com > hoje;
@@ -61,6 +61,7 @@
         const liquidoPorAcao = pr.valor * (pr.tipo === "JCP" ? 1 - IR_JCP : 1);
         if (pr.data_com > ha12 && pr.data_com <= hoje) {
           porAcao12 += liquidoPorAcao;
+          brutoPorAcao12 += pr.valor;
           datas12.add(pr.data_com);
         }
         if (!(q > 0)) continue;
@@ -86,7 +87,8 @@
         por_acao_12m: porAcao12, recebido_12m: recebido12,
         // o que a posição de HOJE renderia por mês, se o próximo ano repetir o último
         mensal_estimado: (qtdHoje * porAcao12) / 12,
-        dy_12m: preco ? (porAcao12 / preco) * 100 : null,
+        // DY bruto (JCP antes do IR), como no resto do app
+        dy_12m: preco ? (brutoPorAcao12 / preco) * 100 : null,
         yoc: pm ? (porAcao12 / pm) * 100 : null,
         frequencia: frequencia(n12),
         proximo: futuros[0] || null, ultimo: passados[0] || null,

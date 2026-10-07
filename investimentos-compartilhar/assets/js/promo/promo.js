@@ -18,7 +18,10 @@
     const tot = rt.total || {};
     // série do patrimônio (até ~90 pontos) e as mesmas datas na Selic e no Ibovespa
     let pontos = [];
-    try { pontos = FC.rentab.serieDiaria(e.base, e.mercado, e.mercado.indices, e.prefs, d.resumo.patrimonio).pontos; } catch (err) { console.error(err); }
+    // proventos pagos contam como dinheiro que voltou, igual ao Início
+    let pagos = [];
+    try { if (e.proventos) pagos = FC.dividendos.analisa(d, e.base, e.proventos).pagamentos; } catch (err) { console.error(err); }
+    try { pontos = FC.rentab.serieDiaria(e.base, e.mercado, e.mercado.indices, e.prefs, d.resumo.patrimonio, pagos).pontos; } catch (err) { console.error(err); }
     const ano = pontos.filter((p) => p.data >= FC.datas.soma(hoje, -365));
     const trecho = ano.length >= 2 ? ano : pontos;
     const passo = Math.max(1, Math.ceil(trecho.length / 90));

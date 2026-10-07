@@ -57,7 +57,7 @@
           <dl class="kpis mt3">
             <div class="kpi pequeno"><dt><i class="ponto-e" style="background:var(--sref)"></i> Hoje</dt><dd>${fmt.brl(b.inicial, 0)}</dd></div>
             <div class="kpi pequeno"><dt><i class="ponto-e" style="background:var(--s1)"></i> Aportes</dt><dd>${fmt.brl(b.aportado, 0)}</dd></div>
-            <div class="kpi pequeno"><dt><i class="ponto-e" style="background:var(--s2)"></i> Proventos</dt><dd>${fmt.brl(b.proventos, 0)}</dd></div>
+            <div class="kpi pequeno"><dt><i class="ponto-e" style="background:var(--s2)"></i> Proventos</dt><dd>${fmt.brl(b.proventos, 0)}${p.premissas.reinvestir_proventos ? "" : html`<small>sacados, fora do total</small>`}</dd></div>
             <div class="kpi pequeno"><dt><i class="ponto-e" style="background:var(--s3)"></i> Valorização</dt><dd>${fmt.brl(b.valorizacao, 0)}</dd></div></dl></div>
       </div>
       <section class="secao">

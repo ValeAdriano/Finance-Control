@@ -5,9 +5,9 @@
  * histórico, e corrigir um lançamento antigo corrige tudo que vem depois.
  *
  * Valor do rebanho = cabeças × peso vivo × rendimento de carcaça ÷ 15
- * × preço da arroba. O peso vem da pesagem mais recente da categoria;
- * sem pesagem, do último movimento com peso; sem nada, de um peso típico
- * — e a tela diz qual das três foi usada. */
+ * × preço da arroba. O peso vem da informação mais recente da categoria
+ * (pesagem ou movimento com peso, com quem entra depois na média pelas
+ * cabeças); sem nada, de um peso típico — e a tela diz qual foi usada. */
 (function () {
   const FC = window.FC;
   const ok = FC.ok;
@@ -23,6 +23,17 @@
   };
 
   function arrobas(kgVivo, rendimento) { return (kgVivo * (rendimento / 100)) / 15; }
+
+  // valor de uma cabeça pela cotação: preço por cabeça da categoria ou peso × arroba
+  function valorCabeca(cat, kg, cfg) {
+    const porCabeca = Number((cfg.valor_cabeca_por_categoria || {})[cat]);
+    if (ok(porCabeca) && porCabeca > 0) return porCabeca;
+    const preco = Number((cfg.arroba_por_categoria || {})[cat]) || Number(cfg.preco_arroba) || 0;
+    return arrobas(kg, Number(cfg.rendimento_carcaca) || 52) * preco;
+  }
+  // "outra entrada" sem valor entra pelo valor estimado (preenchido em analisa):
+  // é capital posto na atividade, não lucro
+  const valorEntrada = (m) => (m.valor_total > 0 ? m.valor_total : m.valor_estimado || 0);
 
   function analisa(agro, cfg) {
     const movs = [...(agro.movs || [])].sort((a, b) => a.data.localeCompare(b.data) || a.criado_em.localeCompare(b.criado_em));
@@ -76,37 +87,59 @@
       // saiu mais do que o rebanho inteiro tinha: fica registrado como negativo
       tira(m, m.categoria, falta);
     };
+    // Peso de cada categoria no tempo, junto com a contagem: a pesagem vale
+    // para a categoria inteira; quem entra depois com peso (compra, entrada,
+    // mudança de categoria) entra na média ponderada pelas cabeças; uma
+    // saída com peso é a informação mais nova da categoria.
+    const pesoCat = {};
+    let ip = 0;
+    const pesa = (p) => {
+      const a = pesoCat[p.categoria];
+      if (a && a.fonte === "pesagem" && a.data === p.data) {
+        a.kg = (a.kg * a.pesadas + p.peso_medio_kg * p.cabecas) / (a.pesadas + p.cabecas); a.pesadas += p.cabecas;
+      } else pesoCat[p.categoria] = { kg: p.peso_medio_kg, pesadas: p.cabecas, cab: Math.max(p.cabecas, rebanho[p.categoria] || 0), fonte: "pesagem", data: p.data };
+    };
+    // pesagens de dias anteriores a d (a do mesmo dia vem depois dos movimentos)
+    const pesagensAte = (d) => { while (ip < pesagens.length && pesagens[ip].data < d) pesa(pesagens[ip++]); };
+    const entraPeso = (cat, kg, n, data) => {
+      const a = pesoCat[cat], tem = a ? Math.max(0, Math.min(a.cab, rebanho[cat] || 0)) : 0;
+      pesoCat[cat] = { kg: tem ? (a.kg * tem + kg * n) / (tem + n) : kg, cab: tem + n, fonte: "movimento", data };
+    };
+    const kgEm = (cat) => (pesoCat[cat] ? pesoCat[cat].kg : FC.PESO_TIPICO[cat]);
+    const temPeso = (m) => ok(m.peso_medio_kg) && m.peso_medio_kg > 0;
     for (const m of movs) {
       const t = FC.TIPOS_MOV[m.tipo];
       if (!t) continue;
+      pesagensAte(m.data);
+      // outra entrada sem valor: estimada como o valor do rebanho na data.
+      // Fica no próprio lançamento para caixa() e os fluxos da carteira.
+      if (m.tipo === "entrada") m.valor_estimado = m.valor_total > 0 ? null
+        : m.cabecas * valorCabeca(m.categoria, temPeso(m) ? m.peso_medio_kg : kgEm(m.categoria), cfg);
       if (m.tipo === "reclassificacao") {
         const faz = m.fazenda || ondeEsta(porFazenda, m.categoria);
         const lote = m.lote || ondeEsta(porLote, m.categoria);
         // só muda de categoria o que existe nela: o excesso não cria cabeças
         const n = Math.min(m.cabecas, Math.max(0, rebanho[m.categoria] || 0));
         if (n < m.cabecas) ajustes.push({ data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
+        if (n && temPeso(m)) entraPeso(m.categoria_destino, m.peso_medio_kg, n, m.data);
         if (n) { mexe(faz, lote, m.categoria, -n); mexe(faz, lote, m.categoria_destino, n); }
       } else if (t.sinal < 0) {
         saida(m, m.cabecas);
-      } else mexe(m.fazenda, m.lote, m.categoria, m.cabecas);
+        if (temPeso(m)) pesoCat[m.categoria] = { kg: m.peso_medio_kg, cab: Math.max(0, rebanho[m.categoria] || 0), fonte: "movimento", data: m.data };
+      } else {
+        if (temPeso(m)) entraPeso(m.categoria, m.peso_medio_kg, m.cabecas, m.data);
+        mexe(m.fazenda, m.lote, m.categoria, m.cabecas);
+      }
     }
+    pesagensAte("9999-12-31");
     const inconsistentes = Object.entries(rebanho).filter(([, n]) => n < 0).map(([c]) => c);
     const total = Object.values(rebanho).reduce((s, n) => s + Math.max(0, n), 0);
 
     // ---------------------------------------------------------- peso atual
     const peso = {};
     for (const cat of Object.keys(FC.CATEGORIAS_GADO)) {
-      const ps = pesagens.filter((p) => p.categoria === cat);
-      if (ps.length) {
-        const ultimaData = ps.at(-1).data;
-        const doDia = ps.filter((p) => p.data === ultimaData);
-        const cab = doDia.reduce((s, p) => s + p.cabecas, 0);
-        peso[cat] = { kg: doDia.reduce((s, p) => s + p.peso_medio_kg * p.cabecas, 0) / cab, fonte: "pesagem", data: ultimaData };
-        continue;
-      }
-      const comPeso = movs.filter((m) => (m.categoria === cat || m.categoria_destino === cat) && ok(m.peso_medio_kg));
-      if (comPeso.length) { peso[cat] = { kg: comPeso.at(-1).peso_medio_kg, fonte: "movimento", data: comPeso.at(-1).data }; continue; }
-      peso[cat] = { kg: FC.PESO_TIPICO[cat], fonte: "típico", data: null };
+      const p = pesoCat[cat];
+      peso[cat] = p ? { kg: p.kg, fonte: p.fonte, data: p.data } : { kg: FC.PESO_TIPICO[cat], fonte: "típico", data: null };
     }
 
     // ---------------------------------------------------------- valor
@@ -118,7 +151,7 @@
       const porCabeca = (cfg.valor_cabeca_por_categoria || {})[cat];
       const precoArroba = Number((cfg.arroba_por_categoria || {})[cat]) || Number(cfg.preco_arroba) || 0;
       const arr = arrobas(kg, rend);
-      const valor = ok(Number(porCabeca)) && Number(porCabeca) > 0 ? n * Number(porCabeca) : n * arr * precoArroba;
+      const valor = n * valorCabeca(cat, kg, cfg);
       valorRebanho += valor;
       porCategoria.push({ categoria: cat, nome: FC.CATEGORIAS_GADO[cat], cabecas: n, kg, fonte_peso: peso[cat].fonte,
         data_peso: peso[cat].data, arrobas_cabeca: arr, preco_arroba: precoArroba, valor,
@@ -131,7 +164,7 @@
     const vendas = movs.filter((m) => m.tipo === "venda");
     // gado que entrou com valor (estoque inicial, transferência) é capital
     // posto na atividade; o que saiu com valor é capital retirado
-    const entradasValor = FC.soma(movs.filter((m) => m.tipo === "entrada"), (m) => m.valor_total);
+    const entradasValor = FC.soma(movs.filter((m) => m.tipo === "entrada"), valorEntrada);
     const saidasValor = FC.soma(movs.filter((m) => m.tipo === "saida"), (m) => m.valor_total);
     const gastoCompras = FC.soma(compras, (m) => m.valor_total + m.despesas) + entradasValor;
     const receitaVendas = FC.soma(vendas, (m) => m.valor_total - m.despesas) + saidasValor;
@@ -146,14 +179,18 @@
 
     const investido = gastoCompras + totalCustos;
     const cx = caixa(movs, custos);
+    // capital próprio: só o que saiu do bolso (o caixa reinvestido de vendas
+    // não conta de novo — ver caixa())
+    const aportado = FC.soma(cx.fluxos, (f) => f.aporte);
     const financeiro = {
       caixa_agro: cx.saldo,
-      aportado: FC.soma(cx.fluxos, (f) => f.aporte), sacado: FC.soma(cx.fluxos, (f) => f.saque),
+      aportado, sacado: FC.soma(cx.fluxos, (f) => f.saque),
       gasto_compras: gastoCompras, receita_vendas: receitaVendas, custos: totalCustos,
       investido, caixa_liquido: receitaVendas - investido,
       // resultado econômico: o que entrou + o que o rebanho vale hoje − tudo que saiu
       resultado: receitaVendas + valorRebanho - investido,
-      retorno_pct: investido ? ((receitaVendas + valorRebanho) / investido - 1) * 100 : null,
+      // retorno sobre o capital aportado (resultado = rebanho + caixa + sacado − aportado)
+      retorno_pct: aportado > 0 ? ((receitaVendas + valorRebanho - investido) / aportado) * 100 : null,
       custos_por_categoria: custosPorCategoria,
       cab_vendidas: cabVendidas, cab_compradas: cabCompradas, entradas_valor: entradasValor,
       preco_medio_arroba_venda: arrVendidas ? valorVendasComPeso / arrVendidas : null,
@@ -169,7 +206,7 @@
     const serie = [];
     const eventos = [
       ...movs.map((m) => ({ data: m.data, cab: m.tipo === "reclassificacao" ? 0 : FC.TIPOS_MOV[m.tipo].sinal * m.cabecas,
-        inv: m.tipo === "compra" ? m.valor_total + m.despesas : m.tipo === "entrada" ? m.valor_total : 0,
+        inv: m.tipo === "compra" ? m.valor_total + m.despesas : m.tipo === "entrada" ? valorEntrada(m) : 0,
         rec: m.tipo === "venda" ? m.valor_total - m.despesas : m.tipo === "saida" ? m.valor_total : 0 })),
       ...custos.map((c) => ({ data: c.data, cab: 0, inv: c.valor, rec: 0 })),
     ].sort((a, b) => a.data.localeCompare(b.data));
@@ -194,8 +231,23 @@
       const k = (p.lote ? "Lote " + p.lote : FC.CATEGORIAS_GADO[p.categoria]) + (p.fazenda ? " · " + p.fazenda : "");
       (grupos[k] = grupos[k] || []).push(p);
     }
-    for (const [nome, ps] of Object.entries(grupos)) {
-      if (ps.length < 2) continue;
+    // só compara pesagens dos mesmos animais: compra, venda, nascimento ou
+    // mudança de categoria no grupo entre duas pesagens começa um período
+    // novo; sem duas pesagens no mesmo período, o GMD não aparece
+    const MUDA = ["compra", "venda", "entrada", "saida", "nascimento", "reclassificacao"];
+    const mexeNoGrupo = (m, p) => MUDA.includes(m.tipo)
+      && (p.lote ? m.lote === p.lote : m.categoria === p.categoria || m.categoria_destino === p.categoria)
+      && (!p.fazenda || !m.fazenda || m.fazenda === p.fazenda);
+    for (const [nome, todas] of Object.entries(grupos)) {
+      let ps = [todas[0]];
+      const periodos = [ps];
+      for (const p of todas.slice(1)) {
+        const de = ps.at(-1).data;
+        if (movs.some((m) => m.data > de && m.data <= p.data && mexeNoGrupo(m, p))) periodos.push((ps = [p]));
+        else ps.push(p);
+      }
+      ps = periodos.filter((x) => x.length > 1 && x.at(-1).data > x[0].data).at(-1);
+      if (!ps) continue;
       const a = ps[0], b = ps.at(-1);
       const dias = FC.datas.dias(a.data, b.data);
       if (dias <= 0) continue;
@@ -244,7 +296,7 @@
       } else if (e.tipo === "saida") {
         saque = e.m.valor_total || 0;
       } else {
-        const custo = e.tipo === "custo" ? e.c.valor : e.tipo === "compra" ? e.m.valor_total + e.m.despesas : e.m.valor_total || 0;
+        const custo = e.tipo === "custo" ? e.c.valor : e.tipo === "compra" ? e.m.valor_total + e.m.despesas : valorEntrada(e.m);
         doCaixa = Math.min(saldo, custo);
         saldo -= doCaixa;
         aporte = custo - doCaixa;
@@ -258,5 +310,5 @@
     return { fluxos, porId, saldo, saldoEm };
   }
 
-  FC.agro = { analisa, arrobas, valorDaOperacao, caixa };
+  FC.agro = { analisa, arrobas, valorDaOperacao, caixa, valorCabeca, valorEntrada, ORIGEM };
 })();

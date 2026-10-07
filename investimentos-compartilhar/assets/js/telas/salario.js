@@ -10,13 +10,10 @@
 
   // dividendos que caíram no mês (calculados pela posição; sem proventos
   // carregados, os que você lançou em Aportes)
+  // (a mesma conta da retrospectiva: FC.salario.dividendosDoMes)
   function dividendosDoMes(mes) {
     const e = FC.estado;
-    if (e.proventos && e.dados) {
-      const r = FC.dividendos.analisa(e.dados, e.base, e.proventos);
-      return FC.soma(r.pagamentos.filter((p) => p.status === "pago" && p.quando.slice(0, 7) === mes), (p) => p.valor);
-    }
-    return FC.soma(e.base.aportes.filter((a) => a.tipo === "provento" && a.data.slice(0, 7) === mes), (a) => a.valor);
+    return FC.salario.dividendosDoMes({ dados: e.dados, base: e.base, proventos: e.proventos }, mes);
   }
 
   // ---------------------------------------------------------------- ganho
@@ -222,7 +219,7 @@
         : html`<div class="cartao">
           <dl class="kpis mb3">
             <div class="kpi"><dt>Investir no mês</dt><dd>${fmt.brl(guia.total)}${guia.dividendos ? html`<small>inclui ${fmt.brl(guia.dividendos)} de dividendos para reinvestir</small>` : ""}</dd></div>
-            <div class="kpi"><dt>Já aportado</dt><dd class="${guia.aportado >= guia.total - 0.5 ? "pos" : ""}">${fmt.brl(guia.aportado)}</dd></div>
+            <div class="kpi"><dt>Já aportado no plano</dt><dd class="${guia.aportado >= guia.total - 0.5 ? "pos" : ""}">${fmt.brl(guia.aportado)}${guia.investido - guia.aportado > 0.5 ? html`<small>investido no mês: ${fmt.brl(guia.investido)} (o que passa de um destino não cobre outro)</small>` : ""}</dd></div>
             <div class="kpi"><dt>Falta</dt><dd>${fmt.brl(guia.falta)}</dd></div>
           </dl>
           <div class="lista" style="box-shadow:none">${guia.destinos.map((d, i) => html`<div class="item" style="flex-wrap:wrap">
