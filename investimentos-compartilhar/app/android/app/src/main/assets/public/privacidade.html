@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <title>Privacidade · Finance Control</title>
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <main class="estreita" style="padding:calc(env(safe-area-inset-top) + 32px) 20px 64px;max-width:680px;margin:0 auto">
+    <p><a href="index.html">← Finance Control</a></p>
+    <h1 style="font-size:32px;margin:16px 0 4px">Política de privacidade</h1>
+    <p class="fraco">Atualizada em 25 de setembro de 2026</p>
+
+    <div class="texto-p" style="display:grid;gap:14px;margin-top:24px;line-height:1.6">
+      <p>O Finance Control é um painel pessoal de investimentos. Esta página explica que dados o app guarda, onde e para quê.</p>
+
+      <h2 style="font-size:20px">O que é guardado</h2>
+      <ul style="padding-left:18px">
+        <li><b>Conta:</b> e-mail e senha (a senha só como hash bcrypt, nunca em texto). Se você ligar a verificação em duas etapas, o segredo do autenticador.</li>
+        <li><b>O que você cadastra:</b> ativos, aportes, renda fixa, movimentos do agro, ganhos, plano de investimento, preferências e o histórico diário do patrimônio.</li>
+        <li><b>Registro do sistema:</b> eventos como atualização de preços e erros, para você acompanhar o funcionamento.</li>
+      </ul>
+
+      <h2 style="font-size:20px">Onde fica</h2>
+      <p>No Supabase (banco Postgres em São Paulo, Brasil), com tráfego sempre criptografado (HTTPS). Cada linha é vinculada à sua conta e o banco só a entrega a você (Row Level Security). No celular, a sessão fica no Keychain (iOS) ou no Keystore (Android).</p>
+
+      <h2 style="font-size:20px">Com quem é compartilhado</h2>
+      <p>Com ninguém. Não há anúncios, rastreamento, analytics nem venda de dados. Para buscar preços, o servidor consulta fontes públicas (Fundamentus, Yahoo Finance, CoinGecko, Banco Central) enviando só os códigos dos ativos — nunca quantidades, valores ou dados da conta. Ao trocar a senha, os 5 primeiros caracteres do hash SHA-1 dela são consultados no Have I Been Pwned (k-anonimato) para recusar senhas vazadas; a senha não sai do aparelho.</p>
+
+      <h2 style="font-size:20px">Biometria e avisos</h2>
+      <p>O bloqueio por Face ID, Touch ID ou digital usa o sistema do aparelho: o app só recebe “autorizado” ou “não autorizado” e nunca tem acesso aos dados biométricos. Os avisos (salário, proventos, plano do mês) são agendados no próprio aparelho, sem servidor de notificações.</p>
+
+      <h2 style="font-size:20px">Seus direitos</h2>
+      <p>Em <b>Ajustes → Seus dados</b> você baixa um backup completo, apaga todos os dados ou <b>exclui a conta</b> — a exclusão remove o login, todos os registros e a verificação em duas etapas, de forma definitiva.</p>
+
+      <h2 style="font-size:20px">Contato</h2>
+      <p>Dúvidas sobre privacidade: <a href="mailto:acsvalefilho@gmail.com">acsvalefilho@gmail.com</a>.</p>
+    </div>
+  </main>
+</body>
+</html>

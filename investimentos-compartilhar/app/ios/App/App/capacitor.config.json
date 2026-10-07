@@ -1,0 +1,38 @@
+{
+	"appId": "com.valeadriano.financecontrol",
+	"appName": "Finance Control",
+	"webDir": "www",
+	"ios": {
+		"contentInset": "never",
+		"backgroundColor": "#f5f5f7",
+		"limitsNavigationsToAppBoundDomains": false
+	},
+	"android": {
+		"backgroundColor": "#f5f5f7",
+		"allowMixedContent": false
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchAutoHide": false,
+			"backgroundColor": "#f5f5f7",
+			"showSpinner": false
+		},
+		"LocalNotifications": {
+			"iconColor": "#0a84ff"
+		},
+		"SystemBars": {
+			"insetsHandling": "native",
+			"initialViewportFitValueHint": "cover"
+		}
+	},
+	"packageClassList": [
+		"BiometricAuthNative",
+		"SecureStorage",
+		"AppPlugin",
+		"FilesystemPlugin",
+		"LocalNotificationsPlugin",
+		"SharePlugin",
+		"SplashScreenPlugin",
+		"StatusBarPlugin"
+	]
+}
