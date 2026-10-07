@@ -62,6 +62,16 @@
       ],
       dicas: ["Os valores vêm do Fundamentus e são atualizados a cada 12 horas.", "Para comparar pagadoras que você ainda não tem, use Investimentos → Pagadoras de dividendos."],
     },
+    admin: {
+      resumo: "Como o sistema está sendo usado de verdade, sem saber quem é quem, e o material de divulgação.",
+      partes: [
+        ["play", "Vídeos", "Gera o vídeo de divulgação com os números da conta logada, vertical ou horizontal, com trilha."],
+        ["alvo", "Cliques", "Cliques por elemento, por página e por dia, comparação entre duas telas e os fluxos de uma tela para outra."],
+        ["bussola", "Jornadas", "Cada sessão reconstruída: telas na ordem, tempo em cada uma, o que foi clicado e onde a pessoa parou."],
+        ["info", "Logs e insights", "Todos os eventos com busca e filtros, erros agrupados e uma lista automática de atritos, gargalos e partes pouco usadas."],
+      ],
+      dicas: ["Os dados são anônimos: um código aleatório do aparelho no lugar da conta. Telas e cliques só de quem aceitou; erros técnicos de todos.", "Tudo é apagado automaticamente depois de 180 dias."],
+    },
     salario: {
       resumo: "Seus ganhos e o plano que diz quanto investir e onde, todo mês.",
       partes: [

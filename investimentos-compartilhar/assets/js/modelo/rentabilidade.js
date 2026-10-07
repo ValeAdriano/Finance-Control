@@ -305,6 +305,55 @@
       sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker) };
   }
 
+  // ---------------------------------------------------------------- rebanho no tempo
+  // As cabeças entram em lotes (compra, nascimento, outra entrada) e saem
+  // na ordem em que entraram (venda, morte, outra saída). Cada pedaço de
+  // lote vira um segmento {de, ate, n, v0, v1}: valor por cabeça na entrada
+  // e na saída, com uma reta entre os dois.
+  function curvaDoRebanho(movs, valorHoje, hoje) {
+    const ordem = { compra: 0, nascimento: 0, entrada: 0, venda: 1, morte: 1, saida: 1 };
+    const ms = (movs || []).filter((m) => m.tipo in ordem && m.cabecas > 0)
+      .sort((a, b) => a.data.localeCompare(b.data) || ordem[a.tipo] - ordem[b.tipo] || String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
+    const abertos = [], segs = [];
+    for (const m of ms) {
+      if (ordem[m.tipo] === 0) {
+        const v0 = m.tipo === "compra" ? (m.valor_total + m.despesas) / m.cabecas
+          : m.tipo === "nascimento" ? 0 : m.valor_total ? m.valor_total / m.cabecas : null;
+        abertos.push({ de: m.data, n: m.cabecas, v0 });
+        continue;
+      }
+      // morte e saída sem valor: a cabeça some pelo valor que tinha (perda no dia)
+      const v1 = m.tipo === "venda" ? Math.max(0, m.valor_total - m.despesas) / m.cabecas
+        : m.tipo === "saida" && m.valor_total ? m.valor_total / m.cabecas : null;
+      let falta = m.cabecas;
+      while (falta > 0 && abertos.length) {
+        const l = abertos[0], q = Math.min(falta, l.n);
+        segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1 });
+        l.n -= q; falta -= q;
+        if (l.n <= 0) abertos.shift();
+      }
+    }
+    // quem ainda está no pasto termina hoje no valor pela arroba
+    const cab = abertos.reduce((s, l) => s + l.n, 0);
+    const porCabHoje = cab ? valorHoje / cab : 0;
+    for (const l of abertos) segs.push({ de: l.de, ate: hoje, n: l.n, v0: l.v0, v1: porCabHoje, aberto: true });
+    for (const g of segs) {
+      if (g.v0 == null && g.v1 == null) g.v0 = g.v1 = porCabHoje;
+      else if (g.v0 == null) g.v0 = g.v1;
+      else if (g.v1 == null) g.v1 = g.v0;
+      g.dias = Math.max(1, D().dias(g.de, g.ate));
+    }
+    return (d) => {
+      let v = 0;
+      for (const g of segs) {
+        if (d < g.de || (!g.aberto && d >= g.ate)) continue;
+        const f = Math.min(1, D().dias(g.de, d) / g.dias);
+        v += g.n * (g.v0 + (g.v1 - g.v0) * f);
+      }
+      return v;
+    };
+  }
+
   // ---------------------------------------------------------------- série diária
   // O patrimônio reconstruído dia a dia: posições × preço de cada dia +
   // renda fixa rendendo + o rebanho no valor do app. "fluxo" acumula o
@@ -327,14 +376,14 @@
       const s = spot[t];
       return s && FC.ok(s.preco) ? s.preco : null;
     };
-    // rebanho: o valor que o app calcula com os lançamentos até cada data
-    const datasAgro = [...new Set([...movsAgro.map((m) => m.data), ...(base.agro.custos || []).map((c) => c.data), ...(base.agro.pesagens || []).map((p) => p.data)])].sort();
-    const agroEm = datasAgro.map((d) => [d, FC.agro.analisa({
-      movs: movsAgro.filter((m) => m.data <= d), custos: (base.agro.custos || []).filter((c) => c.data <= d),
-      pesagens: (base.agro.pesagens || []).filter((p) => p.data <= d) }, prefs.agro).valorRebanho || 0]);
+    // rebanho: cada cabeça vale, em cada dia, uma reta entre os dois preços
+    // reais que se conhecem dela — o que custou ao entrar e o que rendeu ao
+    // sair (ou, se ainda está no pasto, o valor de hoje pela arroba).
+    // Avaliar o passado pela arroba de hoje inventaria saltos na venda.
+    const valorRebanho = curvaDoRebanho(movsAgro, FC.agro.analisa(base.agro, prefs.agro).valorRebanho || 0, hoje);
     // + o dinheiro de vendas reinvestido que ainda não virou gado
     const cxAgro = FC.agro.caixa(movsAgro, base.agro.custos || []);
-    const valorAgro = (d) => { let v = 0; for (const [dd, x] of agroEm) { if (dd > d) break; v = x; } return v + cxAgro.saldoEm(d); };
+    const valorAgro = (d) => valorRebanho(d) + cxAgro.saldoEm(d);
 
     // dinheiro que entrou até cada dia (aporte +, resgate/venda −)
     const fluxos = [];

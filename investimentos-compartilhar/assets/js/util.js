@@ -225,6 +225,9 @@
     pausa: '<rect x="6.5" y="5" width="3.8" height="14" rx="1.3" fill="currentColor" stroke="none"/><rect x="13.7" y="5" width="3.8" height="14" rx="1.3" fill="currentColor" stroke="none"/>',
     som: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
     somDesligado: '<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+    alvo: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>',
+    celular: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
+    baixar: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>',
     moeda: '<circle cx="12" cy="12" r="8.5"/><path d="M14.6 9.4A2.7 2.7 0 0 0 12 8.2c-1.5 0-2.6.8-2.6 1.9s1.1 1.6 2.6 1.9 2.6.8 2.6 1.9-1.1 1.9-2.6 1.9a2.7 2.7 0 0 1-2.6-1.2M12 6.7v1.5M12 15.8v1.5"/>',
   };
   FC.icone = function (nome, tam = 20, extra = "") {

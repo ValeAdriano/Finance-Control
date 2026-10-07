@@ -19,11 +19,12 @@
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
     { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
     { id: "retrospectiva", nome: "Retrospectiva", icone: "play", oculta: true },
+    { id: "admin", nome: "Administração", icone: "escudo", oculta: true },
   ];
   FC.ROTAS = ROTAS;
   // barra de baixo do celular: as 4 primeiras destas que estiverem ligadas
   const PREFERIDAS_CELULAR = ["inicio", "ativos", "agro", "aportes", "dividendos", "salario"];
-  const rotasLigadas = () => ROTAS.filter((x) => FC.rotaLigada(x.id));
+  const rotasLigadas = () => ROTAS.filter((x) => FC.rotaLigada(x.id) && (x.id !== "admin" || estado.admin));
   const noCelular = () => PREFERIDAS_CELULAR.filter(FC.rotaLigada).slice(0, 4);
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
@@ -278,13 +279,16 @@
   }
 
   function abreMais() {
-    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva");
+    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva" && x.id !== "admin");
     const f = FC.ui.folha({
       titulo: "Mais",
       corpo: html`<div class="lista">
         ${extras.map((x) => html`<a class="item clicavel" href="#/${x.id}" style="color:inherit;text-decoration:none">
           <span style="color:var(--acento)">${icone(x.icone, 22)}</span><div class="principal"><div class="titulo">${x.nome}</div></div>
           <span class="chevron">${icone("chevron", 18)}</span></a>`)}
+        ${estado.admin ? html`<a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("escudo", 22)}</span><div class="principal"><div class="titulo">Administração</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>` : ""}
         <button class="item clicavel" id="mais-sair" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
           <span style="color:var(--vermelho)">${icone("sair", 22)}</span><div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair</div></div></button>
       </div>`,
@@ -294,6 +298,8 @@
   }
 
   FC.sair = async function () {
+    if (FC.uso) FC.uso.para();
+    estado.admin = false;
     await FC.auth.sair();
     FC.local.apagar("ultimo-uso");
     estado.base = null; estado.dados = null;
@@ -306,7 +312,7 @@
   // ---------------------------------------------------------------- rotas
   function rotaAtual() {
     const partes = (location.hash || "#/inicio").replace(/^#\/?/, "").split("/");
-    const id = ROTAS.some((r) => r.id === partes[0]) && FC.rotaLigada(partes[0]) ? partes[0] : "inicio";
+    const id = ROTAS.some((r) => r.id === partes[0]) && FC.rotaLigada(partes[0]) && (partes[0] !== "admin" || estado.admin) ? partes[0] : "inicio";
     return { id, params: partes.slice(1).map(decodeURIComponent) };
   }
 
@@ -389,7 +395,9 @@
       const s = await FC.auth.sessao();
       FC.auth.usuario = s.user;
       FC.marcaUso();
-      await FC.recarregaBase();
+      // o painel de admin só aparece para quem o banco reconhece
+      const [, adm] = await Promise.all([FC.recarregaBase(), FC.sb.rpc("eh_admin").then((r) => !r.error && r.data === true, () => false)]);
+      estado.admin = adm;
     } catch (e) {
       FC.ui.erro(e);
       FC.telas.login(r);
@@ -398,7 +406,10 @@
     casca();
     await FC.rerender();
     // primeiro acesso da conta: a apresentação por passos
+    FC.uso.inicia();
     if (FC.onboarding.precisa()) FC.onboarding.abre();
+    // pede a coleta anônima depois do onboarding, nunca por cima dele
+    else setTimeout(() => FC.uso.pedeConsentimento(), 2500);
     FC.carregaMercado(false);
     ligaAtualizacaoAutomatica();
   };

@@ -60,11 +60,18 @@
           <span class="chevron">${icone("chevron", 18)}</span></a>
       </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
 
-      ${grupo("Divulgação", "material de marketing do sistema", html`<div class="lista">
-        <div class="item clicavel" id="aj-promo"><span class="modulo-ic">${icone("play", 18)}</span>
-          <div class="principal"><div class="titulo">Gerar vídeo de divulgação</div><div class="detalhe">${Math.round(FC.promo.TOTAL)} s com trilha, vertical ou horizontal, feito no navegador com os números desta conta</div></div>
-          <span class="chevron">${icone("chevron", 18)}</span></div>
-      </div>`)}
+      ${grupo("Privacidade", "o que o Finance Control registra sobre o uso", html`<div class="lista">
+        <div class="item"><span class="modulo-ic">${icone("escudo", 18)}</span>
+          <div class="principal"><div class="titulo">Ajudar a melhorar o app</div><div class="detalhe">registra de forma anônima as telas e botões que você usa — nunca valores, ativos, nome ou e-mail</div></div>
+          <label class="interruptor"><input type="checkbox" id="aj-uso" aria-label="Coleta anônima de uso" ${FC.uso.lerConsentimento() === true ? "checked" : ""}><span></span></label></div>
+      </div>
+      <p class="texto-p mt2">No lugar da sua conta vai um código aleatório deste aparelho. Os registros são apagados em 180 dias. Erros técnicos, sem dado pessoal, são registrados para manter o app funcionando.</p>`)}
+
+      ${FC.estado.admin ? grupo("Administração", "visível só para administradores", html`<div class="lista">
+        <a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none"><span class="modulo-ic">${icone("escudo", 18)}</span>
+          <div class="principal"><div class="titulo">Painel do administrador</div><div class="detalhe">vídeos de divulgação, cliques, jornadas, logs e insights</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+      </div>`) : ""}
 
       ${grupo("Segurança", "", html`<div class="lista">
         <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
@@ -164,7 +171,10 @@
       }, 700);
     });
     FC.$("#aj-senha", raiz).addEventListener("click", trocaSenha);
-    FC.$("#aj-promo", raiz).addEventListener("click", () => FC.abrePromo());
+    FC.$("#aj-uso", raiz).addEventListener("change", async (e) => {
+      try { await FC.uso.defineConsentimento(e.target.checked); FC.ui.aviso(e.target.checked ? "Obrigado! A coleta anônima está ligada" : "Coleta de uso desligada"); }
+      catch (err) { e.target.checked = !e.target.checked; FC.ui.erro(err); }
+    });
     FC.$("#aj-apresentacao", raiz).addEventListener("click", () => FC.onboarding.abre());
     FC.$("#aj-mfa-add", raiz) && FC.$("#aj-mfa-add", raiz).addEventListener("click", () => ligaMfa(fatores.length));
     FC.$$("[data-remove-fator]", raiz).forEach((bt) => bt.addEventListener("click", () => removeFator(fatores, bt.dataset.removeFator)));

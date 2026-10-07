@@ -356,3 +356,82 @@ alter table public.aportes add column if not exists indexador text check (indexa
 alter table public.aportes add column if not exists taxa numeric;
 -- data da posição inicial de um ativo (vazio = data do cadastro)
 alter table public.ativos add column if not exists data_base date;
+
+-- ============================================================
+--  PAINEL DO ADMINISTRADOR
+--  Quem é admin fica numa tabela que a API não expõe (nem para ler):
+--  só a função privado.eh_admin() a consulta. Para dar acesso:
+--    insert into public.admins (user_id) select id from auth.users where email = '...';
+--  Admin com 2FA ligado só enxerga o painel numa sessão aal2.
+-- ============================================================
+create table if not exists public.admins (
+  user_id   uuid primary key references auth.users on delete cascade,
+  criado_em timestamptz not null default now()
+);
+alter table public.admins enable row level security;
+revoke all on public.admins from anon, authenticated;
+
+create or replace function privado.eh_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.admins a where a.user_id = auth.uid()) and privado.mfa_ok();
+$$;
+revoke all on function privado.eh_admin() from public, anon;
+grant execute on function privado.eh_admin() to authenticated;
+
+-- o app pergunta se mostra o painel; quem garante é a RLS
+create or replace function public.eh_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select privado.eh_admin();
+$$;
+revoke all on function public.eh_admin() from public, anon;
+grant execute on function public.eh_admin() to authenticated;
+
+-- ------------------------------------------------------------ uso do app (LGPD)
+-- Eventos de navegação ANÔNIMOS: sem user_id, sem e-mail, sem valores.
+-- "visitante" é um código aleatório do aparelho, sem ligação com a conta;
+-- "sessao", um código por visita. Telas, cliques e folhas só são
+-- gravados com o consentimento do usuário; erros técnicos (sem dado
+-- pessoal) por legítimo interesse, para manter o app funcionando.
+-- Tudo some depois de 180 dias.
+create table if not exists public.uso_eventos (
+  id         bigint generated always as identity primary key,
+  quando     timestamptz not null default now()
+             check (quando > now() - interval '2 days' and quando < now() + interval '10 minutes'),
+  visitante  text not null check (visitante ~ '^[a-z0-9]{12,32}$'),
+  sessao     text not null check (sessao ~ '^[a-z0-9]{12,32}$'),
+  tipo       text not null check (tipo in ('tela','clique','folha_abre','folha_envia','folha_fecha','erro')),
+  rota       text check (length(rota) <= 40),
+  alvo       text check (length(alvo) <= 120),
+  duracao_ms integer check (duracao_ms between 0 and 86400000),
+  aparelho   text check (aparelho in ('celular','tablet','computador')),
+  detalhe    jsonb not null default '{}' check (pg_column_size(detalhe) <= 2000)
+);
+create index if not exists uso_eventos_quando_idx on public.uso_eventos (quando desc);
+create index if not exists uso_eventos_sessao_idx on public.uso_eventos (sessao, quando);
+alter table public.uso_eventos enable row level security;
+drop policy if exists "qualquer usuario grava" on public.uso_eventos;
+create policy "qualquer usuario grava" on public.uso_eventos for insert to authenticated with check (true);
+drop policy if exists "admin le" on public.uso_eventos;
+create policy "admin le" on public.uso_eventos for select to authenticated using ((select privado.eh_admin()));
+drop policy if exists "admin apaga" on public.uso_eventos;
+create policy "admin apaga" on public.uso_eventos for delete to authenticated using ((select privado.eh_admin()));
+revoke all on public.uso_eventos from anon;
+grant insert, select, delete on public.uso_eventos to authenticated;
+
+-- erros do sistema (fontes de preço, registro diário) para o admin, sem
+-- dizer de quem: nada de user_id nem dos valores da carteira
+create or replace function public.admin_erros_sistema(dias integer default 30)
+returns table (quando timestamptz, origem text, etapa text, erro text)
+language sql stable security definer set search_path = '' as $$
+  select l.quando, l.origem, coalesce(l.detalhe ->> 'etapa', l.evento),
+         left(regexp_replace(coalesce(l.detalhe ->> 'erro', l.detalhe ->> 'mensagem', ''), '[0-9a-f]{8}-[0-9a-f-]{27}', '<id>', 'g'), 300)
+  from public.log_sistema l
+  where privado.eh_admin() and l.evento = 'erro' and l.quando > now() - make_interval(days => least(greatest(dias, 1), 180))
+  order by l.quando desc limit 2000;
+$$;
+revoke all on function public.admin_erros_sistema(integer) from public, anon;
+grant execute on function public.admin_erros_sistema(integer) to authenticated;
+
+-- retenção: 180 dias
+select cron.unschedule('fc-limpa-uso') where exists (select 1 from cron.job where jobname = 'fc-limpa-uso');
+select cron.schedule('fc-limpa-uso', '30 7 * * *', $$delete from public.uso_eventos where quando < now() - interval '180 days'$$);
