@@ -125,6 +125,7 @@
         })}</div>`}
         <p class="texto-p mt2">Cada aporte entra com a sua data: o retorno no período divide o ganho pelo capital médio que ficou aplicado (Modified Dietz), e a TIR é a taxa anual equivalente — aparece a partir de 90 dias de história.</p>
         ${rt.sem_custo.length ? html`<p class="texto-p mt1">Fora da conta: ${rt.sem_custo.join(", ")}, sem preço médio — sem o custo não dá para saber o ganho. Preencha em Investimentos → Editar.</p>` : ""}
+        ${rt.sem_preco && rt.sem_preco.length ? html`<p class="texto-p mt1">Fora da conta por enquanto: ${rt.sem_preco.join(", ")}, sem cotação no momento.</p>` : ""}
       </div></section>`;
   };
 
@@ -185,6 +186,7 @@
     if (!r || !r.lotes.length) return "";
     return html`<h3 style="font-size:17px;margin:22px 0 8px">Rentabilidade por aporte</h3>
       ${r.sem_custo ? html`<div class="mensagem alerta mb2">${icone("info", 16)}<span>Sem o preço médio da posição inicial não dá para medir o retorno do ativo. Preencha em Editar.</span></div>`
+        : r.sem_preco ? html`<div class="mensagem alerta mb2">${icone("info", 16)}<span>Sem a cotação de agora não dá para medir o retorno do ativo. Tente atualizar.</span></div>`
         : html`${C.kpisRentab(r)}${C.comparaIndices(r.fluxos, r.valor_atual)}`}
       <div class="tabela-rola"><table class="tabela lotes">
         <thead><tr><th>Data</th><th class="n">Qtd.</th><th class="n">Preço pago</th><th class="n">Vale hoje</th><th class="n">Resultado</th><th class="n">% ao ano</th><th class="n">Na Selic</th><th class="n">No Ibovespa</th></tr></thead>

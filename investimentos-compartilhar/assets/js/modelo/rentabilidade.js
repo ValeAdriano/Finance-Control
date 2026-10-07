@@ -44,6 +44,10 @@
     const util = dias.map((d) => (ultCal && d >= priCal && d <= ultCal ? mCdi.has(d) : D().ehUtil(d)));
     const porMes = {};
     dias.forEach((d, i) => { if (util[i]) porMes[d.slice(0, 7)] = (porMes[d.slice(0, 7)] || 0) + 1; });
+    // o mês corrente conta todos os dias úteis dele, não só os que já passaram:
+    // senão o IPCA do mês inteiro entraria em poucos dias
+    const mesFim = dias.at(-1).slice(0, 7);
+    for (let d = D().soma(dias.at(-1), 1); d.slice(0, 7) === mesFim; d = D().soma(d, 1)) if (D().ehUtil(d)) porMes[mesFim] = (porMes[mesFim] || 0) + 1;
     const cache = new Map();
 
     // valor do índice num dia útil e se foi medido ou estimado
@@ -253,12 +257,14 @@
         pct, pct_aa: anualiza(pct, dias), dias };
     });
     const q = lotes.reduce((s, l) => s + l.quantidade, 0);
-    const semCusto = lotes.some((l) => l.preco == null);
+    // sem o custo de alguma compra (mesmo já vendida) não há como medir o
+    // retorno do ativo inteiro; sem o preço de agora, também não
+    const semCusto = ev.some((e) => e.q > 0 && e.preco == null);
+    const semPreco = preco == null && q > 1e-12;
     const valor = preco != null ? q * preco : 0;
-    // sem o custo de algum lote não há como medir o retorno do ativo inteiro
-    const r = semCusto ? { aplicado: null, valor_atual: valor, ganho: null, periodo_pct: null, xirr: null, desde: ev[0] && ev[0].data, dias: null }
+    const r = semCusto || semPreco ? { aplicado: null, valor_atual: valor, ganho: null, periodo_pct: null, xirr: null, desde: ev[0] && ev[0].data, dias: null }
       : resumoFluxos(fluxos, valor, hoje);
-    return { lotes, realizados, quantidade: q, sem_custo: semCusto,
+    return { lotes, realizados, quantidade: q, sem_custo: semCusto, sem_preco: semPreco,
       proventos: proventosPagos.reduce((s, p) => s + p.valor, 0), fluxos, ...r };
   }
 
@@ -302,7 +308,8 @@
     const final = ativos.filter((a) => a.aplicado != null).reduce((s, a) => s + a.valor_atual, 0)
       + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0);
     return { ativos, titulos, classes, total: fl.length ? resumoFluxos(fl, final, hoje) : null,
-      sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker) };
+      sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker),
+      sem_preco: ativos.filter((a) => a.sem_preco && !a.sem_custo).map((a) => a.ticker) };
   }
 
   // ---------------------------------------------------------------- rebanho no tempo

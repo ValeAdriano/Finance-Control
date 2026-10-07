@@ -82,8 +82,10 @@
       if (m.tipo === "reclassificacao") {
         const faz = m.fazenda || ondeEsta(porFazenda, m.categoria);
         const lote = m.lote || ondeEsta(porLote, m.categoria);
-        mexe(faz, lote, m.categoria, -m.cabecas);
-        mexe(faz, lote, m.categoria_destino, m.cabecas);
+        // só muda de categoria o que existe nela: o excesso não cria cabeças
+        const n = Math.min(m.cabecas, Math.max(0, rebanho[m.categoria] || 0));
+        if (n < m.cabecas) ajustes.push({ data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
+        if (n) { mexe(faz, lote, m.categoria, -n); mexe(faz, lote, m.categoria_destino, n); }
       } else if (t.sinal < 0) {
         saida(m, m.cabecas);
       } else mexe(m.fazenda, m.lote, m.categoria, m.cabecas);

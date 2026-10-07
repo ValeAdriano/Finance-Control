@@ -71,7 +71,7 @@
   };
 
   // tickers cujo histórico interessa: carteira, watchlist e o que aparece
-  // nos aportes (para a curva de evolução)
+  // nos aportes (para o gráfico de crescimento do patrimônio)
   function itensDeMercado() {
     const m = new Map();
     for (const a of estado.base.ativos) m.set(a.ticker, { ticker: a.ticker, classe: a.classe });

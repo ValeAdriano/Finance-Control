@@ -28,10 +28,12 @@
       const aplic = r.valor_aplicado || 0;
       if (!aplic) continue;
       let nominal;
-      if (r.taxa == null) nominal = cdi;
-      else if (r.tipo === "cdi") nominal = (cdi * r.taxa) / 100;
-      else if (r.tipo === "ipca") nominal = ((1 + ipca / 100) * (1 + r.taxa / 100) - 1) * 100;
-      else nominal = r.taxa;
+      // sem taxa informada vale o padrão do tipo (100% do CDI/Selic, IPCA + 0)
+      const taxa = r.taxa != null ? Number(r.taxa) : FC.rentab ? FC.rentab.PADRAO_TAXA[r.tipo] ?? 100 : 100;
+      // Selic e CDI andam juntos no longo prazo: os dois pela premissa do CDI
+      if (r.tipo === "cdi" || r.tipo === "selic") nominal = (cdi * taxa) / 100;
+      else if (r.tipo === "ipca") nominal = ((1 + ipca / 100) * (1 + taxa / 100) - 1) * 100;
+      else nominal = taxa;
       caixa.valor += aplic;
       caixa.titulos.push({ nome: r.nome, valor: aplic, real: real(nominal, ipca), nominal });
     }

@@ -35,6 +35,11 @@
     const inicioBase = ha12;
     const importados = new Set(base.aportes.filter((a) => a.tipo === "ativo" && a.origem).map((a) => a.ticker));
     const lancados = new Set(base.aportes.filter((a) => a.tipo === "provento" && a.origem).map((a) => a.origem));
+    // provento que veio do extrato (origem própria) também conta como lançado:
+    // mesmo ticker, mesma data de pagamento, mesmo valor (até 5 centavos)
+    const manuais = base.aportes.filter((a) => a.tipo === "provento");
+    const jaLancado = (origem, ticker, pagamento, valor) => lancados.has(origem)
+      || (!!pagamento && manuais.some((m) => m.ticker === ticker && m.data === pagamento && Math.abs(m.valor - valor) <= 0.05));
 
     const pagamentos = [];
     const porAtivo = [];
@@ -51,7 +56,8 @@
       const datas12 = new Set();
       for (const pr of lista) {
         const futuro = pr.data_com > hoje;
-        const q = futuro ? qtdHoje : qtdEm(item, compras, importados.has(a.ticker), pr.data_com, inicioBase);
+        // a posição inicial só recebe a partir da data dela (sem data: os últimos 12 meses)
+        const q = futuro ? qtdHoje : qtdEm(item, compras, importados.has(a.ticker), pr.data_com, item.data_base || inicioBase);
         const liquidoPorAcao = pr.valor * (pr.tipo === "JCP" ? 1 - IR_JCP : 1);
         if (pr.data_com > ha12 && pr.data_com <= hoje) {
           porAcao12 += liquidoPorAcao;
@@ -66,7 +72,7 @@
           ticker: a.ticker, tipo: pr.tipo, data_com: pr.data_com, pagamento: pr.pagamento, quando,
           valor_por_acao: pr.valor, liquido_por_acao: liquidoPorAcao, quantidade: q, valor, bruto: q * pr.valor,
           status: pago ? "pago" : futuro ? "anunciado" : pr.pagamento ? "a receber" : "sem data de pagamento",
-          estimado_base: !futuro && !compras.some((c) => c.data <= pr.data_com), origem, lancado: lancados.has(origem),
+          estimado_base: !futuro && !compras.some((c) => c.data <= pr.data_com), origem, lancado: jaLancado(origem, a.ticker, pr.pagamento, valor),
         });
         if (pago && pr.pagamento > ha12) recebido12 += valor;
       }
@@ -107,7 +113,7 @@
       m = mm === 12 ? `${a + 1}-01` : `${a}-${String(mm + 1).padStart(2, "0")}`;
     }
 
-    const proximos = pagamentos.filter((x) => x.quando >= hoje || x.status === "anunciado" || x.status === "sem data de pagamento" && x.data_com > FC.datas.soma(hoje, -60))
+    const proximos = pagamentos.filter((x) => x.status !== "pago").filter((x) => x.quando >= hoje || x.status === "anunciado" || x.status === "sem data de pagamento" && x.data_com > FC.datas.soma(hoje, -60))
       .sort((x, y) => x.quando.localeCompare(y.quando));
     const recebidos = pagamentos.filter((x) => x.status === "pago").sort((x, y) => y.quando.localeCompare(x.quando));
     const em30 = FC.soma(proximos.filter((x) => x.pagamento && x.pagamento <= FC.datas.soma(hoje, 30)), (x) => x.valor);

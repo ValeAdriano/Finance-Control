@@ -223,11 +223,14 @@
     if (pvp < 0) return { valor: null, motivo: "patrimônio líquido negativo — a fórmula não se aplica" };
     const lpa = cotacao / pl, vpa = cotacao / pvp;
     const valor = Math.sqrt(22.5 * lpa * vpa);
-    const margem = (valor / cotacao - 1) * 100;       // > 0: cotação abaixo do justo
-    const cor = margem >= 15 ? "verde" : margem >= -10 ? "amarelo" : "vermelho";
+    // margem de segurança de Graham: quanto a cotação está abaixo do justo,
+    // sobre o justo (nunca passa de 100%); acima do justo, quanto passa dele
+    const margem = (1 - cotacao / valor) * 100;
+    const acima = (cotacao / valor - 1) * 100;
+    const cor = margem >= 15 ? "verde" : acima <= 10 ? "amarelo" : "vermelho";
     const leitura = margem >= 15 ? `${FC.fmt.num(margem, 0)}% abaixo do justo`
       : margem >= 0 ? "perto do justo"
-      : margem >= -10 ? "um pouco acima do justo" : `${FC.fmt.num(-margem, 0)}% acima do justo`;
+      : acima <= 10 ? "um pouco acima do justo" : `${FC.fmt.num(acima, 0)}% acima do justo`;
     return { valor, lpa, vpa, margem, cor, leitura };
   };
 

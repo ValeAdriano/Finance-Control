@@ -448,7 +448,8 @@
     raiz.innerHTML = String(html`
       ${C.cabecalho("Agronegócio", "Seu rebanho como investimento: movimentos, custos, pesagens e resultado.",
         html`<button class="botao sec" id="bt-cotacao">${icone("moeda", 18)} Cotação</button><button class="botao" id="bt-novo">${icone("aportes", 18)} Lançamento</button>`)}
-      ${ag.ajustes.length ? html`<div class="mensagem info mb3">${icone("info", 18)}<span>O gado muda de categoria sem lançamento: ${ag.ajustes.map((x) => `${FC.datas.br(x.data)}, ${x.cabecas} ${FC.CATEGORIAS_GADO[x.de].toLowerCase()} saíram como ${FC.CATEGORIAS_GADO[x.para].toLowerCase()} (${FC.TIPOS_MOV[x.tipo].nome.toLowerCase()})`).join("; ")}.</span></div>` : ""}
+      ${ag.ajustes.some((x) => x.ignorado) ? html`<div class="mensagem alerta mb3">${icone("alerta", 18)}<span>Mudança de categoria maior que o rebanho da categoria — só o que existia mudou: ${ag.ajustes.filter((x) => x.ignorado).map((x) => `${FC.datas.br(x.data)}, ${x.cabecas} ${FC.CATEGORIAS_GADO[x.de].toLowerCase()} a mais do que havia`).join("; ")}. Confira o lançamento.</span></div>` : ""}
+      ${ag.ajustes.some((x) => !x.ignorado) ? html`<div class="mensagem info mb3">${icone("info", 18)}<span>O gado muda de categoria sem lançamento: ${ag.ajustes.filter((x) => !x.ignorado).map((x) => `${FC.datas.br(x.data)}, ${x.cabecas} ${FC.CATEGORIAS_GADO[x.de].toLowerCase()} saíram como ${FC.CATEGORIAS_GADO[x.para].toLowerCase()} (${FC.TIPOS_MOV[x.tipo].nome.toLowerCase()})`).join("; ")}.</span></div>` : ""}
       ${ag.inconsistentes.length ? html`<div class="mensagem alerta mb3">${icone("alerta", 18)}<span>Saíram mais cabeças do que entraram em: <b>${ag.inconsistentes.map((c) => FC.CATEGORIAS_GADO[c]).join(", ")}</b>.
         Se o gado já existia antes de você começar a registrar, lance o estoque inicial com “Outra entrada”.</span></div>` : ""}
       <div class="cartao heroi">

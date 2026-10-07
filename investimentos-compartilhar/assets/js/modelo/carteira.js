@@ -5,15 +5,18 @@
   const ok = FC.ok;
 
   // ---------------------------------------------------------------- aportes
+  // compras e vendas de cada ticker em ordem de data; a venda entra no
+  // preço médio pelo custo das cotas que saíram, não pelo preço da venda
   function consolidadoPorTicker(aportes) {
     const fora = {};
     for (const a of aportes) {
       if (a.tipo !== "ativo" || !a.ticker) continue;
-      const d = (fora[a.ticker] = fora[a.ticker] || { quantidade: 0, custo: 0, n: 0 });
+      const d = (fora[a.ticker] = fora[a.ticker] || { quantidade: 0, n: 0, eventos: [] });
       d.quantidade += a.quantidade;
-      d.custo += a.quantidade * a.preco;
       d.n += 1;
+      d.eventos.push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: a.preco });
     }
+    for (const d of Object.values(fora)) d.eventos.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
     return fora;
   }
   // aportes em caixa que somam ao saldo (os de extrato já estão no saldo)
@@ -30,16 +33,25 @@
 
   // ---------------------------------------------------------------- posição
   // O preço médio só é calculado sobre a parte cujo custo se conhece.
+  // Posição base primeiro, depois compras e vendas na ordem: a venda tira
+  // a mesma fração da quantidade e do custo (o preço médio não muda).
   function posicao(item, preco, reg) {
     const qBase = Number(item.quantidade) || 0;
     const pmBase = item.preco_medio;
     const qAp = reg ? reg.quantidade : 0;
-    const cAp = reg ? reg.custo : 0;
     const q = qBase + qAp;
     if (!(q > 1e-9 && preco)) return null;
-    let custo = 0, qCusto = 0;
-    if (pmBase && qBase) { custo += qBase * pmBase; qCusto += qBase; }
-    if (qAp) { custo += cAp; qCusto += qAp; }
+    let qt = qBase, custo = 0, qCusto = 0;
+    if (pmBase && qBase) { custo = qBase * pmBase; qCusto = qBase; }
+    for (const e of reg ? reg.eventos : []) {
+      if (e.q > 0) {
+        qt += e.q;
+        if (FC.ok(e.preco)) { custo += e.q * e.preco; qCusto += e.q; }
+      } else if (e.q < 0 && qt > 1e-12) {
+        const fr = Math.min(1, -e.q / qt);
+        custo -= custo * fr; qCusto -= qCusto * fr; qt += e.q;
+      }
+    }
     const atual = q * preco;
     const completo = qCusto >= q - 1e-9;
     const p = {
@@ -121,9 +133,8 @@
       ultimo: meses.at(-1).total, n_meses: meses.length };
   }
 
-  // ---------------------------------------------------------------- evolução
-  // Valor e custo da carteira semana a semana, reconstruídos das compras
-  // e do histórico de preço. A distância entre as linhas é o ganho.
+  // ---------------------------------------------------------------- preço numa data
+  // o fechamento do dia (ou o anterior mais próximo) numa série [[data, preço]]
   function precoEm(serie, dia) {
     let lo = 0, hi = serie.length - 1, r = null;
     while (lo <= hi) {
@@ -131,32 +142,6 @@
       if (serie[m][0] <= dia) { r = serie[m][1]; lo = m + 1; } else hi = m - 1;
     }
     return r;
-  }
-  function evolucao(aportes, historicos) {
-    const compras = aportes.filter((a) => a.tipo === "ativo" && a.data).sort((a, b) => a.data.localeCompare(b.data));
-    const caixa = aportes.filter((a) => a.tipo === "caixa" && a.data).sort((a, b) => a.data.localeCompare(b.data));
-    if (!compras.length && !caixa.length) return { pontos: [] };
-    const hoje = FC.datas.hoje();
-    const inicio = [compras[0], caixa[0]].filter(Boolean).map((a) => a.data).sort()[0];
-    function ponto(dia) {
-      const pos = {};
-      let custo = 0, valor = 0, faltou = false;
-      for (const c of compras) { if (c.data > dia) break; pos[c.ticker] = (pos[c.ticker] || 0) + c.quantidade; custo += c.quantidade * c.preco; }
-      for (const c of caixa) { if (c.data > dia) break; custo += c.valor; valor += c.valor; }
-      for (const [t, q] of Object.entries(pos)) {
-        const h = historicos[t];
-        const p = h && !h.erro ? precoEm(h.precos, dia) : null;
-        if (p == null) { faltou = true; continue; }
-        valor += q * p;
-      }
-      return { data: dia, valor, custo, incompleto: faltou };
-    }
-    const pontos = [];
-    for (let d = inicio; d <= hoje; d = FC.datas.soma(d, 7)) pontos.push(ponto(d));
-    if (!pontos.length || pontos.at(-1).data !== hoje) pontos.push(ponto(hoje));
-    const u = pontos.at(-1);
-    return { pontos, primeiro: inicio, valor_final: u.valor, custo_final: u.custo, ganho: u.valor - u.custo,
-      algum_incompleto: pontos.some((p) => p.incompleto), so_caixa: caixa.length > 0 && !compras.length };
   }
 
   // ---------------------------------------------------------------- coleta
@@ -234,12 +219,8 @@
     const hojeAbs = FC.soma(comPos.filter((a) => ok(a.variacao_dia)), (a) => a.posicao.atual - a.posicao.atual / (1 + a.variacao_dia / 100));
     const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado);
 
-    const hist = evolucao(aportes, historicos || {});
     const proventos = aportes.filter((a) => a.tipo === "provento").sort((a, b) => b.data.localeCompare(a.data));
-    hist.proventos = proventos;
-    hist.total_proventos = FC.soma(proventos, (p) => p.valor);
-    hist.renda_mensal = proventosPorMes(proventos);
-    hist.rendimento_rf = Math.max(0, atual + rf - (hist.valor_final || 0));
+    const hist = { proventos, renda_mensal: proventosPorMes(proventos) };
 
     const dados = {
       ativos, rendaFixa, agro, macro, regras,
