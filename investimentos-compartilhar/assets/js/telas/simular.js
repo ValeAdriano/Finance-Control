@@ -63,17 +63,27 @@
       const alvo = FC.$("#cenarios", raiz);
       if (!total) { alvo.innerHTML = String(html`<div class="lista">${C.vazio("📊", "Digite as cotas acima", "A alocação depois da compra aparece aqui, nos dois cenários.")}</div>`); return; }
       const cenario = (novo) => {
-        const totDepois = novo ? patrimonio + total : patrimonio;
-        const linhas = FC.PILARES.map((p) => {
-          const b = base.find((l) => l.chave === p.chave) || { valor: 0, pct: 0, alvo_pct: Number(d.alocacao_alvo[p.chave]) || 0 };
+        // pilar com meta 0% fica fora do equilíbrio: as % são sobre os outros
+        const alvos = d.alocacao_alvo || {};
+        const algumaMeta = FC.PILARES.some((p) => Number(alvos[p.chave]) > 0);
+        const conta = (k) => !algumaMeta || Number(alvos[k]) > 0;
+        const brutas = FC.PILARES.map((p) => {
+          const b = base.find((l) => l.chave === p.chave) || { valor: 0, pct: 0, pct_meta: 0, alvo_pct: Number(alvos[p.chave]) || 0 };
           let v = b.valor + (porPilar[p.chave] || 0);
           if (!novo && p.chave === "caixa") v = b.valor - total;
+          return { p, b, v };
+        });
+        const totDepois = FC.soma(brutas.filter((x) => conta(x.p.chave)), (x) => x.v);
+        const linhas = brutas.map(({ p, b, v }) => {
+          if (!conta(p.chave)) return { nome: p.nome, cor: p.cor, hoje: null, pct: null, desvio: null, alvo: 0, v, fora: true };
           const pctD = totDepois ? (v / totDepois) * 100 : 0;
-          return { nome: p.nome, cor: p.cor, hoje: b.pct, pct: pctD, desvio: pctD - b.alvo_pct, alvo: b.alvo_pct, v };
+          return { nome: p.nome, cor: p.cor, hoje: b.pct_meta ?? b.pct, pct: pctD, desvio: pctD - b.alvo_pct, alvo: b.alvo_pct, v };
         }).filter((l) => l.v > 0 || l.alvo > 0 || l.hoje > 0);
-        const pior = linhas.reduce((m, l) => (Math.abs(l.desvio) > Math.abs(m.desvio) ? l : m), linhas[0]);
+        const comMeta = linhas.filter((l) => !l.fora);
+        const pior = comMeta.reduce((m, l) => (Math.abs(l.desvio) > Math.abs(m.desvio) ? l : m), comMeta[0]);
         return html`<table class="tabela"><thead><tr><th>Pilar</th><th class="n">Hoje</th><th class="n">Depois</th><th class="n">vs meta</th></tr></thead>
-          <tbody>${linhas.map((l) => html`<tr><td><span class="ponto-e" style="background:${l.cor}"></span> ${l.nome}</td><td class="n fraco">${fmt.num(l.hoje, 1)}%</td>
+          <tbody>${linhas.map((l) => l.fora ? html`<tr><td><span class="ponto-e" style="background:${l.cor}"></span> ${l.nome}</td><td class="n fraco" colspan="3">fora da meta (0%)</td></tr>`
+            : html`<tr><td><span class="ponto-e" style="background:${l.cor}"></span> ${l.nome}</td><td class="n fraco">${fmt.num(l.hoje, 1)}%</td>
             <td class="n"><b>${fmt.num(l.pct, 1)}%</b></td><td class="n ${l === pior && Math.abs(l.desvio) >= 1 ? "neg" : "fraco"}">${fmt.delta(l.desvio, 1, " p.p.")}</td></tr>`)}</tbody></table>`;
       };
       const caixa = (base.find((l) => l.chave === "caixa") || { valor: 0 }).valor;

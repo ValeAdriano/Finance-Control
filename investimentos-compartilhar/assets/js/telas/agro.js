@@ -348,7 +348,9 @@
     const f = FC.ui.folha({
       titulo: "Cotação e avaliação do rebanho",
       corpo: html`<form class="form" id="f-cot">
-        <p class="texto-p">O valor do rebanho é estimado por: cabeças × peso vivo × rendimento de carcaça ÷ 15 × preço da arroba. Atualize o preço com a cotação da sua praça (CEPEA, Scot, frigorífico).</p>
+        <label class="flex" style="gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" name="avaliar_pelo_custo" ${cfg.avaliar_pelo_custo ? "checked" : ""} style="margin-top:4px">
+          <span><b>Avaliar pelo que paguei até vender</b><br><span class="texto-p">O rebanho vale o custo das cabeças no pasto e o ganho só aparece quando você lança a venda. A arroba abaixo não é usada.</span></span></label>
+        <p class="texto-p">Sem essa opção, o valor do rebanho é estimado por: cabeças × peso vivo × rendimento de carcaça ÷ 15 × preço da arroba. Atualize o preço com a cotação da sua praça (CEPEA, Scot, frigorífico).</p>
         <div class="linha3">
           <div class="campo"><label for="q-arr">Preço da @ do boi (R$)</label><input id="q-arr" name="preco_arroba" inputmode="decimal" value="${cfg.preco_arroba ?? ""}" required></div>
           <div class="campo"><label for="q-rend">Rendimento de carcaça (%)</label><input id="q-rend" name="rendimento_carcaca" inputmode="decimal" value="${cfg.rendimento_carcaca ?? 52}"></div>
@@ -378,7 +380,8 @@
         if (c > 0) porCab[k] = c;
       }
       const agro = { preco_arroba: FC.lerNum(d.preco_arroba) || 0, rendimento_carcaca: FC.lerNum(d.rendimento_carcaca) || 52,
-        data_cotacao: d.data_cotacao || null, arroba_por_categoria: porArr, valor_cabeca_por_categoria: porCab };
+        data_cotacao: d.data_cotacao || null, arroba_por_categoria: porArr, valor_cabeca_por_categoria: porCab,
+        avaliar_pelo_custo: !!FC.$("[name=avaliar_pelo_custo]", form).checked };
       try {
         await FC.ui.ocupado(FC.$("[data-acao=salvar]", f.el), () => FC.db.gravaPrefs({ agro }));
         f.fechar();
@@ -466,8 +469,8 @@
         <p class="rotulo">Rebanho</p>
         <p class="valor"><span data-conta="${ag.total}" data-modo="int">${fmt.int(ag.total)}</span> <span style="font-size:.45em;color:var(--ink-2);font-weight:500">cabeças</span></p>
         <div class="chips">
-          <span class="chip">Valor estimado <b class="rs">${fmt.brlTexto(ag.valorRebanho, 0)}</b></span>
-          <button class="chip" id="chip-arroba" style="border:0;cursor:pointer">@ <b>${fmt.brlTexto(cfg.preco_arroba)}</b>${cfg.data_cotacao ? " em " + FC.datas.br(cfg.data_cotacao) : ""} ${icone("editar", 13)}</button>
+          <span class="chip">${ag.pelo_custo ? "Valor pago" : "Valor estimado"} <b class="rs">${fmt.brlTexto(ag.valorRebanho, 0)}</b></span>
+          <button class="chip" id="chip-arroba" style="border:0;cursor:pointer">${ag.pelo_custo ? html`pelo custo até vender` : html`@ <b>${fmt.brlTexto(cfg.preco_arroba)}</b>${cfg.data_cotacao ? " em " + FC.datas.br(cfg.data_cotacao) : ""}`} ${icone("editar", 13)}</button>
           ${ag.tem_dados ? html`<span class="chip">Resultado <b class="${fin.resultado >= 0 ? "pos" : "neg"} rs">${fmt.brlTexto(fin.resultado, 0)}</b></span>` : ""}
         </div>
       </div>
@@ -482,7 +485,7 @@
           <dl class="kpis">
             <div class="kpi"><dt>Investido ${FC.ajuda("Compras (com frete, comissão e impostos da operação), o valor do gado que entrou como estoque inicial ou transferência, e todos os custos lançados.")}</dt><dd>${fmt.brl(fin.investido, 0)}<small>${fmt.brl(fin.gasto_compras, 0)} em gado · ${fmt.brl(fin.custos, 0)} em custos</small></dd></div>
             <div class="kpi"><dt>Recebido em vendas</dt><dd>${fmt.brl(fin.receita_vendas, 0)}<small>${fmt.int(fin.cab_vendidas)} cabeças, já sem as despesas</small></dd></div>
-            <div class="kpi"><dt>Rebanho hoje</dt><dd>${fmt.brl(ag.valorRebanho, 0)}<small>estimado pela arroba</small></dd></div>
+            <div class="kpi"><dt>Rebanho hoje</dt><dd>${fmt.brl(ag.valorRebanho, 0)}<small>${ag.pelo_custo ? "pelo que você pagou" : "estimado pela arroba"}</small></dd></div>
             <div class="kpi"><dt>Resultado ${FC.ajuda("Recebido em vendas + valor estimado do rebanho − tudo o que foi investido. É o ganho econômico, mesmo sem ter vendido tudo.")}</dt>
               <dd class="${fin.resultado >= 0 ? "pos" : "neg"}">${fmt.brl(fin.resultado, 0)}${ok(fin.retorno_pct) ? html`<small>${fmt.delta(fin.retorno_pct)}% sobre o capital aportado</small>` : ""}</dd></div>
           </dl>
@@ -500,13 +503,13 @@
       </section>
 
       ${ag.porCategoria.length ? html`<section class="secao">
-        <div class="secao-topo"><h2>Rebanho por categoria</h2><span class="sub">cabeças, peso e valor estimado</span></div>
+        <div class="secao-topo"><h2>Rebanho por categoria</h2><span class="sub">cabeças, peso e ${ag.pelo_custo ? "valor pago" : "valor estimado"}</span></div>
         <div class="gado-cat entra">${ag.porCategoria.map((c, i) => html`<div class="cartao" style="--i:${i}">
           <div class="rot-cat">${c.nome}</div><div class="n-cab">${fmt.int(c.cabecas)}</div>
           <small>${fmt.num(c.kg, 0)} kg · ${fmt.num(c.arrobas_cabeca, 1)} @/cab</small>
           <small>peso ${c.fonte_peso === "pesagem" ? "da pesagem de " + FC.datas.br(c.data_peso) : c.fonte_peso === "movimento" ? "do último lançamento" : "típico (sem pesagem)"}</small>
           <div style="margin-top:8px;font-weight:600" class="rs">${fmt.brlTexto(c.valor, 0)}</div>
-          <small>${c.por_cabeca ? "valor fixo por cabeça" : fmt.brlTexto(c.preco_arroba) + "/@"}</small></div>`)}</div>
+          <small>${c.pelo_custo ? "pelo que você pagou" : c.por_cabeca ? "valor fixo por cabeça" : fmt.brlTexto(c.preco_arroba) + "/@"}</small></div>`)}</div>
       </section>` : ""}
 
       ${ag.serie.length > 1 ? html`<section class="secao">

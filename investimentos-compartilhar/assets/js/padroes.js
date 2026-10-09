@@ -281,6 +281,8 @@
     // preço por @ específico por categoria (ex.: bezerro costuma ter ágio)
     arroba_por_categoria: {},
     data_cotacao: null,
+    // true: o rebanho vale o que foi pago até ser vendido (sem estimar pela @)
+    avaliar_pelo_custo: false,
   };
 
   // mescla profunda: o que foi salvo sobrepõe o padrão, chave a chave

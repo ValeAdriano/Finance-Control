@@ -244,7 +244,8 @@
   // barra de alocação: o que você tem × o traço da meta
   function barraAlocacao(pct, alvo, escala, cor) {
     const w = Math.min(100, (pct / escala) * 100), m = Math.min(100, (alvo / escala) * 100);
-    return html`<div class="aloc-barra"><i style="width:${w}%;background:${cor}"></i><span class="meta" style="left:calc(${m}% - 1px)" title="meta ${FC.fmt.num(alvo, 0)}%"></span></div>`;
+    // sem meta (alvo null), só a barra
+    return html`<div class="aloc-barra"><i style="width:${w}%;background:${cor}"></i>${alvo == null ? "" : html`<span class="meta" style="left:calc(${m}% - 1px)" title="meta ${FC.fmt.num(alvo, 0)}%"></span>`}</div>`;
   }
 
   // ---------------------------------------------------------------- ativação

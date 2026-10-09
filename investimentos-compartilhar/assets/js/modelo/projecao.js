@@ -65,7 +65,8 @@
       const s = ks.reduce((t, k) => t + (pesosPlano[k] || 0), 0) || 1;
       return Object.fromEntries(ks.map((k) => [k, (pesosPlano[k] || 0) / s]));
     }
-    const total = ks.reduce((s, k) => s + saldos[k], 0);
+    // pilar com meta 0% não entra na base do equilíbrio
+    const total = ks.reduce((s, k) => s + (Number(alvos[k]) > 0 ? saldos[k] : 0), 0);
     const somaAlvos = ks.reduce((s, k) => s + (Number(alvos[k]) || 0), 0);
     const proporcional = () => Object.fromEntries(ks.map((k) => [k, (Number(alvos[k]) || 0) / somaAlvos]));
     if (!somaAlvos) return Object.fromEntries(ks.map((k) => [k, 1 / ks.length]));

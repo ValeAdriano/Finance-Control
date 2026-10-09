@@ -463,7 +463,7 @@
       },
       despesas: null,
       dividendos: div,
-      alocacao: (d.alocacao || []).map((l) => ({ chave: l.chave, nome: NOME_PILAR[l.chave] || l.nome, cor: COR_PILAR[l.chave] || "#8e8e93", pct: l.pct, meta_pct: l.alvo_pct })),
+      alocacao: (d.alocacao || []).map((l) => ({ chave: l.chave, nome: NOME_PILAR[l.chave] || l.nome, cor: COR_PILAR[l.chave] || "#8e8e93", pct: l.pct, meta_pct: l.alvo_no_patrimonio ?? l.alvo_pct })),
       destaques: { alta: vars[0] && vars[0].pct > 0 ? vars[0] : null, queda: vars.length && vars.at(-1).pct < 0 ? vars.at(-1) : null },
       metas: [], agro, ir: null, meses,
       tem_dados: pontos.length > 0,

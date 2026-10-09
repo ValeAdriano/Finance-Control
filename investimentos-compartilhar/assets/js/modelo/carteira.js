@@ -93,16 +93,25 @@
     }
     const total = Object.values(valor).reduce((a, b) => a + b, 0);
     if (!total) return { linhas: [], total: 0 };
+    // pilar com meta 0% fica fora do equilíbrio: as metas dos outros valem
+    // sobre o patrimônio sem ele (sem nenhuma meta, vale o patrimônio todo)
+    const temMeta = (k) => Number(alvos[k]) > 0;
+    const algumaMeta = FC.PILARES.some((p) => temMeta(p.chave));
+    const baseMeta = algumaMeta ? FC.PILARES.reduce((s, p) => s + (temMeta(p.chave) ? valor[p.chave] : 0), 0) : total;
     // pilares sem valor e sem meta não aparecem (ex.: agro zerado)
-    const linhas = FC.PILARES.filter((p) => valor[p.chave] > 0 || Number(alvos[p.chave]) > 0).map((p) => {
+    const linhas = FC.PILARES.filter((p) => valor[p.chave] > 0 || temMeta(p.chave)).map((p) => {
       const alvo = Number(alvos[p.chave]) || 0;
+      const fora = algumaMeta && !temMeta(p.chave);
       const pct = (valor[p.chave] / total) * 100;
+      const pctMeta = fora ? null : baseMeta ? (valor[p.chave] / baseMeta) * 100 : 0;
       const comp = dentro[p.chave].sort((a, b) => b.valor - a.valor);
       comp.forEach((x) => { x.peso = valor[p.chave] ? (x.valor / valor[p.chave]) * 100 : 0; });
-      return { chave: p.chave, nome: p.nome, cor: p.cor, valor: valor[p.chave], pct, alvo_pct: alvo,
-        desvio_pct: pct - alvo, desvio_reais: (total * alvo) / 100 - valor[p.chave], composicao: comp };
-    });
-    return { linhas, total };
+      return { chave: p.chave, nome: p.nome, cor: p.cor, valor: valor[p.chave], pct, pct_meta: pctMeta, alvo_pct: alvo, fora_meta: fora,
+        // a meta medida em % do patrimônio todo (para desenhar ao lado de pct)
+        alvo_no_patrimonio: fora ? 0 : (alvo * baseMeta) / total,
+        desvio_pct: fora ? 0 : pctMeta - alvo, desvio_reais: fora ? 0 : (baseMeta * alvo) / 100 - valor[p.chave], composicao: comp };
+    }).sort((a, b) => a.fora_meta - b.fora_meta);
+    return { linhas, total, base_meta: baseMeta };
   }
 
   // ---------------------------------------------------------------- proventos

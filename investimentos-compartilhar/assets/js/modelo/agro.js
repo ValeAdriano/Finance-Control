@@ -34,6 +34,26 @@
   // "outra entrada" sem valor entra pelo valor estimado (preenchido em analisa):
   // é capital posto na atividade, não lucro
   const valorEntrada = (m) => (m.valor_total > 0 ? m.valor_total : m.valor_estimado || 0);
+  // o que custaram as cabeças que ainda estão no pasto: cada saída consome
+  // as entradas mais antigas (nascimento entra a custo zero)
+  function custoEmAberto(movs) {
+    const ordem = { compra: 0, nascimento: 0, entrada: 0, venda: 1, morte: 1, saida: 1 };
+    const abertos = [];
+    for (const m of movs.filter((x) => x.tipo in ordem && x.cabecas > 0)) {
+      if (ordem[m.tipo] === 0) {
+        const total = m.tipo === "compra" ? m.valor_total + m.despesas : m.tipo === "entrada" ? valorEntrada(m) : 0;
+        abertos.push({ n: m.cabecas, porCab: total / m.cabecas });
+        continue;
+      }
+      let falta = m.cabecas;
+      while (falta > 0 && abertos.length) {
+        const l = abertos[0], q = Math.min(falta, l.n);
+        l.n -= q; falta -= q;
+        if (l.n <= 0) abertos.shift();
+      }
+    }
+    return abertos.reduce((s, l) => s + l.n * l.porCab, 0);
+  }
 
   function analisa(agro, cfg) {
     const movs = [...(agro.movs || [])].sort((a, b) => a.data.localeCompare(b.data) || a.criado_em.localeCompare(b.criado_em));
@@ -157,6 +177,15 @@
         data_peso: peso[cat].data, arrobas_cabeca: arr, preco_arroba: precoArroba, valor,
         por_cabeca: ok(Number(porCabeca)) && Number(porCabeca) > 0 });
     }
+    // avaliado pelo que foi pago: o rebanho vale o custo até ser vendido, e o
+    // ganho só aparece na venda (a divisão por categoria é por cabeça)
+    const peloCusto = !!cfg.avaliar_pelo_custo;
+    if (peloCusto) {
+      const custo = custoEmAberto(movs);
+      const cab = porCategoria.reduce((s, c) => s + c.cabecas, 0);
+      for (const c of porCategoria) { c.valor = cab ? (custo * c.cabecas) / cab : 0; c.pelo_custo = true; }
+      valorRebanho = custo;
+    }
     porCategoria.sort((a, b) => b.valor - a.valor);
 
     // ---------------------------------------------------------- financeiro
@@ -256,7 +285,7 @@
         ganho, gmd: ganho / dias, arrobas_mes: (arrobas(ganho, rend) / dias) * 30, pesagens: ps.length });
     }
 
-    return { ajustes, rebanho, total, porFazenda, porLote, porCategoria, valorRebanho, peso, financeiro, serie, gmd,
+    return { ajustes, rebanho, total, porFazenda, porLote, porCategoria, valorRebanho, pelo_custo: peloCusto, peso, financeiro, serie, gmd,
       inconsistentes, rendimento: rend, tem_dados: movs.length + custos.length + pesagens.length > 0 };
   }
 

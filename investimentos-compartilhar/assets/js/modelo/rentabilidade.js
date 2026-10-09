@@ -184,7 +184,13 @@
       lotes.push({ id: a.id, origem: a.valor < 0 ? "resgate" : "aporte", data: a.data, valor: Number(a.valor),
         indexador: a.indexador || ind, taxa: a.taxa != null ? Number(a.taxa) : taxa, proprio: !!(a.indexador || a.taxa != null) });
     }
-    return lotes.sort((a, b) => a.data.localeCompare(b.data));
+    lotes.sort((a, b) => a.data.localeCompare(b.data));
+    // valor atual informado à mão: vale na data dele; o que entrou depois
+    // rende pela taxa a partir dali
+    if (titulo.valor_atual != null && titulo.valor_atual !== "" && Number.isFinite(Number(titulo.valor_atual))) {
+      lotes.manual = { valor: Number(titulo.valor_atual), data: titulo.valor_atual_em || D().hoje() };
+    }
+    return lotes;
   }
 
   function rotuloTaxa(indexador, taxa) {
@@ -194,10 +200,27 @@
   }
 
   // valor de um título num dia (para o gráfico) e a análise completa (para hoje)
-  function valorTituloEm(lotes, ix, dia) {
+  function valorCalculadoEm(lotes, ix, dia) {
     let v = 0;
     for (const l of lotes) if (l.data <= dia) v += l.valor * (ix ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
     return v;
+  }
+  // Com valor informado, a diferença para o calculado é rendimento: antes
+  // da data ela entra aos poucos (do primeiro lote até lá), sem virar
+  // aporte; depois, o valor informado segue e os lotes novos rendem.
+  function valorTituloEm(lotes, ix, dia) {
+    const m = lotes.manual;
+    if (!m) return valorCalculadoEm(lotes, ix, dia);
+    if (dia >= m.data) {
+      let v = m.valor;
+      for (const l of lotes) if (l.data > m.data && l.data <= dia) v += l.valor * (ix ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
+      return v;
+    }
+    const ini = lotes.length ? lotes[0].data : m.data;
+    if (dia < ini) return 0;
+    const ajuste = m.valor - valorCalculadoEm(lotes, ix, m.data);
+    const f = Math.min(1, D().dias(ini, dia) / Math.max(1, D().dias(ini, m.data)));
+    return valorCalculadoEm(lotes, ix, dia) + ajuste * f;
   }
 
   function avaliaTitulo(titulo, aportes, ix, hoje = D().hoje()) {
@@ -208,9 +231,12 @@
       return { ...l, rotulo_taxa: rotuloTaxa(l.indexador, l.taxa), valor_atual: atual, rendimento: atual - l.valor,
         pct: l.valor > 0 ? pct : null, pct_aa: l.valor > 0 ? anualiza(pct, dias) : null, dias, estimado };
     });
-    const valor = lotes.reduce((s, l) => s + l.valor_atual, 0);
+    const calculado = lotes.reduce((s, l) => s + l.valor_atual, 0);
+    const brutos = lotesDoTitulo(titulo, aportes);
+    const valor = brutos.manual ? valorTituloEm(brutos, ix, hoje) : calculado;
+    const manual = brutos.manual ? { ...brutos.manual, ajuste: valor - calculado } : null;
     const fluxos = lotes.map((l) => ({ data: l.data, valor: -l.valor }));
-    return { lotes, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !ix || ix.vazio, so_reserva: !!(ix && ix.so_reserva) }) };
+    return { lotes, manual, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !ix || ix.vazio, so_reserva: !!(ix && ix.so_reserva) }) };
   }
 
   // ---------------------------------------------------------------- ações, FIIs, cripto
@@ -320,7 +346,9 @@
   // Cada pedaço de lote vira um segmento {de, ate, n, v0, v1}: valor por
   // cabeça na entrada e na saída, com uma reta entre os dois.
   // "ag" é o resultado de FC.agro.analisa (valor de hoje por categoria).
+  // Avaliado pelo custo (ag.pelo_custo), a cabeça vale o que custou até sair.
   function curvaDoRebanho(movs, ag, hoje) {
+    const peloCusto = !!(ag && ag.pelo_custo);
     const ordem = { compra: 0, nascimento: 0, entrada: 0, reclassificacao: 1, venda: 2, morte: 2, saida: 2 };
     const ms = (movs || []).filter((m) => m.tipo in ordem && m.cabecas > 0)
       .sort((a, b) => a.data.localeCompare(b.data) || ordem[a.tipo] - ordem[b.tipo] || String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
@@ -356,7 +384,8 @@
       // morte e saída sem valor: a cabeça some pelo valor que tinha (perda no dia)
       const v1 = m.tipo === "venda" ? Math.max(0, m.valor_total - m.despesas) / m.cabecas
         : m.tipo === "saida" && m.valor_total ? m.valor_total / m.cabecas : null;
-      const fecha = (l, q) => segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1 });
+      // pelo custo, a cabeça vale o que custou até o dia da venda
+      const fecha = (l, q) => segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1: peloCusto && l.v0 != null ? l.v0 : v1 });
       const antes = (ORIGEM[m.categoria] || []).slice().reverse();
       const cats = [m.categoria, ...antes, ...Object.keys(abertos).filter((c) => c !== m.categoria && !antes.includes(c))];
       let falta = m.cabecas;
@@ -373,7 +402,7 @@
     const cab = Object.keys(abertos).reduce((s, c) => s + tem(c), 0);
     const porCabHoje = cab ? valorHoje / cab : 0;
     for (const [c, ls] of Object.entries(abertos)) {
-      for (const l of ls) if (l.n > 0) segs.push({ de: l.de, ate: hoje, n: l.n, v0: l.v0, v1: porCatHoje[c] ?? porCabHoje, aberto: true });
+      for (const l of ls) if (l.n > 0) segs.push({ de: l.de, ate: hoje, n: l.n, v0: l.v0, v1: peloCusto && l.v0 != null ? l.v0 : porCatHoje[c] ?? porCabHoje, aberto: true });
     }
     for (const g of segs) {
       if (g.v0 == null && g.v1 == null) g.v0 = g.v1 = porCabHoje;

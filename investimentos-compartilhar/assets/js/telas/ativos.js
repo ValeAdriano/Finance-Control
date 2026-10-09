@@ -76,7 +76,7 @@
         <div class="item clicavel" data-rf="${r.id}" role="button" tabindex="0">
           <span style="color:var(--verde)">${icone("moeda", 26)}</span>
           <div class="principal"><div class="titulo">${r.nome}</div>
-            <div class="detalhe">${r.base}${r.vencimento ? " · vence " + FC.datas.br(r.vencimento) : ""}${ok(r.real) ? " · real " + fmt.num(r.real) + "% a.a." : ""}</div></div>
+            <div class="detalhe">${r.base}${r.rent && r.rent.manual ? " · valor informado em " + FC.datas.br(r.rent.manual.data) : ""}${r.vencimento ? " · vence " + FC.datas.br(r.vencimento) : ""}${ok(r.real) ? " · real " + fmt.num(r.real) + "% a.a." : ""}</div></div>
           <div class="esconde-mob" title="comparação bruta, antes de IR${impostos[r.id] && impostos[r.id].isento ? " — título isento: a comparação justa é com o CDI líquido de IR" : ""}">${FC.pilula(r.cor, ok(r.premio_cdi) ? r.leitura + (impostos[r.id] && impostos[r.id].isento ? " (bruto; isento)" : " (bruto)") : r.leitura)}</div>
           <div class="valores"><b>${fmt.brl(r.valor_aplicado)}</b>${impostos[r.id] ? html`<small>${impostos[r.id].isento ? "isento de IR" : ok(impostos[r.id].liquido) ? html`líquido ~${fmt.brl(impostos[r.id].liquido)}` : ""}</small>` : ""}${r.rent && r.rent.aplicado > 0
             ? html`<small>aplicou ${fmt.brl(r.rent.aplicado)} · <span class="${r.rent.ganho >= 0 ? "pos" : "neg"}">${r.rent.ganho >= 0 ? "+" : "−"}${fmt.brl(Math.abs(r.rent.ganho))}</span></small>`

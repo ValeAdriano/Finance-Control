@@ -216,7 +216,9 @@
           <td class="n">${fmt.brl(l.valor)}</td>
           <td class="n">${fmt.brl(l.valor_atual)}</td>
           <td class="n ${corPct(l.rendimento)}">${l.valor > 0 ? html`${l.rendimento >= 0 ? "+" : "−"}${fmt.brl(Math.abs(l.rendimento))}<span class="leg">${pctTxt(l.pct)}</span>` : "—"}</td>
-          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}</tbody>
+          <td class="n">${FC.ok(l.pct_aa) ? pctTxt(l.pct_aa) : html`<span class="leg">${l.dias < 30 ? "menos de 30 dias" : "—"}</span>`}</td></tr>`)}
+          ${rent.manual ? html`<tr><td>${FC.datas.br(rent.manual.data)}<span class="leg">valor informado</span></td><td>ajuste</td><td class="n">—</td>
+            <td class="n">${fmt.brl(rent.valor_atual)}</td><td class="n ${corPct(rent.manual.ajuste)}">${rent.manual.ajuste >= 0 ? "+" : "−"}${fmt.brl(Math.abs(rent.manual.ajuste))}<span class="leg">conta como rendimento</span></td><td class="n">—</td></tr>` : ""}</tbody>
       </table></div>
       ${rent.sem_indices ? html`<div class="mensagem alerta mt2">${icone("info", 16)}<span>Índices do Banco Central ainda carregando: por enquanto os valores estão sem rendimento.</span></div>`
         : rent.so_reserva ? html`<div class="mensagem alerta mt2">${icone("info", 16)}<span>A série diária do CDI/IPCA não carregou: o rendimento está estimado pela taxa anual de hoje do Banco Central e se ajusta quando a série voltar.</span></div>`
@@ -503,6 +505,12 @@
           <div class="campo"><label for="r-ini">Saldo inicial desde</label><input id="r-ini" name="data_inicio" type="date" value="${item.data_inicio || (item.criado_em ? String(item.criado_em).slice(0, 10) : "")}">
             <span class="dica">a partir de quando o saldo inicial rende</span></div>
         </div>
+        ${novo ? "" : html`<div class="linha2">
+          <div class="campo"><label for="r-atual">Valor atual (R$)</label><input id="r-atual" name="valor_atual" inputmode="decimal" value="${item.valor_atual != null ? String(item.valor_atual).replace(".", ",") : ""}" placeholder="calculado pela taxa">
+            <span class="dica">o saldo que o banco mostra. A diferença para o que você aplicou conta como rendimento. Vazio = calcula pela taxa.</span></div>
+          <div class="campo"><label for="r-atual-em">Valor de</label><input id="r-atual-em" name="valor_atual_em" type="date" value="${item.valor_atual_em || FC.datas.hoje()}">
+            <span class="dica">aportes depois desta data somam ao valor</span></div>
+        </div>`}
         <div class="campo"><label for="r-venc">Vencimento</label><input id="r-venc" name="vencimento" type="date" value="${item.vencimento || ""}"></div>
         <div class="campo"><label for="r-pilar">Pilar</label><select id="r-pilar" name="pilar">
           ${FC.PILARES.filter((p) => p.chave !== "agro").map((p) => html`<option value="${p.chave}" ${item.pilar === p.chave ? "selected" : ""}>${p.nome}</option>`)}</select></div>
@@ -548,6 +556,11 @@
       const d = FC.dadosDoForm(form);
       const linha = { nome: d.nome, tipo: d.tipo, taxa: FC.lerNum(d.taxa), valor_aplicado: FC.lerNum(d.valor_aplicado) || 0,
         vencimento: d.vencimento || null, pilar: d.pilar, data_inicio: d.data_inicio || null };
+      if (!novo) {
+        const atual = String(d.valor_atual || "").trim() === "" ? null : FC.lerNum(d.valor_atual);
+        linha.valor_atual = FC.ok(atual) && atual >= 0 ? atual : null;
+        linha.valor_atual_em = linha.valor_atual == null ? null : d.valor_atual_em || FC.datas.hoje();
+      }
       const erro = FC.$("#r-erro", form);
       if (!linha.nome) { erro.textContent = "Dê um nome ao título."; erro.hidden = false; return; }
       const extra = { instituicao: (d.instituicao || "").trim(), isento: !!d.isento, reserva: !!d.reserva };

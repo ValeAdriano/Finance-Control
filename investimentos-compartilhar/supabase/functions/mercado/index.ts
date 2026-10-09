@@ -509,9 +509,12 @@ function valorTitulos(rf: any[], aportes: any[], idx: Record<string, any>, hoje:
   for (const r of rf) {
     const ind = r.tipo, tx = r.taxa != null ? Number(r.taxa) : (ind === "cdi" || ind === "selic" ? 100 : 0);
     const ini = r.data_inicio || String(r.criado_em).slice(0, 10);
-    let v = Number(r.valor_aplicado) ? Number(r.valor_aplicado) * fatorRF(ind, tx, ini, hoje, idx) : 0;
+    // valor atual informado à mão: vale na data dele; só os aportes depois somam
+    const manual = r.valor_atual != null && Number.isFinite(Number(r.valor_atual)) ? String(r.valor_atual_em || hoje) : null;
+    let v = manual ? Number(r.valor_atual) : Number(r.valor_aplicado) ? Number(r.valor_aplicado) * fatorRF(ind, tx, ini, hoje, idx) : 0;
     for (const a of aportes) {
       if (a.tipo !== "caixa" || a.historico || a.origem || a.titulo !== r.nome) continue;
+      if (manual && a.data <= manual) continue;
       const ia = a.indexador || ind, ta = a.taxa != null ? Number(a.taxa) : tx;
       v += Number(a.valor) * fatorRF(ia, ta, a.data, hoje, idx);
     }

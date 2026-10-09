@@ -356,6 +356,10 @@ alter table public.aportes add column if not exists indexador text check (indexa
 alter table public.aportes add column if not exists taxa numeric;
 -- data da posição inicial de um ativo (vazio = data do cadastro)
 alter table public.ativos add column if not exists data_base date;
+-- valor atual informado à mão (o extrato do banco) e a data dele; a
+-- diferença para o calculado conta como rendimento. Vazio = calculado
+alter table public.renda_fixa add column if not exists valor_atual numeric check (valor_atual is null or valor_atual >= 0);
+alter table public.renda_fixa add column if not exists valor_atual_em date;
 
 -- ============================================================
 --  PAINEL DO ADMINISTRADOR

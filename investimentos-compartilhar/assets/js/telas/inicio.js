@@ -30,20 +30,24 @@
 
   function alocacao(d) {
     if (!d.alocacao.length) return "";
-    const escala = Math.max(...d.alocacao.map((l) => Math.max(l.pct, l.alvo_pct))) * 1.12 || 100;
+    // pilar com meta 0% fica fora do equilíbrio: aparece com a fatia do patrimônio todo
+    const mostra = (l) => (l.fora_meta ? l.pct : l.pct_meta);
+    const fora = d.alocacao.filter((l) => l.fora_meta);
+    const escala = Math.max(...d.alocacao.map((l) => Math.max(mostra(l), l.alvo_pct))) * 1.12 || 100;
     return html`<section class="secao">
-      <div class="secao-topo"><h2>Alocação por pilar</h2><span class="sub">a barra é o que você tem; o traço, a sua meta</span>
+      <div class="secao-topo"><h2>Alocação por pilar</h2><span class="sub">a barra é o que você tem; o traço, a sua meta${fora.length ? html`. ${fora.map((l) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta` : ""}</span>
         <div class="direita"><a class="botao texto pequeno" href="#/ajustes">Mudar metas</a></div></div>
       <div class="lista">${d.alocacao.map((l) => html`
         <div class="item clicavel" data-pilar="${l.chave}" role="button" tabindex="0" aria-expanded="false">
           <span class="ponto-e" style="background:${l.cor};width:12px;height:12px"></span>
           <div class="principal">
             <div class="titulo">${l.nome}<span class="muito-fraco" style="font-weight:400;font-size:13px">${l.composicao.length} ${l.composicao.length === 1 ? "item" : "itens"}</span></div>
-            <div class="aloc mt1">${FC.graficos.barraAlocacao(l.pct, l.alvo_pct, escala, l.cor)}</div>
+            <div class="aloc mt1">${FC.graficos.barraAlocacao(mostra(l), l.fora_meta ? null : l.alvo_pct, escala, l.cor)}</div>
           </div>
           <div class="valores" style="min-width:120px">
-            <b>${fmt.num(l.pct, 1)}%<span class="muito-fraco" style="font-weight:400"> / ${fmt.num(l.alvo_pct, 0)}%</span></b>
-            <small>${Math.abs(l.desvio_pct) < 1 ? "na meta" : l.desvio_reais > 0 ? html`aportar ${fmt.brl(l.desvio_reais, 0)}` : html`${fmt.brl(-l.desvio_reais, 0)} acima`}</small>
+            ${l.fora_meta ? html`<b>${fmt.num(l.pct, 1)}%<span class="muito-fraco" style="font-weight:400"> do total</span></b>
+            <small>fora da meta</small>` : html`<b>${fmt.num(l.pct_meta, 1)}%<span class="muito-fraco" style="font-weight:400"> / ${fmt.num(l.alvo_pct, 0)}%</span></b>
+            <small>${Math.abs(l.desvio_pct) < 1 ? "na meta" : l.desvio_reais > 0 ? html`aportar ${fmt.brl(l.desvio_reais, 0)}` : html`${fmt.brl(-l.desvio_reais, 0)} acima`}</small>`}
           </div>
         </div>
         <div class="composicao" data-de="${l.chave}" hidden style="background:var(--bg-3);border-top:1px solid var(--linha)">
