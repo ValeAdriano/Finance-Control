@@ -63,6 +63,7 @@
   FC.recalcula = function () {
     if (!estado.base) return;
     estado.dados = FC.carteira.monta(estado.base, estado.mercado, estado.prefs);
+    if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
   };
 
   FC.recarregaBase = async function () {
@@ -209,29 +210,305 @@
     gravaRegistroDoDia(true);
   };
 
+  // ---------------------------------------------------------------- detecção de mobile e PWA
+  const ua = navigator.userAgent || "";
+  const ehIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const ehAndroid = /Android/i.test(ua);
+  const ehMobile = ehIOS || ehAndroid || /Mobi|Tablet|iPad|iPhone|Android/i.test(ua) ||
+    (window.matchMedia && window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches);
+  const ehInstalado = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    document.referrer.includes("android-app://") ||
+    !!window.FCNativo ||
+    document.documentElement.classList.contains("app-nativo");
+
+  let eventoInstall = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    eventoInstall = e;
+  });
+  window.addEventListener("appinstalled", () => {
+    eventoInstall = null;
+    FC.dispositivo.ehInstalado = true;
+    const b = FC.$("#banner-instalar");
+    if (b) b.remove();
+    if (FC.ui && FC.ui.aviso) FC.ui.aviso("Finance Control instalado com sucesso!");
+  });
+
+  FC.dispositivo = {
+    ehMobile,
+    ehIOS,
+    ehAndroid,
+    ehInstalado,
+    obterEventoInstall: () => eventoInstall,
+  };
+
+  FC.abreGuiaInstalacao = function () {
+    const disp = FC.dispositivo;
+    const promptDisponivel = !!disp.obterEventoInstall();
+
+    let corpo;
+    if (disp.ehIOS) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/apple-touch-icon.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Adicionar à Tela de Início no iOS</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Toque no botão de <b>Compartilhar</b> <span class="passo-pill">${icone("compartilhar", 14)} Compartilhar</span> na barra do Safari (na parte inferior do iPhone ou no topo do iPad).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Role a lista de ações para baixo e selecione <span class="passo-pill">${icone("adicionarTela", 14)} Adicionar à Tela de Início</span>.
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">3</span>
+            <div class="passo-texto">
+              No canto superior direito, toque em <b>Adicionar</b>. O ícone oficial aparecerá na sua tela inicial!
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Abertura em tela inteira sem barras de navegação</span></div>
+          <div>${icone("check", 16)} <span>Desempenho mais ágil e sensação nativa</span></div>
+          <div>${icone("check", 16)} <span>Acesso imediato com 1 toque</span></div>
+        </div>`;
+    } else if (promptDisponivel) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Instalar aplicativo oficial</div>
+          </div>
+        </div>
+        <p class="texto-p mt2" style="font-size:14.5px;line-height:1.5">
+          Instale o Finance Control no seu dispositivo para ter tela inteira, resposta instantânea e ícone dedicado.
+        </p>
+        <div class="mt3" style="text-align:center">
+          <button class="botao" id="bt-exec-instalar" type="button" style="width:100%;padding:14px;font-size:16px;font-weight:600">
+            ${icone("celular", 18)} Instalar no aparelho
+          </button>
+        </div>
+        <div class="vantagens-instalar mt3">
+          <div>${icone("check", 16)} <span>Tela cheia sem barras de navegador</span></div>
+          <div>${icone("check", 16)} <span>Ícone próprio na tela de início</span></div>
+          <div>${icone("check", 16)} <span>Carregamento instantâneo</span></div>
+        </div>`;
+    } else if (disp.ehAndroid) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Adicionar à Tela de Início no Android</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Toque no menu do seu navegador (os <b>três pontinhos ⋮</b> no topo ou na barra inferior).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Selecione <span class="passo-pill">${icone("celular", 14)} Instalar aplicativo</span> ou <b>Adicionar à tela inicial</b>.
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">3</span>
+            <div class="passo-texto">
+              Confirme a instalação para criar o aplicativo na sua tela de início.
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Tela cheia nativa sem barra de URL</span></div>
+          <div>${icone("check", 16)} <span>Acesso rápido e visual exclusivo</span></div>
+        </div>`;
+    } else {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Instalar no computador ou tablet</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Na barra de endereços do Chrome, Edge ou Safari, clique no ícone de <b>Instalar aplicativo</b> (ou no menu do navegador).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Confirme <b>Instalar</b> para abrir o Finance Control em sua própria janela dedicada.
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Janela própria independente de abas</span></div>
+          <div>${icone("check", 16)} <span>Atalho direto no Dock ou menu Iniciar</span></div>
+        </div>`;
+    }
+
+    const f = FC.ui.folha({
+      titulo: "Adicionar à Tela de Início",
+      corpo,
+      botoes: [{ rotulo: "Entendi", primario: !promptDisponivel, acao: () => f.fechar() }],
+    });
+
+    const btExec = FC.$("#bt-exec-instalar", f.el);
+    if (btExec && promptDisponivel) {
+      btExec.addEventListener("click", async () => {
+        const ev = disp.obterEventoInstall();
+        if (ev) {
+          f.fechar();
+          try {
+            await ev.prompt();
+            const res = await ev.userChoice;
+            if (res && res.outcome === "accepted") {
+              FC.ui.aviso("Instalando aplicativo…");
+            }
+          } catch (e) { console.error(e); }
+        }
+      });
+    }
+  };
+
+  FC.mostraBannerInstalacaoSePreciso = function () {
+    if (!FC.dispositivo.ehMobile || FC.dispositivo.ehInstalado) return;
+    const dispensado = FC.local.ler("pwa-banner-dispensado", 0);
+    if (Date.now() - dispensado < 7 * 24 * 60 * 60 * 1000) return;
+    if (FC.$("#banner-instalar")) return;
+
+    setTimeout(() => {
+      if (FC.dispositivo.ehInstalado || FC.$("#banner-instalar")) return;
+      const b = document.createElement("div");
+      b.className = "banner-instalar";
+      b.id = "banner-instalar";
+      b.setAttribute("role", "dialog");
+      b.setAttribute("aria-label", "Adicionar à Tela de Início");
+      b.innerHTML = String(html`
+        <img class="banner-instalar-icone" src="${FC.dispositivo.ehIOS ? 'assets/img/apple-touch-icon.png' : 'assets/img/icone-192.png'}" alt="App" width="42" height="42">
+        <div class="banner-instalar-info">
+          <div class="banner-instalar-titulo">Adicionar à Tela de Início</div>
+          <div class="banner-instalar-sub">${FC.dispositivo.ehIOS ? 'Abra em tela cheia como app no seu iPhone' : 'Instale no celular para acesso rápido'}</div>
+        </div>
+        <div class="banner-instalar-acoes">
+          <button class="botao pequeno" id="bt-banner-instalar" type="button">Adicionar</button>
+          <button class="banner-instalar-fechar" id="bt-banner-fechar" type="button" aria-label="Fechar aviso">${icone("fechar", 16)}</button>
+        </div>`);
+      document.body.appendChild(b);
+
+      FC.$("#bt-banner-instalar", b).addEventListener("click", () => {
+        b.remove();
+        FC.abreGuiaInstalacao();
+      });
+
+      FC.$("#bt-banner-fechar", b).addEventListener("click", () => {
+        FC.local.gravar("pwa-banner-dispensado", Date.now());
+        b.style.transition = "opacity .25s ease, transform .25s ease";
+        b.style.opacity = "0";
+        b.style.transform = "translateY(12px)";
+        setTimeout(() => b.remove(), 260);
+      });
+    }, 3000);
+  };
+
   // ---------------------------------------------------------------- casca
   function casca() {
     const r = FC.$("#raiz");
     r.innerHTML = String(html`
       <header class="topo"><div class="topo-in">
-        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span>Finance Control</a>
+        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span><span class="nome-marca">Finance Control</span></a>
         <nav class="abas" aria-label="Seções">${navTopo()}</nav>
         <div class="acoes-topo">
-          <button class="icone-bt" id="bt-ajuda" title="Como usar esta tela" aria-label="Como usar esta tela">${icone("ajuda", 20)}</button>
+          <button class="icone-bt" id="bt-alertas" title="Avisos e atenção" aria-label="Avisos e atenção">
+            ${icone("sino", 19)}
+            <span class="badge-alerta" id="badge-alertas" hidden></span>
+          </button>
           <button class="icone-bt" id="bt-privado" title="Esconder valores (modo privado)" aria-label="Esconder valores"></button>
-          <button class="icone-bt" id="bt-atualizar" title="Atualizar cotações" aria-label="Atualizar cotações">${icone("atualizar", 19)}</button>
-          <a class="icone-bt" href="#/ajustes" title="Ajustes" aria-label="Ajustes" data-rota="ajustes">${icone("ajustes", 19)}</a>
+          <button class="icone-bt" id="bt-menu-topo" title="Mais opções" aria-label="Mais opções">${icone("mais", 20)}</button>
         </div>
       </div></header>
       <main id="conteudo" tabindex="-1"></main>
       <div class="barra-abas"><nav aria-label="Seções">${navCelular()}</nav></div>`);
-    FC.$("#bt-ajuda").addEventListener("click", () => FC.guiaDaTela(rotaAtual().id));
+    FC.$("#bt-alertas").addEventListener("click", () => FC.abreAlertas && FC.abreAlertas());
     FC.$("#bt-privado").addEventListener("click", () => {
       const v = !document.body.classList.contains("privado");
       FC.local.gravar("privado", v);
       aplicaPrivado();
     });
-    FC.$("#bt-atualizar").addEventListener("click", async () => {
+    FC.$("#bt-menu-topo").addEventListener("click", abreMenuTopo);
+    ligaMais();
+    aplicaPrivado();
+    if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
+  }
+
+  function abreMenuTopo() {
+    const estaAtualizando = estado.carregandoMercado;
+    const f = FC.ui.folha({
+      titulo: "Mais opções",
+      corpo: html`<div class="lista">
+        <button class="item clicavel" id="menu-atualizar" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)" class="${estaAtualizando ? "girando" : ""}">${icone("atualizar", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Atualizar cotações</div>
+            <div class="detalhe">${estaAtualizando ? "Atualizando cotações agora…" : (estado.spotEm ? `Última atualização ${FC.datas.ha(estado.spotEm)}` : "Buscar preços mais recentes")}</div>
+          </div>
+        </button>
+        <button class="item clicavel" id="menu-ajuda" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)">${icone("ajuda", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Como usar esta tela</div>
+            <div class="detalhe">Explicação e dicas desta seção</div>
+          </div>
+        </button>
+        ${!FC.dispositivo.ehInstalado ? html`
+        <button class="item clicavel" id="menu-instalar" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)">${icone("celular", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Adicionar à Tela de Início</div>
+            <div class="detalhe">${FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad" : "Instalar no celular como app"}</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </button>` : ""}
+        <a class="item clicavel" href="#/ajustes" id="menu-ajustes" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("ajustes", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Ajustes</div>
+            <div class="detalhe">Metas, regras, segurança e módulos</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>
+        ${estado.admin ? html`<a class="item clicavel" href="#/admin" id="menu-admin" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("escudo", 20)}</span>
+          <div class="principal"><div class="titulo">Administração</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>` : ""}
+        <button class="item clicavel" id="menu-sair" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--vermelho)">${icone("sair", 20)}</span>
+          <div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair da conta</div></div>
+        </button>
+      </div>`,
+    });
+    FC.$("#menu-atualizar", f.el).addEventListener("click", async () => {
+      f.fechar();
       FC.mercado.limpaCacheLocal();
       await FC.carregaMercado(true);
       if (!estado.erroMercado) {
@@ -243,8 +520,22 @@
         FC.db.log("erro", { etapa: "atualizar cotações", erro: estado.erroMercado });
       }
     });
-    ligaMais();
-    aplicaPrivado();
+    FC.$("#menu-ajuda", f.el).addEventListener("click", () => {
+      f.fechar();
+      FC.guiaDaTela(rotaAtual().id);
+    });
+    if (FC.$("#menu-instalar", f.el)) {
+      FC.$("#menu-instalar", f.el).addEventListener("click", () => {
+        f.fechar();
+        FC.abreGuiaInstalacao();
+      });
+    }
+    FC.$("#menu-ajustes", f.el).addEventListener("click", () => f.fechar());
+    if (FC.$("#menu-admin", f.el)) FC.$("#menu-admin", f.el).addEventListener("click", () => f.fechar());
+    FC.$("#menu-sair", f.el).addEventListener("click", async () => {
+      f.fechar();
+      await FC.sair();
+    });
   }
 
   function navTopo() {
@@ -271,13 +562,17 @@
     if (b) {
       b.innerHTML = String(icone(v ? "olhoFechado" : "olho", 19));
       b.setAttribute("aria-pressed", String(v));
-      b.title = v ? "Mostrar valores" : "Esconder valores (modo privado)";
+      const rotulo = v ? "Mostrar valores" : "Esconder valores (modo privado)";
+      b.setAttribute("aria-label", rotulo);
+      b.title = rotulo;
     }
   }
 
   function atualizaBotaoAtualizar() {
     const b = FC.$("#bt-atualizar");
     if (b) b.classList.toggle("girando", estado.carregandoMercado);
+    const m = FC.$("#bt-menu-topo");
+    if (m) m.classList.toggle("girando", estado.carregandoMercado);
   }
 
   function abreMais() {
@@ -414,6 +709,7 @@
     else setTimeout(() => FC.uso.pedeConsentimento(), 2500);
     FC.carregaMercado(false);
     ligaAtualizacaoAutomatica();
+    FC.mostraBannerInstalacaoSePreciso();
   };
 
   async function inicia() {

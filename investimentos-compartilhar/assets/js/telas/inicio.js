@@ -63,6 +63,7 @@
 
   // proventos lançados em Aportes; sem eles, os pagos calculados pela posição
   function proventos(r, div) {
+    if (!FC.modulo("dividendos")) return "";
     if ((!r || r.n_meses < 2) && div) {
       const meses = div.serie.filter((m) => !m.futuro).map((m) => ({ mes: m.mes, total: m.total, itens: m.itens }));
       while (meses.length && !(meses[0].total > 0)) meses.shift();
@@ -447,7 +448,7 @@
 
   // ---- renda passiva: proventos por mês contra a renda que se quer
   function rendaPassiva(div) {
-    if (!div) return "";
+    if (!div || !FC.modulo("dividendos")) return "";
     const res = div.resumo;
     const media = res.recebido_12m > 0 ? res.recebido_12m / 12 : 0;
     const mensal = media > 0 ? media : res.mensal_estimado || 0;
@@ -530,7 +531,6 @@
       ${t ? detalhesTecnicos(d, imp) : html`<div class="mt3">${macro(d.macro)}</div>`}
       ${retrospectivas()}
       ${vazio ? comecar() : ""}
-      ${alertas(avisos)}
       ${proximos30(d, div)}
       ${rendaPassiva(div)}
       ${alocacao(d)}
@@ -540,6 +540,8 @@
       ${melhores(d)}
       ${d.atualizado ? html`<p class="texto-p mt4 centro" style="margin-inline:auto">Preços atualizados ${FC.datas.ha(FC.estado.spotEm) || "—"} (a cada minuto com o app aberto) · cripto pelo CoinGecko, bolsa pelo Yahoo Finance, fundamentos pelo Fundamentus e juros pelo Banco Central.</p>` : ""}
     `);
+
+    if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
 
     FC.$$("[data-pilar]", raiz).forEach((el) => {
       const alterna = () => {

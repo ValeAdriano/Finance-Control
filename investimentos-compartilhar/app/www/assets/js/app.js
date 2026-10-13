@@ -186,14 +186,17 @@
     const r = FC.$("#raiz");
     r.innerHTML = String(html`
       <header class="topo"><div class="topo-in">
-        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span>Finance Control</a>
+        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span><span class="nome-marca">Finance Control</span></a>
         <nav class="abas" aria-label="Seções">
           ${ROTAS.filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}
         </nav>
         <div class="acoes-topo">
+          <button class="icone-bt" id="bt-alertas" title="Avisos e atenção" aria-label="Avisos e atenção">
+            ${icone("sino", 19)}
+            <span class="badge-alerta" id="badge-alertas" hidden></span>
+          </button>
           <button class="icone-bt" id="bt-privado" title="Esconder valores (modo privado)" aria-label="Esconder valores"></button>
-          <button class="icone-bt" id="bt-atualizar" title="Atualizar cotações" aria-label="Atualizar cotações">${icone("atualizar", 19)}</button>
-          <a class="icone-bt" href="#/ajustes" title="Ajustes" aria-label="Ajustes" data-rota="ajustes">${icone("ajustes", 19)}</a>
+          <button class="icone-bt" id="bt-menu-topo" title="Mais opções" aria-label="Mais opções">${icone("mais", 20)}</button>
         </div>
       </div></header>
       <main id="conteudo" tabindex="-1"></main>
@@ -201,12 +204,46 @@
         ${NO_CELULAR.map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
         <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>
       </nav></div>`);
+    FC.$("#bt-alertas").addEventListener("click", () => FC.abreAlertas && FC.abreAlertas());
     FC.$("#bt-privado").addEventListener("click", () => {
       const v = !document.body.classList.contains("privado");
       FC.local.gravar("privado", v);
       aplicaPrivado();
     });
-    FC.$("#bt-atualizar").addEventListener("click", async () => {
+    FC.$("#bt-menu-topo").addEventListener("click", abreMenuTopo);
+    FC.$("#bt-mais").addEventListener("click", abreMais);
+    aplicaPrivado();
+    if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
+  }
+
+  function abreMenuTopo() {
+    const estaAtualizando = estado.carregandoMercado;
+    const f = FC.ui.folha({
+      titulo: "Mais opções",
+      corpo: html`<div class="lista">
+        <button class="item clicavel" id="menu-atualizar" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)" class="${estaAtualizando ? "girando" : ""}">${icone("atualizar", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Atualizar cotações</div>
+            <div class="detalhe">${estaAtualizando ? "Atualizando cotações agora…" : (estado.spotEm ? `Última atualização ${FC.datas.ha(estado.spotEm)}` : "Buscar preços mais recentes")}</div>
+          </div>
+        </button>
+        <a class="item clicavel" href="#/ajustes" id="menu-ajustes" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("ajustes", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Ajustes</div>
+            <div class="detalhe">Metas, regras, segurança e módulos</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>
+        <button class="item clicavel" id="menu-sair" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--vermelho)">${icone("sair", 20)}</span>
+          <div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair da conta</div></div>
+        </button>
+      </div>`,
+    });
+    FC.$("#menu-atualizar", f.el).addEventListener("click", async () => {
+      f.fechar();
       FC.mercado.limpaCacheLocal();
       await FC.carregaMercado(true);
       if (!estado.erroMercado) {
@@ -218,8 +255,11 @@
         FC.db.log("erro", { etapa: "atualizar cotações", erro: estado.erroMercado });
       }
     });
-    FC.$("#bt-mais").addEventListener("click", abreMais);
-    aplicaPrivado();
+    FC.$("#menu-ajustes", f.el).addEventListener("click", () => f.fechar());
+    FC.$("#menu-sair", f.el).addEventListener("click", async () => {
+      f.fechar();
+      await FC.sair();
+    });
   }
 
   FC.aplicaPrivado = aplicaPrivado;
@@ -230,13 +270,17 @@
     if (b) {
       b.innerHTML = String(icone(v ? "olhoFechado" : "olho", 19));
       b.setAttribute("aria-pressed", String(v));
-      b.title = v ? "Mostrar valores" : "Esconder valores (modo privado)";
+      const rotulo = v ? "Mostrar valores" : "Esconder valores (modo privado)";
+      b.setAttribute("aria-label", rotulo);
+      b.title = rotulo;
     }
   }
 
   function atualizaBotaoAtualizar() {
     const b = FC.$("#bt-atualizar");
     if (b) b.classList.toggle("girando", estado.carregandoMercado);
+    const m = FC.$("#bt-menu-topo");
+    if (m) m.classList.toggle("girando", estado.carregandoMercado);
   }
 
   function abreMais() {

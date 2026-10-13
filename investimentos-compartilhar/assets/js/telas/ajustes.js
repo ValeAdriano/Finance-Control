@@ -60,12 +60,16 @@
         <div class="flex entre mt2 quebra"><span id="ob-reserva" class="fraco"></span><button class="botao" type="submit">Salvar objetivos</button></div>
       </form>`)}
 
-      ${grupo("Módulos", "ligue só o que você usa; o resto sai dos menus", html`<div class="lista" id="aj-modulos">
-        ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
-          <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
-          <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
-      </div>
-      <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
+      ${grupo("Categorias e Módulos", "ligue só o que você usa; o resto sai dos menus e telas", html`
+        <div class="mb3 fraco" style="font-size:13px;padding:10px 14px;background:var(--campo);border-radius:12px;line-height:1.4">
+          <b style="color:var(--ink)">Principais (sempre ativas):</b> Início, Investimentos e Aportes.
+        </div>
+        <div class="lista" id="aj-modulos">
+          ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
+            <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
+            <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
+        </div>
+        <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
 
       ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
         <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
@@ -125,6 +129,28 @@
             ${[["auto", "Automático"], ["claro", "Claro"], ["escuro", "Escuro"]].map(([k, v]) => html`<button type="button" data-tema="${k}" aria-pressed="${tema === k}">${v}</button>`)}</div></div>
         <div class="item"><div class="principal"><div class="titulo">Modo privado</div><div class="detalhe">borra os valores em reais; passe o mouse para ver</div></div>
           <label class="interruptor"><input type="checkbox" id="aj-privado" ${FC.local.ler("privado", false) ? "checked" : ""}><span></span></label></div>
+      </div>`)}
+
+      ${grupo("Dispositivo e Aplicativo", "", html`<div class="lista">
+        ${FC.dispositivo.ehInstalado ? html`
+          <div class="item">
+            <span style="color:var(--verde)">${icone("check", 20)}</span>
+            <div class="principal">
+              <div class="titulo">Aplicativo na Tela de Início</div>
+              <div class="detalhe">Executando em tela cheia como aplicativo</div>
+            </div>
+            <span class="badge" style="background:var(--verde-suave);color:var(--verde);font-weight:600;padding:4px 8px;border-radius:6px;font-size:12px">Ativo</span>
+          </div>
+        ` : html`
+          <button class="item clicavel" id="aj-instalar-app" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+            <span style="color:var(--acento)">${icone("celular", 20)}</span>
+            <div class="principal">
+              <div class="titulo">Adicionar à Tela de Início</div>
+              <div class="detalhe">${FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad para abrir em tela cheia" : "Instalar no celular ou tablet para acesso rápido"}</div>
+            </div>
+            <span class="chevron">${icone("chevron", 18)}</span>
+          </button>
+        `}
       </div>`)}
 
       ${grupo("Metas de alocação", "em % do patrimônio; a soma precisa dar 100", html`<form class="cartao" id="f-metas">
@@ -242,6 +268,8 @@
     // ---- aparência
     FC.$$("#aj-tema button", raiz).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));
     FC.$("#aj-privado", raiz).addEventListener("change", (e) => { FC.local.gravar("privado", e.target.checked); FC.aplicaPrivado(); });
+    const btInstalar = FC.$("#aj-instalar-app", raiz);
+    if (btInstalar) btInstalar.addEventListener("click", () => FC.abreGuiaInstalacao());
 
     // ---- metas
     const fm = FC.$("#f-metas", raiz);

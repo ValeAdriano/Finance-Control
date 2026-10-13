@@ -13,6 +13,61 @@
   ];
   FC.PILAR_NOME = Object.fromEntries(FC.PILARES.map((p) => [p.chave, p.nome]));
 
+  // ------------------------------------------------------------------ módulos
+  // O que nem todo mundo usa fica desligado até a pessoa ligar em Ajustes.
+  // Desligar só esconde: os dados continuam guardados e somando no patrimônio.
+  FC.MODULOS = [
+    { chave: "dividendos", nome: "Dividendos e proventos", icone: "moeda", desc: "aba Dividendos: histórico, próximos pagamentos e análise de proventos", rotas: ["dividendos"] },
+    { chave: "irpf", nome: "Imposto de Renda", icone: "recibo", desc: "aba Imposto de Renda: Bens e Direitos, rendimentos e cálculo de DARF", rotas: ["irpf"] },
+    { chave: "salario", nome: "Salário e planejamento", icone: "carteira", desc: "aba Salário: controle de renda mensal, aportes e reserva de emergência", rotas: ["salario"] },
+    { chave: "projecoes", nome: "Projeções", icone: "projecoes", desc: "aba Projeções: patrimônio e renda futuros em moeda de hoje", rotas: ["projecoes"] },
+    { chave: "agro", nome: "Agronegócio", icone: "agro", desc: "aba Agro: rebanho, compras, vendas, custos e pesagens do gado", rotas: ["agro"] },
+    { chave: "fii", nome: "Fundos Imobiliários (FIIs)", icone: "ativos", desc: "FIIs na carteira e nas opções de classes de ativos", classes: ["fii"] },
+    { chave: "cripto", nome: "Criptomoedas", icone: "moeda", desc: "BTC, ETH e outras criptos com cotação em reais", classes: ["cripto"] },
+    { chave: "exterior", nome: "Bolsa dos EUA", icone: "ativos", desc: "ações e ETFs negociados nos Estados Unidos", classes: ["acao_us", "etf_us"] },
+    { chave: "renda", nome: "Análise de setores", icone: "renda", desc: "aba Renda: empresas de setores perenes pelos seus critérios de dividendo", rotas: ["renda"] },
+    { chave: "simular", nome: "Simulador de compras", icone: "simular", desc: "aba Simular: o efeito de uma cesta na alocação antes de comprar", rotas: ["simular"] },
+    { chave: "engajamento", nome: "Sequência e vídeo", icone: "play", desc: "o foguinho da sequência de aportes e o vídeo de divulgação" },
+  ];
+  // sem escolha salva, liga o que a conta já usa
+  FC.resolveModulos = function (salvos, base) {
+    const ativos = (base && base.ativos) || [];
+    const ag = (base && base.agro) || {};
+    const padroes = {
+      dividendos: true,
+      irpf: true,
+      salario: true,
+      projecoes: true,
+      fii: ativos.some((a) => a.classe === "fii"),
+      agro: !!((ag.movs || []).length || (ag.custos || []).length),
+      cripto: ativos.some((a) => a.classe === "cripto"),
+      exterior: ativos.some((a) => a.classe === "acao_us" || a.classe === "etf_us"),
+      renda: false,
+      simular: false,
+      engajamento: false,
+    };
+    if (salvos) {
+      return Object.fromEntries(FC.MODULOS.map((m) => [
+        m.chave,
+        salvos[m.chave] !== undefined ? !!salvos[m.chave] : (padroes[m.chave] ?? false)
+      ]));
+    }
+    return padroes;
+  };
+  const mods = () => (FC.estado && FC.estado.prefs && FC.estado.prefs.modulos) || {};
+  FC.modulo = (chave) => !!mods()[chave];
+  // rota pertence a um módulo desligado?
+  FC.rotaLigada = (id) => !FC.MODULOS.some((m) => (m.rotas || []).includes(id) && !FC.modulo(m.chave));
+  // classes de ativo à mostrar nos formulários (mantém a atual, mesmo desligada)
+  FC.classesLigadas = (atual) => Object.entries(FC.CLASSES).filter(([k]) =>
+    k === atual || !FC.MODULOS.some((m) => (m.classes || []).includes(k) && !FC.modulo(m.chave)));
+  FC.pilaresLigados = () => FC.PILARES.filter((p) => {
+    if (p.chave === "agro") return FC.modulo("agro");
+    if (p.chave === "alternativos") return FC.modulo("cripto");
+    if (p.chave === "real_estate") return FC.modulo("fii");
+    return true;
+  });
+
   FC.CLASSES = {
     acao_br: "Ação brasileira",
     etf_br: "ETF na B3",
@@ -25,19 +80,27 @@
     ...FC.CLASSES,
     fii_papel: "FII de papel",
     fii_tijolo: "FII de tijolo",
+    fii_fof: "FII de fundos (FOF)",
+    fii_hibrido: "FII híbrido",
   };
 
   FC.ROTULO_CURTO = {
     pvp: "P/VP", pl: "P/L", dy: "DY", vacancia: "Vacância", cap_rate: "Cap rate",
     liquidez: "Liquidez", roe: "ROE", div_liq_pl: "Dív/PL", cresc_rec_5a: "Cresc 5a",
     dist_maxima_52s: "Desc. máx", premio_media_200d: "vs média 200d",
+    vacancia_financeira: "Vac. financ.", concentracao: "Concentração",
   };
 
+  // descreve a distância dos SEUS critérios — não é recomendação
   FC.VEREDITO_CURTO = {
-    "atende seus critérios": "Atende",
-    "zona cinzenta": "Zona cinzenta",
-    "fora dos seus critérios": "Fora",
+    "Dentro dos seus critérios": "Nos critérios",
+    "Perto dos seus critérios": "Perto",
+    "Fora dos seus critérios": "Fora",
     "sem dados": "Sem dados",
+    // textos antigos, caso algum venha de dado salvo
+    "atende seus critérios": "Nos critérios",
+    "zona cinzenta": "Perto",
+    "fora dos seus critérios": "Fora",
   };
 
   FC.PADRAO_ALOCACAO = { acoes: 25, real_estate: 25, alternativos: 25, caixa: 25, agro: 0 };
@@ -57,7 +120,10 @@
         metricas: {
           pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.9, aceitavel: 1.02, ruim: 1.25 },
           dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11, aceitavel: 8.5, ruim: 6, ancora_macro: "cdi" },
-          vacancia: { rotulo: "Vacância média", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 10, ruim: 25 },
+          vacancia: { rotulo: "Vacância física", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 10, ruim: 25 },
+          // a receita que deixa de entrar — pesa mais que a área vaga
+          vacancia_financeira: { rotulo: "Vacância financeira (estimada)", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 8, ruim: 20 },
+          concentracao: { rotulo: "Concentração — maior imóvel na receita", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 15, aceitavel: 30, ruim: 60 },
           cap_rate: { rotulo: "Cap Rate", unidade: "%", direcao: "maior_melhor", peso: 1, otimo: 10, aceitavel: 7.5, ruim: 5 },
           liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
         },
@@ -68,6 +134,31 @@
         metricas: {
           pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 4, otimo: 0.95, aceitavel: 1.03, ruim: 1.12 },
           dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 4, otimo: 13, aceitavel: 10, ruim: 8, ancora_macro: "cdi" },
+          // sem imóvel não há vacância: o risco é de crédito, e diluído é melhor
+          concentracao: { rotulo: "Concentração — maior CRI da carteira", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 5, aceitavel: 10, ruim: 25 },
+          liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
+        },
+      },
+      fii_fof: {
+        descricao: "Fundo de fundos — carteira de cotas de outros FIIs",
+        isento_ir: true,
+        metricas: {
+          // FOF costuma negociar com desconto: o próprio desconto é parte da tese
+          pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.88, aceitavel: 0.98, ruim: 1.08 },
+          dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11, aceitavel: 9, ruim: 7, ancora_macro: "cdi" },
+          concentracao: { rotulo: "Concentração — maior FII da carteira", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 10, aceitavel: 20, ruim: 40 },
+          liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
+        },
+      },
+      fii_hibrido: {
+        descricao: "FII híbrido — imóveis e papéis na mesma carteira",
+        isento_ir: true,
+        metricas: {
+          pvp: { rotulo: "P/VP", direcao: "menor_melhor", peso: 3, otimo: 0.92, aceitavel: 1.02, ruim: 1.2 },
+          dy: { rotulo: "Dividend Yield 12m", unidade: "%", direcao: "maior_melhor", peso: 3, otimo: 11.5, aceitavel: 9, ruim: 7, ancora_macro: "cdi" },
+          vacancia: { rotulo: "Vacância física", unidade: "%", direcao: "menor_melhor", peso: 1, otimo: 3, aceitavel: 10, ruim: 25 },
+          vacancia_financeira: { rotulo: "Vacância financeira (estimada)", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 3, aceitavel: 8, ruim: 20 },
+          concentracao: { rotulo: "Concentração — maior posição", unidade: "%", direcao: "menor_melhor", peso: 2, otimo: 15, aceitavel: 30, ruim: 60 },
           liquidez: { rotulo: "Liquidez diária", unidade: "R$", direcao: "maior_melhor", peso: 2, otimo: 3000000, aceitavel: 500000, ruim: 100000 },
         },
       },
@@ -165,9 +256,22 @@
     reinvestir_proventos: true,
     distribuicao_aporte: "rebalancear",
     valorizacao_real_anual: { acoes: 4, real_estate: 0.5, alternativos: 3.5, caixa: 0, agro: 3 },
-    cenarios: { pessimista: -4, otimista: 3 },
+    cenarios: { pessimista: null, otimista: null },   // vazio: os deltas de FC.projecao.CENARIOS
     macro_longo_prazo: { cdi: null, ipca: null },
   };
+
+  // ------------------------------------------------------------------ objetivos
+  // Guardados em preferencias.premissas.objetivos (sem coluna própria), junto
+  // com premissas.titulos = { [id]: { instituicao, isento, reserva } }.
+  FC.PADRAO_OBJETIVOS = { custo_vida_mensal: null, meses_reserva: 6, renda_desejada_mensal: null };
+  FC.objetivos = function (prefs) {
+    const o = { ...FC.PADRAO_OBJETIVOS, ...((((prefs || {}).premissas) || {}).objetivos || {}) };
+    if (!(o.meses_reserva > 0)) o.meses_reserva = 6;
+    // sem renda desejada, a meta é cobrir o custo de vida
+    if (!(o.renda_desejada_mensal > 0)) o.renda_desejada_mensal = o.custo_vida_mensal > 0 ? o.custo_vida_mensal : null;
+    return o;
+  };
+  FC.infoTitulo = (prefs, id) => ((((prefs || {}).premissas) || {}).titulos || {})[id] || {};
 
   // ------------------------------------------------------------------ agro
   FC.CATEGORIAS_GADO = {
@@ -198,6 +302,8 @@
     // preço por @ específico por categoria (ex.: bezerro costuma ter ágio)
     arroba_por_categoria: {},
     data_cotacao: null,
+    // true: o rebanho vale o que foi pago até ser vendido (sem estimar pela @)
+    avaliar_pelo_custo: false,
   };
 
   // mescla profunda: o que foi salvo sobrepõe o padrão, chave a chave

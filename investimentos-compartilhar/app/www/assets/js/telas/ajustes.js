@@ -28,8 +28,9 @@
     const tema = FC.local.ler("tema", "auto");
     const alvos = prefs.alocacao_alvo;
     const r = prefs.regras;
-
-    const aparelho = FC.app ? await FC.app.secaoAjustes() : null;
+    // objetivos: o salvo (para os campos) e o resolvido com os padrões
+    const objSalvo = ((b.prefsBrutas || {}).premissas || {}).objetivos || {};
+    const obj = FC.objetivos(prefs);
 
     raiz.innerHTML = String(html`<div class="estreita">
       ${C.cabecalho("Ajustes", "Conta, segurança e os critérios que o painel aplica.")}
@@ -37,10 +38,62 @@
       ${grupo("Conta", "", html`<div class="lista">
         <div class="item"><span style="color:var(--acento)">${icone("cadeado", 22)}</span>
           <div class="principal"><div class="titulo">${u.email}</div>
-            <div class="detalhe">Dono do painel desde ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
+            <div class="detalhe">Conta criada em ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
         <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
           <input class="entrada" id="aj-nome" style="max-width:200px;min-height:38px" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
+        <div class="item clicavel" id="aj-apresentacao"><span style="color:var(--acento)">${icone("info", 20)}</span>
+          <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
       </div>`)}
+
+      ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
+        <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+          <div class="campo"><label for="ob-custo">Custo de vida por mês (R$)</label>
+            <input id="ob-custo" name="custo_vida_mensal" inputmode="decimal" value="${objSalvo.custo_vida_mensal ? fmt.num(objSalvo.custo_vida_mensal, 2) : ""}" placeholder="0,00">
+            <span class="dica">quanto você gasta num mês normal</span></div>
+          <div class="campo"><label for="ob-meses">Meses de reserva</label>
+            <input id="ob-meses" name="meses_reserva" inputmode="numeric" value="${obj.meses_reserva}" placeholder="6">
+            <span class="dica">quantos meses a reserva de emergência deve cobrir</span></div>
+          <div class="campo"><label for="ob-renda">Renda passiva desejada por mês (R$)</label>
+            <input id="ob-renda" name="renda_desejada_mensal" inputmode="decimal" value="${objSalvo.renda_desejada_mensal ? fmt.num(objSalvo.renda_desejada_mensal, 2) : ""}" placeholder="igual ao custo de vida">
+            <span class="dica">quanto quer receber de proventos para viver de renda</span></div>
+        </div>
+        <div class="flex entre mt2 quebra"><span id="ob-reserva" class="fraco"></span><button class="botao" type="submit">Salvar objetivos</button></div>
+      </form>`)}
+
+      ${grupo("Categorias e Módulos", "ligue só o que você usa; o resto sai dos menus e telas", html`
+        <div class="mb3 fraco" style="font-size:13px;padding:10px 14px;background:var(--campo);border-radius:12px;line-height:1.4">
+          <b style="color:var(--ink)">Principais (sempre ativas):</b> Início, Investimentos e Aportes.
+        </div>
+        <div class="lista" id="aj-modulos">
+          ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
+            <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
+            <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
+        </div>
+        <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
+
+      ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
+        <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
+          <span class="modulo-ic">${icone("play", 18)}</span>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("mes").rotulo.toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+        <a class="item clicavel" href="#/retrospectiva/ano/ajustes" style="color:inherit;text-decoration:none">
+          <span class="modulo-ic ano">${icone("play", 18)}</span>
+          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("ano").rotulo}${FC.recap.periodoDe("ano").fim < FC.recap.periodoDe("ano").chave + "-12-31" ? " até agora" : ""}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+      </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
+
+      ${grupo("Privacidade", "o que o Finance Control registra sobre o uso", html`<div class="lista">
+        <div class="item"><span class="modulo-ic">${icone("escudo", 18)}</span>
+          <div class="principal"><div class="titulo">Ajudar a melhorar o app</div><div class="detalhe">registra de forma anônima as telas e botões que você usa — nunca valores, ativos, nome ou e-mail</div></div>
+          <label class="interruptor"><input type="checkbox" id="aj-uso" aria-label="Coleta anônima de uso" ${FC.uso.lerConsentimento() === true ? "checked" : ""}><span></span></label></div>
+      </div>
+      <p class="texto-p mt2">No lugar da sua conta vai um código aleatório deste aparelho. Os registros são apagados em 180 dias. Erros técnicos, sem dado pessoal, são registrados para manter o app funcionando.</p>`)}
+
+      ${FC.estado.admin ? grupo("Administração", "visível só para administradores", html`<div class="lista">
+        <a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none"><span class="modulo-ic">${icone("escudo", 18)}</span>
+          <div class="principal"><div class="titulo">Painel do administrador</div><div class="detalhe">vídeos de divulgação, cliques, jornadas, logs e insights</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>
+      </div>`) : ""}
 
       ${grupo("Segurança", "", html`<div class="lista">
         <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
@@ -62,15 +115,12 @@
           <li>Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.</li>
           <li>Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).</li>
           <li>Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.</li>
-          <li>Cadastro fechado: o Supabase recusa contas novas, e um gatilho no banco garante que só exista o dono.</li>
           <li>Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso.</li>
-        </ul><p class="texto-p"><a href="privacidade.html" target="_blank" rel="noopener">Política de privacidade</a></p></details>`)}
-
-      ${aparelho ? grupo("Neste aparelho", "vale só para este celular", aparelho) : ""}
+        </ul></details>`)}
 
       ${grupo("Suas informações", "tudo isto está vinculado à sua conta", html`<div class="cartao">
         <dl class="kpis">${contagem.map(([n, v]) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${fmt.int(v)}</dd></div>`)}</dl>
-        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda este dono, e ninguém mais consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
+        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda esta conta, e nenhuma outra conta consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
       </div>`)}
 
       ${grupo("Aparência", "", html`<div class="lista">
@@ -83,7 +133,8 @@
 
       ${grupo("Metas de alocação", "em % do patrimônio; a soma precisa dar 100", html`<form class="cartao" id="f-metas">
         <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
-          ${FC.PILARES.map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
+          ${FC.PILARES.filter((p) => !FC.pilaresLigados().includes(p)).map((p) => html`<input type="hidden" name="${p.chave}" value="${alvos[p.chave] ?? 0}">`)}
+          ${FC.pilaresLigados().map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
             <input id="meta-${p.chave}" name="${p.chave}" inputmode="decimal" value="${alvos[p.chave] ?? 0}"></div>`)}
         </div>
         <div class="flex entre mt2"><span id="soma-metas" class="fraco"></span><button class="botao" type="submit">Salvar metas</button></div>
@@ -95,8 +146,8 @@
           ${[["historica", "Histórico"], ["regra", "Seu alvo"], ["pares", "Pares"], ["macro", "Renda fixa"]].map(([k, v]) => html`<div class="campo"><label for="pl-${k}">${v}</label><input id="pl-${k}" name="pl_${k}" inputmode="decimal" value="${r.pesos_lentes[k]}"></div>`)}
         </div>
         <div class="form mt2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-          <div class="campo"><label for="v-atende">“Atende” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
-          <div class="campo"><label for="v-observar">“Zona cinzenta” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
+          <div class="campo"><label for="v-atende">“Dentro dos seus critérios” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
+          <div class="campo"><label for="v-observar">“Perto dos seus critérios” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
           <div class="campo"><label for="v-janela">Janela do histórico (anos)</label><input id="v-janela" name="janela" inputmode="numeric" value="${r.janela_historico_anos}"></div>
         </div>
         <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Faixas de cada indicador (avançado)</summary>
@@ -130,8 +181,6 @@
           <div class="principal"><div class="titulo">Restaurar backup</div><div class="detalhe">acrescenta o conteúdo de um backup; o que já existe fica</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
         <div class="item clicavel" id="aj-apagar"><span style="color:var(--vermelho)">${icone("lixo", 22)}</span>
           <div class="principal"><div class="titulo" style="color:var(--vermelho)">Apagar todos os dados</div><div class="detalhe">a conta continua; carteira, aportes e agro somem</div></div></div>
-        <div class="item clicavel" id="aj-excluir"><span style="color:var(--vermelho)">${icone("sair", 22)}</span>
-          <div class="principal"><div class="titulo" style="color:var(--vermelho)">Excluir conta</div><div class="detalhe">apaga o login, os dados e o 2FA de vez</div></div></div>
       </div><input type="file" id="aj-arquivo" accept=".json" hidden>`)}
     </div>`);
 
@@ -144,6 +193,11 @@
       }, 700);
     });
     FC.$("#aj-senha", raiz).addEventListener("click", trocaSenha);
+    FC.$("#aj-uso", raiz).addEventListener("change", async (e) => {
+      try { await FC.uso.defineConsentimento(e.target.checked); FC.ui.aviso(e.target.checked ? "Obrigado! A coleta anônima está ligada" : "Coleta de uso desligada"); }
+      catch (err) { e.target.checked = !e.target.checked; FC.ui.erro(err); }
+    });
+    FC.$("#aj-apresentacao", raiz).addEventListener("click", () => FC.onboarding.abre());
     FC.$("#aj-mfa-add", raiz) && FC.$("#aj-mfa-add", raiz).addEventListener("click", () => ligaMfa(fatores.length));
     FC.$$("[data-remove-fator]", raiz).forEach((bt) => bt.addEventListener("click", () => removeFator(fatores, bt.dataset.removeFator)));
     FC.$("#aj-sair-outros", raiz).addEventListener("click", async (e) => {
@@ -152,6 +206,42 @@
       catch (err) { FC.ui.erro(err); }
     });
     FC.$("#aj-sair", raiz).addEventListener("click", () => FC.sair());
+
+    // ---- objetivos (em premissas.objetivos, mesclando com o resto das premissas)
+    const fo = FC.$("#f-objetivos", raiz);
+    const lerObjetivos = () => {
+      const d = FC.dadosDoForm(fo);
+      const custo = FC.lerNum(d.custo_vida_mensal), renda = FC.lerNum(d.renda_desejada_mensal);
+      const meses = Math.round(FC.lerNum(d.meses_reserva) || 6);
+      return { custo_vida_mensal: custo > 0 ? custo : null, meses_reserva: Math.max(1, Math.min(36, meses)),
+        renda_desejada_mensal: renda > 0 ? renda : null };
+    };
+    const previaReserva = () => {
+      const o = lerObjetivos();
+      FC.$("#ob-reserva", raiz).textContent = o.custo_vida_mensal ? `Reserva ideal: ${fmt.brlTexto(o.custo_vida_mensal * o.meses_reserva, 0)}` : "";
+    };
+    fo.addEventListener("input", previaReserva); previaReserva();
+    fo.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        await FC.ui.ocupado(FC.$("button[type=submit]", fo), () => C.gravaPremissas({ objetivos: lerObjetivos() }));
+        await C.depoisDeMudar("Objetivos salvos");
+      } catch (err) { FC.ui.erro(err); }
+    });
+
+    // ---- módulos
+    FC.$$("[data-modulo]", raiz).forEach((cx) => cx.addEventListener("change", async () => {
+      const m = FC.MODULOS.find((x) => x.chave === cx.dataset.modulo);
+      const modulos = { ...FC.estado.prefs.modulos, [m.chave]: cx.checked };
+      try {
+        await FC.db.gravaPrefs({ modulos });
+        FC.estado.prefs.modulos = modulos;
+        FC.estado.base.prefsBrutas.modulos = modulos;
+        FC.atualizaNavegacao();
+        FC.ui.aviso(`${m.nome} ${cx.checked ? "ligado" : "desligado"}`);
+        FC.rerender({ suave: true, semAnimacao: true });
+      } catch (err) { cx.checked = !cx.checked; FC.ui.erro(err); }
+    }));
 
     // ---- aparência
     FC.$$("#aj-tema button", raiz).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));
@@ -253,8 +343,6 @@
       arq.value = "";
     });
     FC.$("#aj-apagar", raiz).addEventListener("click", apagaTudo);
-    FC.$("#aj-excluir", raiz).addEventListener("click", excluiConta);
-    if (FC.app) FC.app.ligaAjustes(raiz);
     ligaHistorico(raiz);
     carregaLog(FC.$("#aj-log", raiz));
   };
@@ -429,35 +517,6 @@
   }
 
   // ---------------------------------------------------------------- apagar
-  // exclusão definitiva: confirma a senha e a palavra, e o servidor apaga o usuário
-  function excluiConta() {
-    const f = FC.ui.folha({
-      titulo: "Excluir conta",
-      corpo: html`<div class="form"><div class="mensagem erro">${icone("alerta", 18)}<span>A conta, todos os dados e a verificação em duas etapas são apagados para sempre. Baixe um backup antes se quiser guardar algo.</span></div>
-        <div class="campo"><label for="exc-senha">Sua senha</label><input id="exc-senha" type="password" autocomplete="current-password"></div>
-        <div class="campo"><label for="exc-conf">Digite <b>EXCLUIR</b> para confirmar</label><input id="exc-conf" autocomplete="off"></div></div>`,
-      rodape: html`<button class="botao sec" data-acao="cancelar">Cancelar</button><button class="botao perigo" data-acao="excluir" disabled>Excluir conta</button>`,
-    });
-    const conf = FC.$("#exc-conf", f.el), senha = FC.$("#exc-senha", f.el), bt = FC.$("[data-acao=excluir]", f.el);
-    const confere = () => { bt.disabled = conf.value.trim() !== "EXCLUIR" || !senha.value; };
-    conf.addEventListener("input", confere); senha.addEventListener("input", confere);
-    FC.$("[data-acao=cancelar]", f.el).addEventListener("click", f.fechar);
-    bt.addEventListener("click", async () => {
-      try {
-        await FC.ui.ocupado(bt, async () => {
-          if (!(await FC.auth.confereSenha(FC.auth.usuario.email, senha.value))) throw new Error("Senha incorreta.");
-          if (FC.app) await FC.app.aoSair();
-          await FC.db.excluiConta();
-        });
-        f.fechar();
-        FC.local.apagar("ultimo-uso");
-        FC.mercado.limpaCacheLocal();
-        location.hash = "";
-        location.reload();
-      } catch (e) { FC.ui.erro(e); }
-    });
-  }
-
   function apagaTudo() {
     const f = FC.ui.folha({
       titulo: "Apagar todos os dados",

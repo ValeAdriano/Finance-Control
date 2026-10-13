@@ -23,6 +23,84 @@
     return "";
   };
 
+  // ---------------------------------------------------------------- alertas e avisos da carteira
+  const NIVEL_ALERTA = {
+    alto: ["alerta", "var(--vermelho)"],
+    medio: ["alerta", "var(--amarelo)"],
+    info: ["info", "var(--acento)"]
+  };
+
+  C.itemAlerta = function (a) {
+    const [ic, cor] = NIVEL_ALERTA[a.nivel] || NIVEL_ALERTA.info;
+    const miolo = html`<span style="color:${cor};flex:none;margin-top:2px">${icone(ic, 20)}</span>
+      <div class="principal">
+        <div class="titulo" style="white-space:normal;font-weight:600;font-size:14.5px">${a.titulo}</div>
+        <div class="detalhe" style="white-space:normal;margin-top:2px;line-height:1.45;color:var(--ink-2)">${a.texto}</div>
+      </div>`;
+    return a.link ? html`<a class="item clicavel link-aviso" href="${a.link}" style="color:inherit;text-decoration:none">${miolo}<span class="chevron">${icone("chevron", 18)}</span></a>`
+      : html`<div class="item">${miolo}</div>`;
+  };
+
+  FC.obterAlertas = function () {
+    const e = FC.estado;
+    if (!FC.alertas || !e || !e.dados) return [];
+    try {
+      return FC.alertas.calcula(e.dados, e.base, e.prefs) || [];
+    } catch (err) {
+      console.error(err);
+      return [];
+    }
+  };
+
+  FC.atualizaBadgeAlertas = function () {
+    const b = FC.$("#badge-alertas");
+    const bt = FC.$("#bt-alertas");
+    if (!b) return;
+    const lista = FC.obterAlertas();
+    if (lista.length > 0) {
+      b.hidden = false;
+      b.textContent = lista.length > 9 ? "9+" : String(lista.length);
+      b.setAttribute("aria-hidden", "true");
+      const txt = `${lista.length} ${lista.length === 1 ? "aviso que requer atenção" : "avisos que requerem atenção"}`;
+      if (bt) {
+        bt.setAttribute("aria-label", txt);
+        bt.title = txt;
+      }
+      b.classList.toggle("urgente", lista.some((x) => x.nivel === "alto"));
+    } else {
+      b.hidden = true;
+      b.textContent = "";
+      if (bt) {
+        bt.setAttribute("aria-label", "Avisos e atenção (nenhuma pendência)");
+        bt.title = "Avisos e atenção (nenhuma pendência)";
+      }
+    }
+  };
+
+  FC.abreAlertas = function () {
+    const lista = FC.obterAlertas();
+    const f = FC.ui.folha({
+      titulo: "Avisos e Atenção",
+      corpo: html`
+        ${lista.length ? html`
+          <p class="sub mb3" style="font-size:13.5px;color:var(--ink-2)">O que merece um olhar na sua carteira:</p>
+          <div class="lista">
+            ${lista.map(C.itemAlerta)}
+          </div>
+        ` : html`
+          <div class="vazio" style="padding:40px 16px;text-align:center">
+            <div class="icone-grande" style="color:var(--verde);margin-bottom:12px">${icone("check", 32)}</div>
+            <h3 style="font-size:18px;margin-bottom:6px">Tudo em dia</h3>
+            <p class="texto-p" style="color:var(--ink-2)">Nenhum aviso ou pendência na sua carteira no momento.</p>
+          </div>
+        `}
+      `,
+    });
+    FC.$$(".link-aviso", f.el).forEach((el) => {
+      el.addEventListener("click", () => f.fechar());
+    });
+  };
+
   C.vazio = (emoji, titulo, texto, acao) => html`<div class="vazio">
     <div class="icone-grande">${emoji}</div><h3 style="font-size:19px;margin-bottom:6px">${titulo}</h3>
     <p class="texto-p" style="margin:0 auto 16px">${texto}</p>${acao || ""}</div>`;
