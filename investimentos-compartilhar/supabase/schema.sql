@@ -439,3 +439,297 @@ grant execute on function public.admin_erros_sistema(integer) to authenticated;
 -- retenção: 180 dias
 select cron.unschedule('fc-limpa-uso') where exists (select 1 from cron.job where jobname = 'fc-limpa-uso');
 select cron.schedule('fc-limpa-uso', '30 7 * * *', $$delete from public.uso_eventos where quando < now() - interval '180 days'$$);
+
+-- ============================================================
+--  PERFIL DO INVESTIDOR E ONBOARDING
+--  Quatro tabelas no mesmo padrão: user_id = auth.uid(), RLS do dono e
+--  política restritiva de 2FA. O histórico de perfil é só de inserção:
+--  cada avaliação fica registrada como foi feita. Renda e patrimônio
+--  entram em FAIXAS, nunca em valores exatos.
+-- ============================================================
+
+-- respostas parciais, para retomar de onde parou; some ao concluir
+create table if not exists public.perfil_rascunho (
+  user_id       uuid primary key default auth.uid() references auth.users on delete cascade,
+  versao_modelo text not null,
+  respostas     jsonb not null default '{}',
+  passo         integer not null default 0 check (passo between 0 and 100),
+  atualizado_em timestamptz not null default now()
+);
+
+-- cada avaliação concluída (imutável pela API: sem update nem delete)
+create table if not exists public.perfil_investidor (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users on delete cascade,
+  versao_modelo text not null,
+  origem        text not null check (origem in ('cadastro','migracao','revisao','comportamento')),
+  respostas     jsonb not null,
+  tolerancia    smallint not null check (tolerancia between 0 and 100),
+  capacidade    smallint not null check (capacidade between 0 and 100),
+  necessidade   numeric(6,4),
+  score         smallint not null check (score between 0 and 100),
+  perfil        text not null check (perfil in ('conservador','moderado','arrojado')),
+  consistencia  text not null check (consistencia in ('alta','baixa')),
+  valido_ate    date not null default (current_date + interval '24 months'),
+  criado_em     timestamptz not null default now()
+);
+create index if not exists perfil_investidor_user_idx on public.perfil_investidor (user_id, criado_em desc);
+
+-- o banco recalcula tolerância, capacidade, score e consistência a partir
+-- das respostas: um perfil adulterado pela API é recusado
+-- >>> perfil_confere (gerado por scripts/gera-perfil-sql.js; não edite à mão)
+-- versão do modelo: perfil-v1
+create or replace function privado.perfil_confere()
+returns trigger language plpgsql security definer set search_path = '' as $f$
+declare
+  r        jsonb := new.respostas;
+  cap_tab  jsonb := '{"idade":{"max":15,"neutro":6,"pts":{"ate_30":15,"31_40":13,"41_50":10,"51_60":6,"61_mais":3}},"estab":{"max":20,"neutro":8,"pts":{"estavel":20,"clt":15,"variavel":8,"sem_renda":0,"nd":8}},"dependentes":{"max":10,"neutro":4,"pts":{"0":10,"1":7,"2":4,"3_mais":2}},"moradia":{"max":5,"neutro":2,"pts":{"propria":5,"familia":4,"aluguel":2}},"patrimonio":{"max":20,"neutro":8,"pts":{"nada":0,"ate_10k":4,"10_50k":8,"50_200k":12,"200k_1m":17,"1m_mais":20,"nd":8}},"reserva":{"max":5,"neutro":2,"pts":{"nenhuma":0,"menos_3":1,"3_6":3,"6_12":4,"12_mais":5,"nd":1}}}'::jsonb;
+  tol_tab  jsonb := '{"t_queda":{"vende":0,"parte":1,"mantem":2,"aporta":3},"t_certo":{"certo":0,"quase_certo":1,"quase_risco":2,"risco":3},"amigo":{"cauteloso":0,"prudente":1,"equilibrado":2,"ousado":3},"t_perda":{"5":1,"10":2,"20":3,"30":4,"zero":0},"t_clima":{"angustia":0,"preocupa":1,"neutro":2,"oportunidade":3},"t_carteiras":{"a":0,"mais_a":1,"mais_b":2,"b":3},"t_foco":{"preservar":0,"mais_preservar":1,"equilibrar":2,"crescer":3}}'::jsonb;
+  renda_v  jsonb := '{"ate_3k":2000,"3_5k":4000,"5_8k":6500,"8_15k":11500,"15_30k":22500,"30k_mais":40000}'::jsonb;
+  sobra_v  jsonb := '{"nada":0,"ate_500":250,"500_1500":1000,"1500_3000":2250,"3000_6000":4500,"6000_mais":8000}'::jsonb;
+  chave    text;
+  pts      integer := 0;
+  tol_pts  integer := 0;
+  tol      integer;
+  cap      integer;
+  rv       numeric;
+  sv       numeric;
+  num      numeric;
+  den      numeric;
+  agro     numeric;
+  ta       integer;
+  tb       integer;
+  cons     text := 'alta';
+  par      text[];
+  perfil   text;
+  score    integer;
+begin
+  if new.versao_modelo <> 'perfil-v1' then
+    raise exception 'versao_modelo_desconhecida' using errcode = '22023';
+  end if;
+  if jsonb_typeof(r) <> 'object' then
+    raise exception 'respostas_invalidas' using errcode = '22023';
+  end if;
+  foreach chave in array array['idade', 'estab', 'renda', 'sobra', 'reserva', 'divida', 'objetivo', 'prazo', 'tempo', 't_queda', 't_certo', 'amigo', 't_perda', 't_clima', 't_carteiras', 't_foco'] loop
+    if r ->> chave is null then
+      raise exception 'resposta_faltando: %', chave using errcode = '22023';
+    end if;
+  end loop;
+
+  -- tolerância
+  for chave in select jsonb_object_keys(tol_tab) loop
+    tol_pts := tol_pts + coalesce((tol_tab -> chave ->> (r ->> chave))::integer, 0);
+  end loop;
+  tol := round(tol_pts::numeric / 22 * 100);
+
+  -- capacidade
+  foreach chave in array array['idade', 'estab', 'dependentes', 'moradia', 'patrimonio', 'reserva'] loop
+    pts := pts + coalesce((cap_tab -> chave -> 'pts' ->> (r ->> chave))::integer,
+                          (cap_tab -> chave ->> 'neutro')::integer);
+  end loop;
+  rv := (renda_v ->> (r ->> 'renda'))::numeric;
+  sv := (sobra_v ->> (r ->> 'sobra'))::numeric;
+  if rv is not null and sv is not null and rv > 0 then
+    num := 25 * sv * 100;
+    den := rv * 30;
+    if sv * 100 >= den then pts := pts + 25;
+    else pts := pts + floor((2 * num + den) / (2 * den))::integer;
+    end if;
+  else
+    pts := pts + 10;
+  end if;
+  agro := (r ->> 'agro_pct')::numeric;
+  if agro is not null and agro > 50 then pts := pts - 15; end if;
+  cap := greatest(0, least(100, pts));
+  if r ->> 'divida' = 'sim' then cap := least(cap, 20); end if;
+  if (r ->> 'reserva') is null or (r ->> 'reserva') in ('nenhuma', 'menos_3', 'nd') then cap := least(cap, 30); end if;
+  if (r ->> 'prazo') in ('menos_2') then cap := least(cap, 25); end if;
+  if r ->> 'saque' = 'provavel' then cap := least(cap, 40); end if;
+
+  -- consistência: perguntas espelho
+  foreach par slice 1 in array array[array['t_queda','t_clima'], array['t_certo','t_carteiras']] loop
+    ta := (tol_tab -> par[1] ->> (r ->> par[1]))::integer;
+    tb := (tol_tab -> par[2] ->> (r ->> par[2]))::integer;
+    if ta is not null and tb is not null and abs(ta - tb) >= 2 then cons := 'baixa'; end if;
+  end loop;
+
+  score := least(tol, cap);
+  perfil := case when score <= 34 then 'conservador' when score <= 64 then 'moderado' when score <= 100 then 'arrojado' else 'arrojado' end;
+
+  if new.tolerancia <> tol or new.capacidade <> cap or new.score <> score
+     or new.perfil <> perfil or new.consistencia <> cons then
+    raise exception 'perfil_adulterado' using errcode = '22023';
+  end if;
+  new.valido_ate := (current_date + interval '24 months')::date;
+  return new;
+end $f$;
+-- <<< perfil_confere
+
+drop trigger if exists perfil_confere on public.perfil_investidor;
+create trigger perfil_confere before insert on public.perfil_investidor
+  for each row execute function privado.perfil_confere();
+
+-- o perfil vigente de cada conta (respeita a RLS de quem consulta)
+create or replace view public.perfil_atual with (security_invoker = true) as
+  select distinct on (user_id) * from public.perfil_investidor
+  order by user_id, criado_em desc;
+
+-- o plano gerado e a decisão da pessoa
+create table if not exists public.plano_investimento (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users on delete cascade,
+  perfil_id     uuid not null references public.perfil_investidor on delete cascade,
+  versao_modelo text not null,
+  modo          text not null default 'educativo' check (modo in ('completo','educativo')),
+  plano         jsonb not null,            -- passos, alocação, candidatos com a regra de cada um
+  decisao       text not null default 'pendente' check (decisao in ('pendente','aplicado','recusado')),
+  metas_antes   jsonb,
+  metas_depois  jsonb,
+  criado_em     timestamptz not null default now(),
+  decidido_em   timestamptz
+);
+create index if not exists plano_investimento_user_idx on public.plano_investimento (user_id, criado_em desc);
+
+-- funil: só o nome do passo e o tempo, nunca dado financeiro
+create table if not exists public.onboarding_eventos (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null default auth.uid() references auth.users on delete cascade,
+  evento     text not null check (evento in ('passo_visto','respondido','bloco_concluido','adiado',
+             'perfil_concluido','plano_aplicado','plano_recusado','ativacao','revisao_aberta')),
+  passo      text check (passo is null or passo ~ '^[a-z0-9_]{1,40}$'),
+  duracao_ms integer check (duracao_ms is null or duracao_ms between 0 and 86400000),
+  criado_em  timestamptz not null default now()
+);
+create index if not exists onboarding_eventos_user_idx on public.onboarding_eventos (user_id, criado_em);
+create index if not exists onboarding_eventos_evento_idx on public.onboarding_eventos (evento, criado_em);
+
+do $$
+declare t text;
+begin
+  foreach t in array array['perfil_rascunho','perfil_investidor','plano_investimento','onboarding_eventos'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon', t);
+    execute format('drop policy if exists "exige 2fa" on public.%I', t);
+    execute format($p$create policy "exige 2fa" on public.%I as restrictive for all to authenticated
+                     using ((select privado.mfa_ok())) with check ((select privado.mfa_ok()))$p$, t);
+  end loop;
+end $$;
+
+-- rascunho: o dono faz tudo
+drop policy if exists "dono" on public.perfil_rascunho;
+create policy "dono" on public.perfil_rascunho for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+grant select, insert, update, delete on public.perfil_rascunho to authenticated;
+
+-- histórico: só INSERT e SELECT
+drop policy if exists "le o proprio" on public.perfil_investidor;
+create policy "le o proprio" on public.perfil_investidor for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "insere o proprio" on public.perfil_investidor;
+create policy "insere o proprio" on public.perfil_investidor for insert to authenticated with check (user_id = (select auth.uid()));
+revoke all on public.perfil_investidor from authenticated;
+grant select, insert on public.perfil_investidor to authenticated;
+grant select on public.perfil_atual to authenticated;
+revoke all on public.perfil_atual from anon;
+
+-- plano: o dono lê e insere; só a decisão pode mudar
+drop policy if exists "le o proprio" on public.plano_investimento;
+create policy "le o proprio" on public.plano_investimento for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "insere o proprio" on public.plano_investimento;
+create policy "insere o proprio" on public.plano_investimento for insert to authenticated with check (user_id = (select auth.uid()));
+drop policy if exists "decide o proprio" on public.plano_investimento;
+create policy "decide o proprio" on public.plano_investimento for update to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+revoke all on public.plano_investimento from authenticated;
+grant select, insert on public.plano_investimento to authenticated;
+grant update (decisao, metas_antes, metas_depois, decidido_em) on public.plano_investimento to authenticated;
+
+-- eventos: só INSERT e SELECT
+drop policy if exists "le o proprio" on public.onboarding_eventos;
+create policy "le o proprio" on public.onboarding_eventos for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists "insere o proprio" on public.onboarding_eventos;
+create policy "insere o proprio" on public.onboarding_eventos for insert to authenticated with check (user_id = (select auth.uid()));
+revoke all on public.onboarding_eventos from authenticated;
+grant select, insert on public.onboarding_eventos to authenticated;
+
+-- ------------------------------------------------------------ modo de recomendação
+-- completo: plano e ativos candidatos com nome. educativo: classes e filtros,
+-- sem "compre X". Quem decide é o administrador (a conta nunca escolhe o
+-- próprio modo): a tabela não é exposta pela API. Padrão: educativo.
+create table if not exists public.contas_modo_completo (
+  user_id   uuid primary key references auth.users on delete cascade,
+  criado_em timestamptz not null default now()
+);
+alter table public.contas_modo_completo enable row level security;
+revoke all on public.contas_modo_completo from anon, authenticated;
+--   liberar:  insert into public.contas_modo_completo (user_id) select id from auth.users where email = '...';
+
+create or replace function public.modo_recomendacao()
+returns text language sql stable security definer set search_path = '' as $$
+  select case when exists (select 1 from public.contas_modo_completo c where c.user_id = auth.uid())
+              then 'completo' else 'educativo' end;
+$$;
+revoke all on function public.modo_recomendacao() from public, anon;
+grant execute on function public.modo_recomendacao() to authenticated;
+
+-- ------------------------------------------------------------ funil agregado (só contagens)
+create or replace function public.admin_funil_onboarding(dias integer default 90)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  desde timestamptz := now() - make_interval(days => least(greatest(dias, 7), 365));
+  saida jsonb;
+begin
+  if not privado.eh_admin() then
+    raise exception 'acesso negado' using errcode = '42501';
+  end if;
+  with novas as (
+    select id, created_at from auth.users where created_at >= desde
+  ), perfis as (
+    select distinct on (user_id) user_id, perfil, consistencia, valido_ate, criado_em from public.perfil_investidor order by user_id, criado_em
+  ), atuais as (
+    select * from public.perfil_atual
+  ), ativadas as (
+    select n.id from novas n join perfis p on p.user_id = n.id and p.criado_em <= n.created_at + interval '7 days'
+    where exists (select 1 from public.ativos a where a.user_id = n.id and a.criado_em <= n.created_at + interval '7 days')
+       or exists (select 1 from public.aportes a where a.user_id = n.id and a.criado_em <= n.created_at + interval '7 days')
+       or exists (select 1 from public.renda_fixa a where a.user_id = n.id and a.criado_em <= n.created_at + interval '7 days')
+       or exists (select 1 from public.plano_investimento pl where pl.user_id = n.id and pl.decisao = 'aplicado' and pl.criado_em <= n.created_at + interval '7 days')
+  ), blocos as (
+    select b, (select count(distinct user_id) from public.onboarding_eventos where evento = 'passo_visto' and passo = 'bloco_' || b and criado_em >= desde) as viram,
+              (select count(distinct user_id) from public.onboarding_eventos where evento = 'bloco_concluido' and passo = 'bloco_' || b and criado_em >= desde) as concluiram
+    from generate_series(1, 4) b
+  ), ativ as (
+    select user_id, (quando at time zone 'America/Sao_Paulo')::date as dia from public.log_sistema where origem = 'app' and user_id is not null group by 1, 2
+  ), coortes as (
+    select date_trunc('week', n.created_at)::date as semana, n.id, n.created_at::date as dia0, (n.id in (select id from ativadas)) as ativada
+    from novas n where n.created_at >= now() - interval '56 days'
+  )
+  select jsonb_build_object(
+    'janela_dias', dias,
+    'contas_novas', (select count(*) from novas),
+    'abriram_bloco_1', (select count(distinct e.user_id) from public.onboarding_eventos e join novas n on n.id = e.user_id where e.evento = 'passo_visto' and e.passo = 'bloco_1'),
+    'blocos', (select jsonb_agg(jsonb_build_object('bloco', b, 'viram', viram, 'concluiram', concluiram) order by b) from blocos),
+    'tempo_mediano_ms', (select percentile_cont(0.5) within group (order by duracao_ms) from public.onboarding_eventos where evento = 'perfil_concluido' and criado_em >= desde and duracao_ms is not null),
+    'perfis_concluidos', (select count(distinct user_id) from public.onboarding_eventos where evento = 'perfil_concluido' and criado_em >= desde),
+    'planos_aplicados', (select count(distinct user_id) from public.onboarding_eventos where evento = 'plano_aplicado' and criado_em >= desde),
+    'planos_recusados', (select count(distinct user_id) from public.onboarding_eventos where evento = 'plano_recusado' and criado_em >= desde),
+    'ativadas_7d', (select count(*) from ativadas),
+    'adiaram', (select count(distinct user_id) from public.onboarding_eventos where evento = 'adiado' and criado_em >= desde),
+    'adiamentos', (select count(*) from public.onboarding_eventos where evento = 'adiado' and criado_em >= desde),
+    'saude', jsonb_build_object(
+      'perfis', (select count(*) from atuais),
+      'vencidos', (select count(*) from atuais where valido_ate < current_date),
+      'baixa_consistencia', (select count(*) from atuais where consistencia = 'baixa'),
+      'conservador', (select count(*) from atuais where perfil = 'conservador'),
+      'moderado', (select count(*) from atuais where perfil = 'moderado'),
+      'arrojado', (select count(*) from atuais where perfil = 'arrojado')),
+    'retencao', (select coalesce(jsonb_agg(x order by x ->> 'semana'), '[]'::jsonb) from (
+      select jsonb_build_object('semana', semana, 'ativada', ativada, 'contas', count(*),
+        'd1', count(*) filter (where exists (select 1 from ativ a where a.user_id = c.id and a.dia = c.dia0 + 1)),
+        'd7', count(*) filter (where exists (select 1 from ativ a where a.user_id = c.id and a.dia between c.dia0 + 7 and c.dia0 + 13)),
+        'd30', count(*) filter (where exists (select 1 from ativ a where a.user_id = c.id and a.dia between c.dia0 + 30 and c.dia0 + 36))) as x
+      from coortes c group by semana, ativada) t)
+  ) into saida;
+  return saida;
+end $$;
+revoke all on function public.admin_funil_onboarding(integer) from public, anon;
+grant execute on function public.admin_funil_onboarding(integer) to authenticated;

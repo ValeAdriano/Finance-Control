@@ -526,7 +526,10 @@
     raiz.innerHTML = String(html`
       ${C.estadoMercado()}
       <p class="fraco" style="font-size:15px;margin-bottom:8px">${saudacao()}${nome ? ", " + nome : ""}.</p>
+      ${C.cartaoPerfil()}
       ${topo(d, imp, seq)}
+      ${C.checklistAtivacao()}
+      ${C.cartaoPlanoRealidade()}
       ${t ? frase(comparativo(t)) : ""}
       ${t ? detalhesTecnicos(d, imp) : html`<div class="mt3">${macro(d.macro)}</div>`}
       ${retrospectivas()}
@@ -542,6 +545,7 @@
     `);
 
     if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
+    C.ligaPerfil(raiz);
 
     FC.$$("[data-pilar]", raiz).forEach((el) => {
       const alterna = () => {

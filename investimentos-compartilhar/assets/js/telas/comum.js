@@ -706,5 +706,76 @@
     } catch (e) { FC.ui.erro(e); }
   };
 
+  // ---------------------------------------------------------------- perfil e ativação (Início)
+  // Card do perfil (termine, revise, aplique) e checklist de ativação: sai
+  // com "Conta criada" e "Perfil feito" já marcados, cada um dizendo por quê.
+  C.cartaoPerfil = function () {
+    const e = FC.estado.perfil;
+    if (!e || e.indisponivel || !FC.perfil) return "";
+    const rev = e.atual ? FC.perfil.revisao(e.atual) : null;
+    let titulo, texto, botao, destaque = false;
+    if (!e.atual && e.rascunho) {
+      titulo = "Termine seu perfil"; texto = "Suas respostas estão salvas. Faltam poucas perguntas para o plano."; botao = "Continuar"; destaque = true;
+    } else if (!e.atual) {
+      titulo = "Faça seu perfil de investidor"; texto = "3 minutos, gera seu plano: perfil, quanto guardar e como dividir."; botao = "Começar"; destaque = true;
+    } else if (rev.estado === "obrigatoria") {
+      titulo = "Seu perfil venceu"; texto = "Passou de 24 meses. Refaça para o plano continuar valendo."; botao = "Revisar"; destaque = true;
+    } else if (rev.estado === "sugerida") {
+      titulo = "Vale revisar seu perfil"; texto = rev.motivo === "renda" ? "Sua renda informada mudou." : "Faz mais de 12 meses desde a última avaliação."; botao = "Revisar";
+    } else if (e.plano && e.plano.decisao === "pendente") {
+      titulo = "Seu plano está pronto"; texto = "Veja a alocação do perfil e aplique às suas metas, ou mantenha as atuais."; botao = "Ver plano";
+    } else return "";
+    return html`<div class="cartao pr-card ${destaque ? "destaque" : ""}">
+      <span class="pr-card-ic">${icone("bussola", 22)}</span>
+      <div class="principal"><h3>${titulo}</h3><p class="sub">${texto}</p></div>
+      <button class="botao pequeno" type="button" data-perfil="${e.atual && rev.estado === "ok" ? "ver" : e.atual && e.plano && e.plano.decisao === "pendente" && rev.estado === "ok" ? "ver" : "abrir"}">${botao}</button>
+    </div>`;
+  };
+
+  C.checklistAtivacao = function () {
+    const e = FC.estado.perfil, b = FC.estado.base;
+    if (!e || e.indisponivel || !b) return "";
+    const metaOk = !!(e.atual && e.atual.respostas.valor_alvo && e.atual.respostas.valor_alvo !== "nd");
+    const itens = [
+      { id: "conta", rotulo: "Conta criada", porque: "você já criou a conta", feito: true },
+      { id: "perfil", rotulo: "Perfil do investidor", porque: "você já respondeu o perfil", feito: !!e.atual, acao: "abrir" },
+      { id: "ativo", rotulo: "Cadastrar o primeiro ativo ou importar um extrato", feito: b.ativos.length > 0 || b.rendaFixa.length > 0, link: "#/ativos" },
+      { id: "meta", rotulo: "Definir valor e prazo da meta principal", feito: metaOk, acao: "meta" },
+      { id: "aporte", rotulo: "Registrar o primeiro aporte", feito: b.aportes.length > 0, link: "#/aportes" },
+      { id: "mfa", rotulo: "Ligar o 2FA", feito: !!e.mfa, link: "#/ajustes" },
+    ];
+    const feitos = itens.filter((x) => x.feito).length;
+    if (feitos === itens.length) return "";
+    return html`<div class="cartao pr-check">
+      <div class="flex entre"><h3>Primeiros passos</h3><span class="fraco" style="font-size:13px">${feitos} de ${itens.length}</span></div>
+      <div class="pr-regua mt1"><i style="width:${(feitos / itens.length) * 100}%"></i></div>
+      <ul class="pr-check-lista">${itens.map((x) => {
+        const miolo = html`<span class="pr-check-marca ${x.feito ? "feito" : ""}">${x.feito ? icone("check", 13) : ""}</span>
+          <span><b>${x.rotulo}</b>${x.feito && x.porque ? html`<small>${x.porque}</small>` : ""}</span>`;
+        if (x.feito) return html`<li class="feito">${miolo}</li>`;
+        return x.link ? html`<li><a href="${x.link}">${miolo}</a></li>` : html`<li><button type="button" data-perfil="${x.acao}">${miolo}</button></li>`;
+      })}</ul>
+    </div>`;
+  };
+
+  // aporte do mês, reserva e distância da meta (só com o plano aplicado)
+  C.cartaoPlanoRealidade = function () {
+    const e = FC.estado.perfil;
+    if (!e || e.indisponivel || !e.atual || !e.plano || e.plano.decisao !== "aplicado" || !FC.perfilRecomendacao || !FC.perfilRelatorio) return "";
+    const r = FC.perfilRecomendacao(e.atual, e.plano, e.modo);
+    if (!r) return "";
+    const p = FC.recomendacao.planoContraRealidade({ plano: r.rec.plano, alocacaoAlvo: FC.estado.prefs.alocacao_alvo, dados: FC.estado.dados, base: FC.estado.base });
+    return p ? FC.perfilRelatorio.cartaoPlanoRealidade(p) : "";
+  };
+
+  C.ligaPerfil = function (raiz) {
+    FC.$$("[data-perfil]", raiz).forEach((b) => b.addEventListener("click", () => {
+      const e = FC.estado.perfil, a = b.dataset.perfil;
+      if (a === "ver") location.hash = "#/perfil";
+      else if (a === "meta") FC.perfilFluxo.abre({ origem: "revisao", irPara: "valor_alvo" });
+      else FC.perfilFluxo.abre({ origem: !e.atual ? (e.rascunho && e.rascunho.respostas ? "cadastro" : "migracao") : "revisao" });
+    }));
+  };
+
   C.rotuloData = (iso) => FC.datas.br(iso);
 })();

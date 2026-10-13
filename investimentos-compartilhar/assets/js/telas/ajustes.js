@@ -193,8 +193,8 @@
             <div class="campo"><label for="v-janela">Janela do histórico (anos)</label><input id="v-janela" name="janela" inputmode="numeric" value="${r.janela_historico_anos}"></div>
           </div>
           <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Faixas de cada indicador (avançado)</summary>
-            <p class="texto-p mt2">Cada perfil tem suas métricas com ótimo (nota 100), aceitável (60) e ruim (0). <code>direcao</code> é <code>menor_melhor</code> ou <code>maior_melhor</code>.</p>
-            <div class="campo mt1"><textarea id="regras-json" rows="16" spellcheck="false">${JSON.stringify({ perfis: r.perfis, override_perfil: r.override_perfil, segmentos_papel: r.segmentos_papel }, null, 2)}</textarea></div>
+            <p class="texto-p mt2">Cada perfil tem suas métricas com ótimo (nota 100), aceitável (60) e ruim (0). <code>direcao</code> é <code>menor_melhor</code> ou <code>maior_melhor</code>. A chave <code>perfil</code> traz as faixas de alocação, nota mínima e peso máximo do perfil do investidor.</p>
+            <div class="campo mt1"><textarea id="regras-json" rows="16" spellcheck="false">${JSON.stringify({ perfis: r.perfis, override_perfil: r.override_perfil, segmentos_papel: r.segmentos_papel, perfil: r.perfil }, null, 2)}</textarea></div>
           </details>
           <div class="flex entre mt3 quebra"><button class="botao texto" type="button" id="bt-regras-padrao">Voltar ao padrão</button><button class="botao" type="submit">Salvar regras</button></div>
           <div id="regras-erro" class="mensagem erro mt2" hidden></div>
@@ -425,14 +425,18 @@
     });
 
     // ---- dados
-    FC.$("#aj-exportar", raiz).addEventListener("click", () => {
+    FC.$("#aj-exportar", raiz).addEventListener("click", async () => {
       const b = FC.estado.base;
+      // perfil e planos entram no backup (direito do titular); sem as tabelas, segue sem
+      let perfilExport = null;
+      if (FC.estado.perfil && !FC.estado.perfil.indisponivel) { try { perfilExport = await FC.perfilDb.exporta(); } catch (err) { console.warn(err); } }
       const limpa = (arr) => arr.map(({ user_id, ...x }) => x);
       const backup = { app: "finance-control", versao: 1, gerado: new Date().toISOString(),
         ativos: limpa(b.ativos), renda_fixa: limpa(b.rendaFixa), aportes: limpa(b.aportes),
         agro_movimentos: limpa(b.agro.movs), agro_custos: limpa(b.agro.custos), agro_pesagens: limpa(b.agro.pesagens),
         ganhos: limpa(b.ganhos || []),
-        preferencias: (({ user_id, ...x }) => x)(b.prefsBrutas || {}) };
+        preferencias: (({ user_id, ...x }) => x)(b.prefsBrutas || {}),
+        ...(perfilExport ? { perfil: perfilExport } : {}) };
       FC.baixar(`finance-control-${FC.datas.hoje()}.json`, JSON.stringify(backup, null, 2));
       FC.ui.aviso("Backup baixado");
     });

@@ -206,7 +206,7 @@
   const pct = (x) => (x == null ? "—" : fmt.num(x * 100, 0) + "%");
 
   // ---------------------------------------------------------------- tela
-  const ABAS = [["videos", "Vídeos", "play"], ["cliques", "Cliques", "alvo"], ["jornadas", "Jornadas", "bussola"], ["logs", "Logs e insights", "info"]];
+  const ABAS = [["videos", "Vídeos", "play"], ["cliques", "Cliques", "alvo"], ["jornadas", "Jornadas", "bussola"], ["onboarding", "Onboarding", "check"], ["logs", "Logs e insights", "info"]];
   let filtro = { dias: 30, aba: "cliques", comparaA: null, comparaB: null, tipo: "", rota: "", busca: "", sessao: null };
 
   FC.telas.admin = async function (raiz, params) {
@@ -225,6 +225,7 @@
 
     const corpo = FC.$("#adm-corpo", raiz);
     if (filtro.aba === "videos") { corpo.innerHTML = String(abaVideos()); ligaVideos(corpo); return; }
+    if (filtro.aba === "onboarding") { corpo.innerHTML = String(await abaOnboarding(filtro.dias)); FC.animar(corpo, { semAnimacao: true }); return; }
     let d;
     try { d = await carrega(filtro.dias); } catch (e) { corpo.innerHTML = String(html`<div class="mensagem erro">${icone("alerta", 18)}<span>Não deu para ler o uso: ${e.message || e}</span></div>`); return; }
     const a = analisa(d.eventos);
@@ -233,6 +234,46 @@
     FC.animar(corpo, { semAnimacao: true });
     liga(corpo, a, d);
   };
+
+  // ---------------------------------------------------------------- onboarding e perfil
+  // só contagens: a função security definer do banco nunca devolve linhas
+  async function abaOnboarding(dias) {
+    let f;
+    try { f = await FC.perfilDb.funil(Math.max(dias, 7)); } catch (e) {
+      return html`<div class="mensagem erro">${icone("alerta", 18)}<span>Não deu para ler o funil: ${e.message || e}. Aplique o schema.sql atualizado.</span></div>`;
+    }
+    const taxa = (a, b) => (b > 0 ? fmt.num((a / b) * 100, 0) + "%" : "—");
+    const min = f.tempo_mediano_ms == null ? "—" : (f.tempo_mediano_ms / 60000).toFixed(1).replace(".", ",") + " min";
+    const kpi = (n, v, dica) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${v}</dd>${dica ? html`<small class="fraco">${dica}</small>` : ""}</div>`;
+    const s = f.saude || {};
+    return html`
+      <p class="texto-p mb3">Janela de ${f.janela_dias} dias. Conclusão do questionário e ativação são medidas separadas: completar o perfil não é ativar.</p>
+      <section class="cartao"><h3>Funil</h3><dl class="kpis mt2">
+        ${kpi("Contas novas", fmt.int(f.contas_novas))}
+        ${kpi("Início do questionário", taxa(f.abriram_bloco_1, f.contas_novas), "abriram o bloco 1")}
+        ${kpi("Tempo mediano até o perfil", min, "meta: menos de 3 min")}
+        ${kpi("Perfis concluídos", fmt.int(f.perfis_concluidos))}
+        ${kpi("Plano aplicado", taxa(f.planos_aplicados, f.perfis_concluidos), "dos perfis concluídos")}
+        ${kpi("Ativação em 7 dias", taxa(f.ativadas_7d, f.contas_novas), "perfil + ativo, aporte ou meta")}
+      </dl></section>
+      <section class="cartao mt3"><h3>Conclusão por bloco</h3>
+        <div class="lista mt2">${(f.blocos || []).map((b) => html`<div class="item"><div class="principal"><div class="titulo">Bloco ${b.bloco}</div>
+          <div class="detalhe">${fmt.int(b.concluiram)} de ${fmt.int(b.viram)} concluíram</div></div><b>${taxa(b.concluiram, b.viram)}</b></div>`)}</div></section>
+      <section class="cartao mt3"><h3>Contas antigas e convite</h3>
+        <p class="texto-p">${fmt.int(f.adiaram)} conta(s) adiaram o convite, somando ${fmt.int(f.adiamentos)} adiamento(s). Planos recusados: ${fmt.int(f.planos_recusados)}.</p></section>
+      <section class="cartao mt3"><h3>Saúde dos perfis</h3><dl class="kpis mt2">
+        ${kpi("Perfis vigentes", fmt.int(s.perfis || 0))}
+        ${kpi("Vencidos", taxa(s.vencidos, s.perfis))}
+        ${kpi("Baixa consistência", taxa(s.baixa_consistencia, s.perfis), "meta: até 15%")}
+        ${kpi("Conservador", fmt.int(s.conservador || 0))}${kpi("Moderado", fmt.int(s.moderado || 0))}${kpi("Arrojado", fmt.int(s.arrojado || 0))}
+      </dl></section>
+      <section class="cartao mt3"><h3>Retenção por coorte semanal</h3>
+        <p class="sub">D1 é o dia seguinte; D7 e D30 contam a volta nos 7 dias a partir da data.</p>
+        ${(f.retencao || []).length ? html`<div class="tabela-rolavel mt2"><table class="tabela"><thead><tr><th>Semana</th><th>Grupo</th><th>Contas</th><th>D1</th><th>D7</th><th>D30</th></tr></thead>
+          <tbody>${f.retencao.map((r) => html`<tr><td>${FC.datas.br(r.semana)}</td><td>${r.ativada ? "ativados" : "não ativados"}</td><td>${fmt.int(r.contas)}</td>
+            <td>${taxa(r.d1, r.contas)}</td><td>${taxa(r.d7, r.contas)}</td><td>${taxa(r.d30, r.contas)}</td></tr>`)}</tbody></table></div>`
+          : html`<p class="texto-p mt2">Ainda sem coortes nas últimas 8 semanas.</p>`}</section>`;
+  }
 
   // ---------------------------------------------------------------- 1. vídeos
   function abaVideos() {

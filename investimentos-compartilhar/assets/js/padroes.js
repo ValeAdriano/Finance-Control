@@ -218,6 +218,25 @@
     // o Fundamentus erra alguns segmentos; aqui se força a mão
     override_perfil: { MXRF11: "fii_papel", KNCR11: "fii_papel", IRDM11: "fii_papel", RECR11: "fii_papel", CPTS11: "fii_papel" },
     segmentos_papel: ["Títulos e Val. Mob.", "Titulos e Val. Mob.", "Papel"],
+    // Recomendação do perfil do investidor (editável em Ajustes → Regras →
+    // faixas avançadas). Pontos de partida para calibrar, não números da
+    // pesquisa. Hierarquia: renda fixa > ações > cripto. Os pesos do
+    // questionário ficam em FC.PERFIL, versionados.
+    perfil: {
+      alocacao: {
+        conservador: { renda_fixa: [85, 95], fiis: [0, 5], acoes: [0, 10], cripto: [0, 0] },
+        moderado: { renda_fixa: [60, 70], fiis: [10, 15], acoes: [15, 25], cripto: [0, 3] },
+        arrojado: { renda_fixa: [40, 50], fiis: [10, 20], acoes: [25, 35], cripto: [3, 7] },
+      },
+      // nota mínima nas quatro lentes para virar candidato
+      score_minimo: { conservador: 70, moderado: 60, arrojado: 55 },
+      // peso máximo de um ativo na carteira (% do investido)
+      peso_max_ativo: { conservador: 5, moderado: 8, arrojado: 10 },
+      // liquidez diária mínima (R$) quando o ativo tem a medida
+      liquidez_minima: { conservador: 1000000, moderado: 500000, arrojado: 100000 },
+      // quanto da sobra mensal informada vira aporte sugerido
+      fator_aporte: { conservador: 0.5, moderado: 0.7, arrojado: 0.85 },
+    },
   };
 
   // ------------------------------------------------------------------ renda
@@ -272,6 +291,227 @@
     return o;
   };
   FC.infoTitulo = (prefs, id) => ((((prefs || {}).premissas) || {}).titulos || {})[id] || {};
+
+  // ------------------------------------------------------------------ perfil do investidor
+  // Questionário em quatro blocos, cada um alimenta um eixo e é pontuado
+  // sozinho: capacidade (blocos 1 e 2), necessidade (bloco 3, calculada) e
+  // tolerância (bloco 4). O perfil final é o MENOR entre tolerância e
+  // capacidade, nunca a média. Mudou algum ponto ou teto? Suba `versao`:
+  // cada avaliação guardada diz com qual versão foi calculada, e o banco
+  // recalcula com a mesma tabela (supabase/schema.sql, gerada por
+  // scripts/gera-perfil-sql.js).
+  //   c = pontos de capacidade · t = pontos de tolerância
+  //   v = valor de referência (R$, meses ou anos) · nd = "prefiro não dizer"
+  const ND = { id: "nd", rotulo: "Prefiro não dizer", nd: true };
+  FC.PERFIL = {
+    versao: "perfil-v1",
+    meses_validade: 24,       // depois disso o perfil está vencido
+    meses_revisao: 12,        // revisão sugerida
+    max_adiamentos: 3,        // convite a contas antigas
+    taxa_sobra_cheia: 0.30,   // poupar 30% da renda vale os pontos todos
+    neutro: 0.4,              // sem resposta: 40% dos pontos do item
+    faixas: [
+      { chave: "conservador", nome: "Conservador", de: 0, ate: 34 },
+      { chave: "moderado", nome: "Moderado", de: 35, ate: 64 },
+      { chave: "arrojado", nome: "Arrojado", de: 65, ate: 100 },
+    ],
+    // tetos que nenhuma resposta compensa
+    tetos: {
+      divida_cara: 20,        // o plano começa por quitar
+      reserva_curta: 30,      // menos de 3 meses: o plano começa pela reserva
+      prazo_curto: 25,        // objetivo em menos de 2 anos
+      saque_provavel: 40,     // pode precisar do dinheiro antes
+    },
+    agro_alto: { limite_pct: 50, desconto: 15 },   // agro acima disso reduz a capacidade
+    // duas ideias do bloco 4 perguntadas de dois jeitos: se divergem 2 degraus ou mais, "baixa consistência"
+    espelhos: [["t_queda", "t_clima"], ["t_certo", "t_carteiras"]],
+    degraus_contradicao: 2,
+    // conhecimento limita produtos, não o perfil: teto de peso (%) por classe
+    conhecimento: {
+      nenhum: { acoes: 10, fiis: 5, cripto: 0 },
+      basico: { acoes: 25, fiis: 20, cripto: 3 },
+      experiente: { acoes: 100, fiis: 100, cripto: 100 },
+    },
+    estudar_peso_max: 2,      // % máximo de ativo "para estudar"
+    cripto_grandes: ["BTC", "ETH", "BNB", "SOL"],
+    // meses de custo da reserva, por estabilidade da renda
+    reserva_meses: { estavel: 6, clt: 6, variavel: 12, sem_renda: 12, nd: 6 },
+    // prêmio real (p.p.) de cada classe sobre a renda fixa real, para o retorno de referência
+    premios: { renda_fixa: 0, fiis: 2.5, acoes: 4, cripto: 6 },
+    retorno_real_padrao: 4,   // % a.a. real da renda fixa sem CDI e IPCA do mercado
+    blocos: [
+      { id: "sobre", n: 1, nome: "Sobre você", eixo: "Capacidade",
+        porque: "Idade, estabilidade da renda e dependentes mostram quanta folga você tem para se recuperar de uma perda." },
+      { id: "dinheiro", n: 2, nome: "Seu dinheiro hoje", eixo: "Capacidade",
+        porque: "Renda, sobra e reserva dizem quanto você pode perder sem mexer na sua vida. Usamos faixas: não precisa do valor exato." },
+      { id: "objetivo", n: 3, nome: "Objetivo e prazo", eixo: "Necessidade",
+        porque: "O que você quer alcançar e em quanto tempo define o retorno que o plano precisa entregar." },
+      { id: "reacao", n: 4, nome: "Experiência e reação", eixo: "Tolerância",
+        porque: "Não há resposta certa: mede como você se sente diante de risco, que é diferente do quanto você pode perder." },
+    ],
+    // essencial: sem ela o perfil não sai. As outras podem ficar para o checklist.
+    perguntas: [
+      // ---------- 1. sobre você
+      { id: "idade", bloco: "sobre", essencial: true, texto: "Quantos anos você tem?",
+        porque: "Quanto mais jovem, mais tempo para se recuperar de uma queda.",
+        opcoes: [
+          { id: "ate_30", rotulo: "Até 30 anos", c: 15 }, { id: "31_40", rotulo: "31 a 40", c: 13 }, { id: "41_50", rotulo: "41 a 50", c: 10 },
+          { id: "51_60", rotulo: "51 a 60", c: 6 }, { id: "61_mais", rotulo: "Mais de 60", c: 3 },
+        ] },
+      { id: "estab", bloco: "sobre", essencial: true, texto: "Como é a sua renda?",
+        porque: "Renda estável aguenta mais oscilação do que renda que muda de mês a mês.",
+        opcoes: [
+          { id: "estavel", rotulo: "Estável: servidor público ou aposentadoria", c: 20, v: "estavel" },
+          { id: "clt", rotulo: "Salário fixo com carteira assinada", c: 15, v: "clt" },
+          { id: "variavel", rotulo: "Varia: autônomo, comissão, empresário", c: 8, v: "variavel" },
+          { id: "sem_renda", rotulo: "No momento, sem renda", c: 0, v: "sem_renda" },
+          { ...ND, c: 8, v: "nd" },
+        ] },
+      { id: "dependentes", bloco: "sobre", essencial: false, texto: "Quantas pessoas dependem da sua renda?",
+        porque: "Mais dependentes pedem mais folga no seu orçamento.",
+        opcoes: [
+          { id: "0", rotulo: "Só eu", c: 10 }, { id: "1", rotulo: "1 pessoa", c: 7 }, { id: "2", rotulo: "2 pessoas", c: 4 }, { id: "3_mais", rotulo: "3 ou mais", c: 2 },
+        ] },
+      // ---------- 2. seu dinheiro hoje
+      { id: "renda", bloco: "dinheiro", essencial: true, dinheiro: true, texto: "Quanto você recebe por mês, já com os descontos?",
+        porque: "Com a renda e a sobra, calculamos quanto do que entra você consegue guardar. Guardamos só a faixa, nunca o valor exato.",
+        opcoes: [
+          { id: "ate_3k", rotulo: "Até R$ 3 mil", v: 2000 }, { id: "3_5k", rotulo: "R$ 3 a 5 mil", v: 4000 }, { id: "5_8k", rotulo: "R$ 5 a 8 mil", v: 6500 },
+          { id: "8_15k", rotulo: "R$ 8 a 15 mil", v: 11500 }, { id: "15_30k", rotulo: "R$ 15 a 30 mil", v: 22500 }, { id: "30k_mais", rotulo: "Mais de R$ 30 mil", v: 40000 }, ND,
+        ] },
+      { id: "sobra", bloco: "dinheiro", essencial: true, dinheiro: true, texto: "Quanto costuma sobrar por mês?",
+        porque: "É daqui que sai o aporte sugerido. Sem isso o plano não consegue dizer quanto guardar.",
+        opcoes: [
+          { id: "nada", rotulo: "Nada ou fico no vermelho", v: 0 }, { id: "ate_500", rotulo: "Até R$ 500", v: 250 }, { id: "500_1500", rotulo: "R$ 500 a 1.500", v: 1000 },
+          { id: "1500_3000", rotulo: "R$ 1.500 a 3 mil", v: 2250 }, { id: "3000_6000", rotulo: "R$ 3 a 6 mil", v: 4500 }, { id: "6000_mais", rotulo: "Mais de R$ 6 mil", v: 8000 }, ND,
+        ] },
+      { id: "reserva", bloco: "dinheiro", essencial: true, dinheiro: true, texto: "Quantos meses do seu custo de vida você tem guardados, de fácil resgate?",
+        porque: "A reserva de emergência é o primeiro passo: sem ela, qualquer imprevisto força a vender investimento na hora errada.",
+        opcoes: [
+          { id: "nenhuma", rotulo: "Nenhum", c: 0, v: 0 }, { id: "menos_3", rotulo: "Menos de 3 meses", c: 1, v: 1.5 }, { id: "3_6", rotulo: "3 a 6 meses", c: 3, v: 4.5 },
+          { id: "6_12", rotulo: "6 a 12 meses", c: 4, v: 9 }, { id: "12_mais", rotulo: "Mais de 12 meses", c: 5, v: 12 }, { ...ND, c: 1, v: null },
+        ] },
+      { id: "divida", bloco: "dinheiro", essencial: true, texto: "Você tem dívida cara em aberto, como cartão rotativo ou cheque especial?",
+        porque: "Nenhum investimento rende mais do que o juro do rotativo. Com dívida cara, o plano começa por quitar.",
+        opcoes: [{ id: "nao", rotulo: "Não" }, { id: "sim", rotulo: "Sim" }] },
+      { id: "patrimonio", bloco: "dinheiro", essencial: false, dinheiro: true, texto: "Quanto você já tem investido, somando tudo?",
+        porque: "Quanto maior o patrimônio, menor o peso de uma queda na sua vida.",
+        opcoes: [
+          { id: "nada", rotulo: "Ainda nada", c: 0, v: 0 }, { id: "ate_10k", rotulo: "Até R$ 10 mil", c: 4, v: 5000 }, { id: "10_50k", rotulo: "R$ 10 a 50 mil", c: 8, v: 30000 },
+          { id: "50_200k", rotulo: "R$ 50 a 200 mil", c: 12, v: 125000 }, { id: "200k_1m", rotulo: "R$ 200 mil a 1 milhão", c: 17, v: 600000 },
+          { id: "1m_mais", rotulo: "Mais de R$ 1 milhão", c: 20, v: 1500000 }, { ...ND, c: 8, v: null },
+        ] },
+      { id: "moradia", bloco: "dinheiro", essencial: false, texto: "Como é a sua moradia?",
+        porque: "Casa própria quitada reduz o seu custo fixo e aumenta a folga.",
+        opcoes: [
+          { id: "propria", rotulo: "Própria", c: 5 }, { id: "familia", rotulo: "Cedida ou com a família", c: 4 }, { id: "aluguel", rotulo: "Aluguel ou financiada", c: 2 },
+        ] },
+      // ---------- 3. objetivo e prazo
+      { id: "objetivo", bloco: "objetivo", essencial: true, texto: "Qual é o seu objetivo principal com o dinheiro?",
+        porque: "O objetivo decide para que serve a carteira: segurança, renda ou crescimento.",
+        opcoes: [
+          { id: "reserva", rotulo: "Montar uma reserva" }, { id: "imovel", rotulo: "Comprar um imóvel" }, { id: "aposentadoria", rotulo: "Aposentadoria ou independência" },
+          { id: "renda_passiva", rotulo: "Viver de renda passiva" }, { id: "crescer", rotulo: "Fazer o patrimônio crescer" }, { id: "educacao", rotulo: "Educação ou um grande projeto" },
+        ] },
+      { id: "valor_alvo", bloco: "objetivo", essencial: false, dinheiro: true, texto: "Quanto você quer juntar para esse objetivo?",
+        porque: "Com o valor, o prazo e o que você guarda, calculamos o retorno que o objetivo exige.",
+        opcoes: [
+          { id: "ate_50k", rotulo: "Até R$ 50 mil", v: 30000 }, { id: "50_200k", rotulo: "R$ 50 a 200 mil", v: 125000 }, { id: "200_500k", rotulo: "R$ 200 a 500 mil", v: 350000 },
+          { id: "500k_1m", rotulo: "R$ 500 mil a 1 milhão", v: 750000 }, { id: "1m_3m", rotulo: "R$ 1 a 3 milhões", v: 2000000 }, { id: "3m_mais", rotulo: "Mais de R$ 3 milhões", v: 5000000 }, ND,
+        ] },
+      { id: "prazo", bloco: "objetivo", essencial: true, texto: "Em quanto tempo você quer chegar lá?",
+        porque: "Prazo curto não combina com risco alto: uma queda pode não dar tempo de voltar.",
+        opcoes: [
+          { id: "menos_2", rotulo: "Em menos de 2 anos", v: 1 }, { id: "2_5", rotulo: "De 2 a 5 anos", v: 3.5 }, { id: "5_10", rotulo: "De 5 a 10 anos", v: 7.5 },
+          { id: "10_20", rotulo: "De 10 a 20 anos", v: 15 }, { id: "20_mais", rotulo: "Mais de 20 anos", v: 25 },
+        ] },
+      { id: "saque", bloco: "objetivo", essencial: false, texto: "Qual a chance de você precisar desse dinheiro antes do prazo?",
+        porque: "Quem pode precisar do dinheiro antes não deve deixá-lo em algo que pode estar em queda.",
+        opcoes: [{ id: "nao", rotulo: "Baixa" }, { id: "talvez", rotulo: "Média" }, { id: "provavel", rotulo: "Alta" }] },
+      // ---------- 4. experiência e reação
+      { id: "tempo", bloco: "reacao", essencial: true, texto: "Há quanto tempo você investe?",
+        porque: "Experiência com altos e baixos muda como as pessoas reagem na prática.",
+        opcoes: [
+          { id: "nunca", rotulo: "Ainda não invisto", k: 0 }, { id: "menos_1", rotulo: "Menos de 1 ano", k: 1 }, { id: "1_3", rotulo: "1 a 3 anos", k: 2 },
+          { id: "3_5", rotulo: "3 a 5 anos", k: 3 }, { id: "5_mais", rotulo: "Mais de 5 anos", k: 4 },
+        ] },
+      { id: "produtos", bloco: "reacao", essencial: false, multipla: true, texto: "Quais destes você já usou?",
+        porque: "Quem nunca investiu em renda variável vê esses produtos só como “para estudar”, com peso limitado.",
+        opcoes: [
+          { id: "poupanca", rotulo: "Poupança" }, { id: "renda_fixa", rotulo: "CDB, Tesouro ou outra renda fixa" }, { id: "fundos", rotulo: "Fundos" },
+          { id: "acoes", rotulo: "Ações ou ETFs", rv: true }, { id: "fii", rotulo: "Fundos imobiliários", rv: true }, { id: "cripto", rotulo: "Criptomoedas", rv: true },
+        ] },
+      { id: "t_queda", bloco: "reacao", essencial: true, texto: "Seu investimento perde 20% em três meses. O que você faz?",
+        porque: "Uma das perguntas que medem a sua reação a quedas.",
+        opcoes: [
+          { id: "vende", rotulo: "Vendo tudo para não perder mais", t: 0 }, { id: "parte", rotulo: "Vendo uma parte", t: 1 },
+          { id: "mantem", rotulo: "Mantenho e espero", t: 2 }, { id: "aporta", rotulo: "Aporto mais, ficou mais barato", t: 3 },
+        ] },
+      { id: "t_certo", bloco: "reacao", essencial: true, texto: "Qual você prefere: R$ 1.000 garantidos ou 50% de chance de ganhar R$ 2.500 (e 50% de não ganhar nada)?",
+        porque: "Compara a certeza com o ganho maior e incerto.",
+        opcoes: [
+          { id: "certo", rotulo: "Os R$ 1.000 garantidos", t: 0 }, { id: "quase_certo", rotulo: "Garantidos, mas pensei na aposta", t: 1 },
+          { id: "quase_risco", rotulo: "A aposta, com algum receio", t: 2 }, { id: "risco", rotulo: "A aposta, sem hesitar", t: 3 },
+        ] },
+      { id: "amigo", bloco: "reacao", essencial: true, texto: "Como um amigo próximo descreveria você diante de risco?",
+        porque: "O olhar de fora costuma ser mais honesto que o nosso.",
+        opcoes: [
+          { id: "cauteloso", rotulo: "Muito cauteloso", t: 0 }, { id: "prudente", rotulo: "Prudente", t: 1 },
+          { id: "equilibrado", rotulo: "Equilibrado", t: 2 }, { id: "ousado", rotulo: "Ousado", t: 3 },
+        ] },
+      { id: "t_perda", bloco: "reacao", essencial: true, texto: "Qual a maior perda, em um ano, que você aceitaria na sua carteira para ter chance de ganhar mais?",
+        porque: "Coloca um número no seu limite.",
+        opcoes: [
+          { id: "zero", rotulo: "Nenhuma", t: 0 }, { id: "5", rotulo: "Até 5%", t: 1 }, { id: "10", rotulo: "Até 10%", t: 2 },
+          { id: "20", rotulo: "Até 20%", t: 3 }, { id: "30", rotulo: "30% ou mais", t: 4 },
+        ] },
+      { id: "t_clima", bloco: "reacao", essencial: true, texto: "O mercado cai forte e só se fala em crise. Como você se sente?",
+        porque: "A mesma ideia da pergunta de queda, perguntada de outro jeito, para conferir a consistência.",
+        opcoes: [
+          { id: "angustia", rotulo: "Muita angústia, quero sair", t: 0 }, { id: "preocupa", rotulo: "Preocupado, mas aguento", t: 1 },
+          { id: "neutro", rotulo: "Tranquilo, é parte do jogo", t: 2 }, { id: "oportunidade", rotulo: "Vejo oportunidade", t: 3 },
+        ] },
+      { id: "t_carteiras", bloco: "reacao", essencial: true, texto: "Entre duas carteiras, qual você escolheria? A rende 6% ao ano sem oscilar. B pode render 14% ou perder 8%.",
+        porque: "Compara estabilidade com possibilidade de ganho, em números.",
+        opcoes: [
+          { id: "a", rotulo: "A, com certeza", t: 0 }, { id: "mais_a", rotulo: "A, mas tenho curiosidade pela B", t: 1 },
+          { id: "mais_b", rotulo: "B, com algum receio", t: 2 }, { id: "b", rotulo: "B, sem dúvida", t: 3 },
+        ] },
+      { id: "t_foco", bloco: "reacao", essencial: true, texto: "O que pesa mais para você numa carteira?",
+        porque: "Mostra se a prioridade é proteger o que existe ou fazer crescer.",
+        opcoes: [
+          { id: "preservar", rotulo: "Não perder o que já tenho", t: 0 }, { id: "mais_preservar", rotulo: "Proteger, mas com algum ganho", t: 1 },
+          { id: "equilibrar", rotulo: "Equilibrar ganho e proteção", t: 2 }, { id: "crescer", rotulo: "Fazer crescer, aceitando oscilar", t: 3 },
+        ] },
+    ],
+    // por que cada recomendação existe: o Relatório monta o texto pelo id da regra
+    regras: {
+      "plano.divida_cara": "Você declarou dívida cara em aberto. Nenhum investimento rende mais que o juro do rotativo, então o plano começa por quitá-la.",
+      "plano.reserva_6": "Renda estável pede reserva de 6 meses de custo de vida, em renda fixa pós-fixada com liquidez diária.",
+      "plano.reserva_12": "Renda variável ou autônoma pede reserva de 12 meses de custo de vida, em renda fixa pós-fixada com liquidez diária.",
+      "plano.reserva_ok": "Sua reserva já cobre os meses recomendados para o seu tipo de renda.",
+      "plano.objetivo_curto": "Objetivo em menos de 2 anos fica em renda fixa com vencimento casado ao prazo, fora da carteira de risco.",
+      "plano.longo_prazo": "O que sobra depois da reserva segue a alocação do seu perfil.",
+      "plano.aporte": "Aporte sugerido: a sobra mensal que você informou vezes o fator do perfil {perfil} ({fator}).",
+      "alocacao.faixa_perfil": "Perfil {perfil}: faixas de alocação do seu perfil, com o ponto dentro da faixa dado pelo seu score ({score}).",
+      "alocacao.teto_conhecimento": "{classe} limitada a {teto}% porque você ainda tem pouca experiência com renda variável.",
+      "alocacao.modulo_desligado": "{classe} fica de fora porque o módulo está desligado em Ajustes.",
+      "alocacao.hierarquia": "Renda fixa sempre a maior fatia, ações no meio e cripto a menor.",
+      "alocacao.cripto_perfil": "Cripto limitada a {teto}%: perfil {perfil}.",
+      "teto.divida_cara": "Capacidade limitada a {limite}: dívida cara em aberto.",
+      "teto.reserva_curta": "Capacidade limitada a {limite}: reserva menor que 3 meses.",
+      "teto.prazo_curto": "Capacidade limitada a {limite}: objetivo em menos de 2 anos.",
+      "teto.saque_provavel": "Capacidade limitada a {limite}: chance alta de precisar do dinheiro antes do prazo.",
+      "desconto.agro_alto": "Capacidade reduzida em {pontos} pontos: o agro passa de 50% do patrimônio.",
+      "candidato.filtros": "Passa nos quatro filtros do perfil {perfil}: classe permitida, score mínimo, risco e concentração.",
+      "conflito.meta_acima_perfil": "A sua meta pede mais risco do que cabe no seu perfil.",
+      "conflito.meta_folgada": "Dá para chegar lá com menos risco.",
+      "conflito.tolerancia_acima_capacidade": "O limite é a sua situação financeira, não a coragem.",
+      "conflito.baixa_consistencia": "Respostas parecidas se contradisseram: o resultado fica marcado como baixa consistência.",
+      "conflito.carteira_acima_perfil": "A carteira real é mais arriscada do que o perfil declarado.",
+      "conflito.vendas_em_queda": "Houve vendas em quedas fortes, o que contradiz a tolerância declarada.",
+    },
+  };
 
   // ------------------------------------------------------------------ agro
   FC.CATEGORIAS_GADO = {

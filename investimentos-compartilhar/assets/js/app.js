@@ -20,6 +20,7 @@
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
     { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
     { id: "retrospectiva", nome: "Retrospectiva", icone: "play", oculta: true },
+    { id: "perfil", nome: "Perfil do investidor", icone: "bussola", oculta: true },
     { id: "admin", nome: "Administração", icone: "escudo", oculta: true },
   ];
   FC.ROTAS = ROTAS;
@@ -497,6 +498,14 @@
           </div>
           <span class="chevron">${icone("chevron", 18)}</span>
         </button>` : ""}
+        <a class="item clicavel" href="#/perfil" id="menu-perfil" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("bussola", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Perfil do investidor</div>
+            <div class="detalhe">Seu perfil, o plano e o relatório</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>
         <a class="item clicavel" href="#/ajustes" id="menu-ajustes" style="color:inherit;text-decoration:none">
           <span style="color:var(--acento)">${icone("ajustes", 20)}</span>
           <div class="principal">
@@ -540,6 +549,7 @@
       });
     }
     FC.$("#menu-ajustes", f.el).addEventListener("click", () => f.fechar());
+    FC.$("#menu-perfil", f.el).addEventListener("click", () => f.fechar());
     if (FC.$("#menu-admin", f.el)) FC.$("#menu-admin", f.el).addEventListener("click", () => f.fechar());
     FC.$("#menu-sair", f.el).addEventListener("click", async () => {
       f.fechar();
@@ -585,7 +595,7 @@
   }
 
   function abreMais() {
-    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva" && x.id !== "admin");
+    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva" && x.id !== "perfil" && x.id !== "admin");
     const f = FC.ui.folha({
       titulo: "Mais",
       corpo: html`<div class="lista">
@@ -611,7 +621,8 @@
     FC.local.apagar("ultimo-cache-base");
     FC.local.apagar("ultimo-cache-mercado");
     document.body.classList.remove("carregando-dados");
-    estado.base = null; estado.dados = null;
+    estado.base = null; estado.dados = null; estado.perfil = null;
+    FC.local.apagar("perfil-venceu-sessao");
     clearInterval(relogio);
     FC.mercado.limpaCacheLocal();
     location.hash = "";
@@ -755,7 +766,11 @@
 
     // primeiro acesso da conta: a apresentação por passos
     FC.uso.inicia();
-    if (FC.onboarding.precisa()) FC.onboarding.abre();
+    // o questionário de perfil é o onboarding: conta nova vai direto para ele
+    // (sem carrossel). Sem as tabelas no banco, cai na apresentação por passos.
+    let abriuPerfil = false;
+    try { abriuPerfil = await FC.perfilFluxo.inicia(); } catch (e) { console.error(e); }
+    if (!abriuPerfil && FC.onboarding.precisa() && !(estado.perfil && !estado.perfil.indisponivel)) FC.onboarding.abre();
     // pede a coleta anônima depois do onboarding, nunca por cima dele
     else setTimeout(() => FC.uso.pedeConsentimento(), 2500);
     FC.carregaMercado(false);

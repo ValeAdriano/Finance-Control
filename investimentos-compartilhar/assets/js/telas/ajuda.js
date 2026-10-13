@@ -7,6 +7,16 @@
 
   // cada guia: resumo, partes da tela [ícone, nome, o que faz] e dicas
   const GUIAS = {
+    perfil: {
+      resumo: "O seu perfil de investidor, medido em três eixos, e o plano que sai dele: reserva, aporte mensal, alocação por classe e uma lista de verificação de ativos.",
+      partes: [
+        ["bussola", "Três eixos", "Tolerância é o que você aguenta sentir; capacidade, o que pode perder; necessidade, o retorno que o objetivo exige. O perfil é o menor entre tolerância e capacidade."],
+        ["check", "Plano em passos", "Dívida cara primeiro, depois a reserva de emergência, objetivos curtos e o longo prazo pelo perfil."],
+        ["ativos", "Alocação e filtros", "A alocação-alvo por classe e os ativos que passam nos quatro filtros do perfil. Aplicar plano grava as metas, mostrando antes e depois."],
+        ["recibo", "Relatório", "O porquê de cada recomendação, com histórico das avaliações. Exporta em PDF."],
+      ],
+      dicas: ["Revise a cada 12 meses ou quando a renda mudar; com 24 meses o perfil vence.", "As faixas de alocação se editam em Ajustes → Critérios → Regras de avaliação → faixas avançadas (chave perfil)."],
+    },
     inicio: {
       resumo: "O retrato do seu dinheiro hoje: quanto você tem, quanto colocou, quanto ganhou e o que pede atenção.",
       partes: [

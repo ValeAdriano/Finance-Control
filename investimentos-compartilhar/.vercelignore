@@ -4,3 +4,5 @@ supabase
 .env
 .env.example
 *.md
+tests
+scripts

@@ -45,10 +45,57 @@ e 1 h no navegador) → scores e gráficos são recalculados no navegador.
 | `agro_pesagens` | peso médio por lote e categoria (vira valor e GMD) |
 | `patrimonio_historico` | uma foto por dia: total, cada classe e cada ativo (quantidade × preço) |
 | `log_sistema` | atualizações de preço, registros diários e erros |
+| `perfil_rascunho` | respostas parciais do questionário, para retomar |
+| `perfil_investidor` | cada avaliação de perfil (só INSERT/SELECT: histórico imutável) |
+| `plano_investimento` | o plano gerado e a decisão (aplicado, recusado, pendente) |
+| `onboarding_eventos` | funil do onboarding: só nome do passo e tempo |
 | `mercado_cache` | cotações públicas; só a Edge Function acessa |
 
 Todas as tabelas do usuário têm `user_id default auth.uid()` e a política
 `user_id = auth.uid()`: cada conta só enxerga as próprias linhas.
+
+## Perfil do investidor e plano
+
+Questionário de ~20 perguntas (uma por tela, em faixas) que mede três eixos
+separados e vira um plano. Tudo roda no navegador, sem LLM, e é versionado.
+
+- **Tolerância** (0 a 100): bloco 4, escrito do zero na estrutura de Grable & Lytton.
+- **Capacidade** (0 a 100): blocos 1 e 2, com tetos que nenhuma resposta compensa
+  (dívida cara ≤ 20, reserva < 3 meses ≤ 30, prazo < 2 anos ≤ 25, saque provável ≤ 40).
+- **Necessidade**: o retorno real anual que o objetivo exige, por bisseção. É conta, não pergunta.
+- **Perfil** = faixa de `min(tolerância, capacidade)`: 0–34 conservador, 35–64 moderado, 65–100 arrojado.
+
+Plano em cascata: dívida cara → reserva (6 ou 12 meses) → objetivos curtos →
+longo prazo; alocação por classe (renda fixa > ações > cripto, faixas em
+Ajustes → Critérios → faixas avançadas, chave `perfil`); candidatos que passam
+nos filtros do perfil. **Aplicar plano** grava `preferencias.alocacao_alvo`.
+
+| arquivo | papel |
+|---|---|
+| `padroes.js` → `FC.PERFIL`, `PADRAO_REGRAS.perfil` | perguntas, pontos, tetos, faixas, filtros (versão `perfil-v1`) |
+| `modelo/perfil.js` | T, C, N, score, consistência, revisão |
+| `modelo/recomendacao.js` | plano, alocação, candidatos, conflitos, plano contra realidade |
+| `telas/perfil-*.js` | questionário, resultado e relatório (`#/perfil`) |
+
+**Modo de recomendação.** `educativo` (padrão): classes e filtros, sem verbo de
+compra. `completo`: só para contas listadas em `contas_modo_completo` (não
+exposta pela API; veja o comentário no schema). Recomendar ativos individuais a
+terceiros é atividade de consultor registrado na CVM: mantenha o cadastro
+fechado ou o modo educativo, e consulte um advogado de mercado de capitais.
+
+**Banco.** `privado.perfil_confere()` (gatilho) recalcula T, C, score e
+consistência a partir das respostas e recusa perfil adulterado. Ela é gerada
+das mesmas tabelas de `padroes.js`: mexeu nos pontos? Suba `FC.PERFIL.versao` e rode
+
+```
+node scripts/gera-perfil-sql.js --escreve   # atualiza supabase/schema.sql
+node tests/perfil.test.js                   # 20 personas + teste de propriedade
+node scripts/gera-perfil-sql.js --confere   # schema em dia com padroes.js
+PERFIL_PG="-h 127.0.0.1 -p 5432 -U postgres" node tests/perfil-sql.test.js   # banco = navegador
+```
+
+O funil do onboarding (só contagens, via `admin_funil_onboarding`) aparece em
+Administração → Onboarding.
 
 ## Segurança
 

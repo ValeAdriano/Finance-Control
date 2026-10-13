@@ -151,6 +151,70 @@
     },
   };
 
+  // ------------------------------------------------------------------ perfil do investidor
+  // Tudo opcional: se as tabelas ainda não existem no banco (schema não
+  // aplicado), carrega() devolve { indisponivel: true } e o app segue sem perfil.
+  FC.perfilDb = {
+    async carrega() {
+      try {
+        const uid = FC.auth.usuario.id;
+        const [atual, rascunho, adiados, modo, ativou] = await Promise.all([
+          sb.from("perfil_atual").select("*").maybeSingle().then(checa),
+          sb.from("perfil_rascunho").select("*").maybeSingle().then(checa),
+          sb.from("onboarding_eventos").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("evento", "adiado").then((r) => { if (r.error) throw r.error; return r.count || 0; }),
+          sb.rpc("modo_recomendacao").then((r) => (r.error ? "educativo" : r.data || "educativo")),
+          sb.from("onboarding_eventos").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("evento", "ativacao").then((r) => (r.error ? 0 : r.count || 0)),
+        ]);
+        let plano = null;
+        if (atual) {
+          plano = checa(await sb.from("plano_investimento").select("*").eq("perfil_id", atual.id).order("criado_em", { ascending: false }).limit(1).maybeSingle());
+        }
+        return { atual: atual ? { ...atual, necessidade: num(atual.necessidade) } : null, rascunho, plano, adiamentos: adiados, modo, ativou: ativou > 0 };
+      } catch (e) {
+        console.warn("perfil indisponível:", e.message || e);
+        return { indisponivel: true, atual: null, rascunho: null, plano: null, adiamentos: 0, modo: "educativo", ativou: false };
+      }
+    },
+    async salvaRascunho(respostas, passo) {
+      return checa(await sb.from("perfil_rascunho").upsert({ user_id: FC.auth.usuario.id, versao_modelo: FC.PERFIL.versao, respostas, passo, atualizado_em: new Date().toISOString() }).select().single());
+    },
+    async apagaRascunho() { try { await sb.from("perfil_rascunho").delete().eq("user_id", FC.auth.usuario.id); } catch (e) { /* segue */ } },
+    // o banco recalcula T, C e score: valor adulterado é recusado
+    async conclui({ respostas, calculo, origem, necessidade }) {
+      return checa(await sb.from("perfil_investidor").insert({
+        versao_modelo: calculo.versao, origem, respostas, tolerancia: calculo.tolerancia, capacidade: calculo.capacidade,
+        necessidade: necessidade == null || !Number.isFinite(necessidade) ? null : Math.round(necessidade * 1e4) / 1e4,
+        score: calculo.score, perfil: calculo.perfil, consistencia: calculo.consistencia,
+      }).select().single());
+    },
+    async salvaPlano({ perfilId, plano, modo }) {
+      return checa(await sb.from("plano_investimento").insert({ perfil_id: perfilId, versao_modelo: FC.PERFIL.versao, modo, plano }).select().single());
+    },
+    async decide(id, decisao, antes, depois) {
+      return checa(await sb.from("plano_investimento").update({ decisao, metas_antes: antes || null, metas_depois: depois || null, decidido_em: new Date().toISOString() }).eq("id", id).select().single());
+    },
+    async historico() {
+      return checa(await sb.from("perfil_investidor").select("*").order("criado_em", { ascending: false }).limit(50));
+    },
+    async planos() {
+      return checa(await sb.from("plano_investimento").select("id,perfil_id,modo,decisao,criado_em,decidido_em,metas_antes,metas_depois").order("criado_em", { ascending: false }).limit(50));
+    },
+    // só o nome do passo e o tempo: nunca valor financeiro
+    async evento(evento, passo = null, duracaoMs = null) {
+      try {
+        await sb.from("onboarding_eventos").insert({ user_id: FC.auth.usuario.id, evento, passo: passo ? String(passo).slice(0, 40) : null,
+          duracao_ms: duracaoMs == null ? null : Math.max(0, Math.min(86400000, Math.round(duracaoMs))) });
+      } catch (e) { /* telemetria não trava o app */ }
+    },
+    async funil(dias = 90) { return checa(await sb.rpc("admin_funil_onboarding", { dias })); },
+    // direito do titular: perfil, planos e histórico em JSON
+    async exporta() {
+      const [perfis, planos, rascunho] = await Promise.all([FC.perfilDb.historico(), FC.perfilDb.planos(),
+        sb.from("perfil_rascunho").select("*").maybeSingle().then(checa)]);
+      return { perfis, planos, rascunho };
+    },
+  };
+
   // ------------------------------------------------------------------ mercado
   // Cache em memória + no navegador: dado público de mercado, guardado só
   // para a próxima abertura ser instantânea. A fonte da verdade é a Edge
