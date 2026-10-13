@@ -120,11 +120,20 @@
       estado.erroMercado = null;
       await gravaRegistroDoDia();
       FC.carregaProventos(forcar);
+      if (estado.base) FC.local.gravar("ultimo-cache-base", estado.base);
+      FC.local.gravar("ultimo-cache-mercado", {
+        universo: estado.mercado.universo,
+        spot: estado.mercado.spot,
+      });
     } catch (e) {
       estado.erroMercado = e.message || String(e);
       console.error(e);
     } finally {
       estado.carregandoMercado = false;
+      if (estado.carregandoInicial) {
+        estado.carregandoInicial = false;
+        document.body.classList.remove("carregando-dados");
+      }
       atualizaBotaoAtualizar();
       FC.rerender({ suave: true });
     }
@@ -599,6 +608,9 @@
     estado.admin = false;
     await FC.auth.sair();
     FC.local.apagar("ultimo-uso");
+    FC.local.apagar("ultimo-cache-base");
+    FC.local.apagar("ultimo-cache-mercado");
+    document.body.classList.remove("carregando-dados");
     estado.base = null; estado.dados = null;
     clearInterval(relogio);
     FC.mercado.limpaCacheLocal();
@@ -671,6 +683,9 @@
     estado.base = null; estado.dados = null;
     clearInterval(relogio);
     FC.local.apagar(CHAVE_USO);
+    FC.local.apagar("ultimo-cache-base");
+    FC.local.apagar("ultimo-cache-mercado");
+    document.body.classList.remove("carregando-dados");
     FC.mercado.limpaCacheLocal();
     location.hash = "";
     FC.telas.login(FC.$("#raiz"), { aviso: "Sua sessão foi encerrada depois de 7 dias sem uso. Entre de novo." });
@@ -687,21 +702,57 @@
   // ---------------------------------------------------------------- início
   FC.entrarNoApp = async function () {
     const r = FC.$("#raiz");
-    r.innerHTML = '<div class="carregando-tela"><div class="roda"></div><span>Abrindo seus dados…</span></div>';
+    document.body.classList.add("carregando-dados");
+    estado.carregandoInicial = true;
+
+    // Se temos o cache local da última sessão, montamos a casca imediatamente com os valores em blur
+    const cacheBase = FC.local.ler("ultimo-cache-base", null);
+    const cacheMercado = FC.local.ler("ultimo-cache-mercado", null);
+    if (cacheBase) {
+      estado.base = cacheBase;
+      estado.prefs = FC.montaPrefs(cacheBase.prefsBrutas || {});
+      estado.prefs.modulos = FC.resolveModulos((cacheBase.prefsBrutas || {}).modulos, estado.base);
+      if (cacheMercado) {
+        estado.mercado = { ...estado.mercado, ...cacheMercado };
+        if (estado.mercado.indices && typeof estado.mercado.indices.fator !== "function") {
+          estado.mercado.indices = null;
+        }
+      }
+      try {
+        FC.recalcula();
+        casca();
+        await FC.rerender({ semAnimacao: true });
+      } catch (errRecalc) {
+        console.warn("Aviso ao inicializar cache local:", errRecalc);
+      }
+    } else {
+      r.innerHTML = '<div class="carregando-tela"><div class="roda"></div><span>Abrindo seus dados…</span></div>';
+    }
+
     try {
       const s = await FC.auth.sessao();
       FC.auth.usuario = s.user;
       FC.marcaUso();
       // o painel de admin só aparece para quem o banco reconhece
-      const [, adm] = await Promise.all([FC.recarregaBase(), FC.sb.rpc("eh_admin").then((r) => !r.error && r.data === true, () => false)]);
+      const [, adm] = await Promise.all([FC.recarregaBase(), FC.sb.rpc("eh_admin").then((res) => !res.error && res.data === true, () => false)]);
       estado.admin = adm;
+      if (estado.base) FC.local.gravar("ultimo-cache-base", estado.base);
     } catch (e) {
+      document.body.classList.remove("carregando-dados");
+      estado.carregandoInicial = false;
       FC.ui.erro(e);
       FC.telas.login(r);
       return;
     }
-    casca();
-    await FC.rerender();
+
+    if (!cacheBase) {
+      casca();
+      await FC.rerender({ semAnimacao: true });
+    } else {
+      FC.recalcula();
+      await FC.rerender({ suave: true, semAnimacao: true });
+    }
+
     // primeiro acesso da conta: a apresentação por passos
     FC.uso.inicia();
     if (FC.onboarding.precisa()) FC.onboarding.abre();

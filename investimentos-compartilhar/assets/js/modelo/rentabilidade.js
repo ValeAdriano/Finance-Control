@@ -202,7 +202,8 @@
   // valor de um título num dia (para o gráfico) e a análise completa (para hoje)
   function valorCalculadoEm(lotes, ix, dia) {
     let v = 0;
-    for (const l of lotes) if (l.data <= dia) v += l.valor * (ix ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
+    const temFator = ix && typeof ix.fator === "function";
+    for (const l of lotes) if (l.data <= dia) v += l.valor * (temFator ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
     return v;
   }
   // Com valor informado, a diferença para o calculado é rendimento: antes
@@ -213,7 +214,8 @@
     if (!m) return valorCalculadoEm(lotes, ix, dia);
     if (dia >= m.data) {
       let v = m.valor;
-      for (const l of lotes) if (l.data > m.data && l.data <= dia) v += l.valor * (ix ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
+      const temFator = ix && typeof ix.fator === "function";
+      for (const l of lotes) if (l.data > m.data && l.data <= dia) v += l.valor * (temFator ? ix.fator(l.indexador, l.taxa, l.data, dia).f : 1);
       return v;
     }
     const ini = lotes.length ? lotes[0].data : m.data;
@@ -224,9 +226,10 @@
   }
 
   function avaliaTitulo(titulo, aportes, ix, hoje = D().hoje()) {
+    const temFator = ix && typeof ix.fator === "function";
     const lotes = lotesDoTitulo(titulo, aportes).map((l) => {
       // o rendimento de um dia útil entra no dia seguinte: hoje vale o acumulado até ontem
-      const { f, estimado } = ix ? ix.fator(l.indexador, l.taxa, l.data, hoje) : { f: 1, estimado: true };
+      const { f, estimado } = temFator ? ix.fator(l.indexador, l.taxa, l.data, hoje) : { f: 1, estimado: true };
       const atual = l.valor * f, dias = D().dias(l.data, hoje), pct = (f - 1) * 100;
       return { ...l, rotulo_taxa: rotuloTaxa(l.indexador, l.taxa), valor_atual: atual, rendimento: atual - l.valor,
         pct: l.valor > 0 ? pct : null, pct_aa: l.valor > 0 ? anualiza(pct, dias) : null, dias, estimado };
@@ -236,7 +239,7 @@
     const valor = brutos.manual ? valorTituloEm(brutos, ix, hoje) : calculado;
     const manual = brutos.manual ? { ...brutos.manual, ajuste: valor - calculado } : null;
     const fluxos = lotes.map((l) => ({ data: l.data, valor: -l.valor }));
-    return { lotes, manual, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !ix || ix.vazio, so_reserva: !!(ix && ix.so_reserva) }) };
+    return { lotes, manual, ...resumoFluxos(fluxos, valor, hoje, { estimado: lotes.some((l) => l.estimado), sem_indices: !temFator || ix.vazio, so_reserva: !!(ix && ix.so_reserva) }) };
   }
 
   // ---------------------------------------------------------------- ações, FIIs, cripto
@@ -508,7 +511,7 @@
   // Cada fluxo cresce pelo índice da data dele até hoje; vendas, resgates e
   // proventos saem da conta simulada na mesma data, pelo mesmo valor.
   function crescimentoIndice(indice, de, ate, ix, ibov) {
-    if (indice === "selic") return ix ? ix.fator("selic", 100, de, ate).f : null;
+    if (indice === "selic") return (ix && typeof ix.fator === "function") ? ix.fator("selic", 100, de, ate).f : null;
     if (!ibov || !ibov.length || de < ibov[0][0]) return null;      // antes da série: sem comparação
     const a = FC.carteira.precoEm(ibov, de), b = FC.carteira.precoEm(ibov, ate);
     return a && b ? b / a : null;

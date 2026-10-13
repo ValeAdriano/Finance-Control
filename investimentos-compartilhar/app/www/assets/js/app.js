@@ -13,13 +13,20 @@
     { id: "agro", nome: "Agro", icone: "agro" },
     { id: "aportes", nome: "Aportes", icone: "aportes" },
     { id: "dividendos", nome: "Dividendos", icone: "moeda" },
+    { id: "irpf", nome: "Imposto de renda", icone: "recibo" },
     { id: "salario", nome: "Salário", icone: "carteira" },
     { id: "renda", nome: "Renda", icone: "renda" },
     { id: "simular", nome: "Simular", icone: "simular" },
     { id: "projecoes", nome: "Projeções", icone: "projecoes" },
     { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
+    { id: "retrospectiva", nome: "Retrospectiva", icone: "play", oculta: true },
+    { id: "admin", nome: "Administração", icone: "escudo", oculta: true },
   ];
-  const NO_CELULAR = ["inicio", "ativos", "agro", "aportes"];
+  FC.ROTAS = ROTAS;
+  // barra de baixo do celular: as 4 primeiras destas que estiverem ligadas
+  const PREFERIDAS_CELULAR = ["inicio", "ativos", "agro", "aportes", "dividendos", "salario"];
+  const rotasLigadas = () => ROTAS.filter((x) => FC.rotaLigada(x.id) && (x.id !== "admin" || estado.admin));
+  const noCelular = () => PREFERIDAS_CELULAR.filter(FC.rotaLigada).slice(0, 4);
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
     carregandoMercado: false, erroMercado: null, spotEm: null, proventos: null, proventosEm: null });
@@ -34,6 +41,7 @@
     try {
       estado.proventos = { ...(estado.proventos || {}), ...(await FC.mercado.proventos(itens, forcar)) };
       estado.proventosEm = Date.now();
+      FC.recalcula();    // proventos pagos entram na rentabilidade de cada ativo
     } catch (e) { console.error(e); estado.proventos = estado.proventos || {}; }
     return estado.proventos;
   };
@@ -43,7 +51,8 @@
     return {
       alocacao_alvo: { ...FC.PADRAO_ALOCACAO, ...(brutas.alocacao_alvo || {}) },
       premissas: FC.mescla(FC.PADRAO_PREMISSAS, brutas.premissas),
-      premissas_salvas: !!brutas.premissas,
+      // objetivos e dados dos títulos moram no mesmo jsonb, mas não são premissas da projeção
+      premissas_salvas: !!brutas.premissas && Object.keys(brutas.premissas).some((k) => k !== "objetivos" && k !== "titulos"),
       regras: brutas.regras ? FC.mescla(FC.PADRAO_REGRAS, brutas.regras) : JSON.parse(JSON.stringify(FC.PADRAO_REGRAS)),
       renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
       agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),
@@ -54,17 +63,18 @@
   FC.recalcula = function () {
     if (!estado.base) return;
     estado.dados = FC.carteira.monta(estado.base, estado.mercado, estado.prefs);
+    if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
   };
 
   FC.recarregaBase = async function () {
     estado.base = await FC.db.carregaTudo();
     estado.prefs = FC.montaPrefs(estado.base.prefsBrutas);
+    estado.prefs.modulos = FC.resolveModulos(estado.base.prefsBrutas.modulos, estado.base);
     FC.recalcula();
-    if (FC.app) FC.app.agendaAvisos();
   };
 
   // tickers cujo histórico interessa: carteira, watchlist e o que aparece
-  // nos aportes (para a curva de evolução)
+  // nos aportes (para o gráfico de crescimento do patrimônio)
   function itensDeMercado() {
     const m = new Map();
     for (const a of estado.base.ativos) m.set(a.ticker, { ticker: a.ticker, classe: a.classe });
@@ -81,21 +91,49 @@
     atualizaBotaoAtualizar();
     try {
       const anos = estado.prefs.regras.janela_historico_anos || 3;
-      const [universo, historicos] = await Promise.all([
+      const [universo, historicos, indices, cvm] = await Promise.all([
         FC.mercado.universo(forcar),
         FC.mercado.historicos(itensDeMercado(), anos, forcar),
+        FC.mercado.indices(forcar).catch((e) => { console.error(e); return null; }),
+        FC.mercado.fiisCvm(forcar).catch((e) => { console.error(e); return null; }),
       ]);
       estado.mercado = { ...estado.mercado, universo, historicos: { ...estado.mercado.historicos, ...historicos } };
+      // o raio-x da CVM entra em cada FII do universo (e serve de par para os outros)
+      if (cvm && cvm.fundos && universo && universo.fiis) {
+        for (const [t, v] of Object.entries(cvm.fundos)) {
+          const f = universo.fiis[t];
+          if (!f) continue;
+          f.cvm = { ...v, fonte: cvm.fonte };
+          f.vacancia_financeira = v.vacancia_financeira ?? null;
+          f.concentracao = v.tipo === "papel" ? (v.cri || {}).maior : v.tipo === "fof" ? (v.fii || {}).maior
+            : v.tipo === "hibrido" ? v.maior_imovel ?? (v.cri || {}).maior ?? null : v.maior_imovel ?? null;
+        }
+      }
+      // sem a série diária (ou com ela incompleta), a renda fixa rende pela
+      // taxa anual do Banco Central em vez de ficar parada no valor aplicado
+      const reserva = (universo && universo.macro) || {};
+      if (indices || (reserva.cdi != null && !(estado.mercado.indices && estado.mercado.indices.tem))) estado.mercado.indices = FC.rentab.preparaIndices(indices || {}, reserva);
+      // Ibovespa para as comparações (sem travar o resto)
+      if (!estado.bench) FC.mercado.benchmarks(5).then((b) => { estado.bench = b; }).catch((e) => console.error(e));
       await buscaCotacoes();
       FC.recalcula();
       estado.erroMercado = null;
       await gravaRegistroDoDia();
-      FC.carregaProventos(forcar).then(() => FC.app && FC.app.agendaAvisos());
+      FC.carregaProventos(forcar);
+      if (estado.base) FC.local.gravar("ultimo-cache-base", estado.base);
+      FC.local.gravar("ultimo-cache-mercado", {
+        universo: estado.mercado.universo,
+        spot: estado.mercado.spot,
+      });
     } catch (e) {
       estado.erroMercado = e.message || String(e);
       console.error(e);
     } finally {
       estado.carregandoMercado = false;
+      if (estado.carregandoInicial) {
+        estado.carregandoInicial = false;
+        document.body.classList.remove("carregando-dados");
+      }
       atualizaBotaoAtualizar();
       FC.rerender({ suave: true });
     }
@@ -181,15 +219,233 @@
     gravaRegistroDoDia(true);
   };
 
+  // ---------------------------------------------------------------- detecção de mobile e PWA
+  const ua = navigator.userAgent || "";
+  const ehIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const ehAndroid = /Android/i.test(ua);
+  const ehMobile = ehIOS || ehAndroid || /Mobi|Tablet|iPad|iPhone|Android/i.test(ua) ||
+    (window.matchMedia && window.matchMedia("(max-width: 768px) and (pointer: coarse)").matches);
+  const ehInstalado = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    document.referrer.includes("android-app://") ||
+    !!window.FCNativo ||
+    document.documentElement.classList.contains("app-nativo");
+
+  let eventoInstall = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    eventoInstall = e;
+  });
+  window.addEventListener("appinstalled", () => {
+    eventoInstall = null;
+    FC.dispositivo.ehInstalado = true;
+    const b = FC.$("#banner-instalar");
+    if (b) b.remove();
+    if (FC.ui && FC.ui.aviso) FC.ui.aviso("Finance Control instalado com sucesso!");
+  });
+
+  FC.dispositivo = {
+    ehMobile,
+    ehIOS,
+    ehAndroid,
+    ehInstalado,
+    obterEventoInstall: () => eventoInstall,
+  };
+
+  FC.abreGuiaInstalacao = function () {
+    const disp = FC.dispositivo;
+    const promptDisponivel = !!disp.obterEventoInstall();
+
+    let corpo;
+    if (disp.ehIOS) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/apple-touch-icon.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Adicionar à Tela de Início no iOS</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Toque no botão de <b>Compartilhar</b> <span class="passo-pill">${icone("compartilhar", 14)} Compartilhar</span> na barra do Safari (na parte inferior do iPhone ou no topo do iPad).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Role a lista de ações para baixo e selecione <span class="passo-pill">${icone("adicionarTela", 14)} Adicionar à Tela de Início</span>.
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">3</span>
+            <div class="passo-texto">
+              No canto superior direito, toque em <b>Adicionar</b>. O ícone oficial aparecerá na sua tela inicial!
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Abertura em tela inteira sem barras de navegação</span></div>
+          <div>${icone("check", 16)} <span>Desempenho mais ágil e sensação nativa</span></div>
+          <div>${icone("check", 16)} <span>Acesso imediato com 1 toque</span></div>
+        </div>`;
+    } else if (promptDisponivel) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Instalar aplicativo oficial</div>
+          </div>
+        </div>
+        <p class="texto-p mt2" style="font-size:14.5px;line-height:1.5">
+          Instale o Finance Control no seu dispositivo para ter tela inteira, resposta instantânea e ícone dedicado.
+        </p>
+        <div class="mt3" style="text-align:center">
+          <button class="botao" id="bt-exec-instalar" type="button" style="width:100%;padding:14px;font-size:16px;font-weight:600">
+            ${icone("celular", 18)} Instalar no aparelho
+          </button>
+        </div>
+        <div class="vantagens-instalar mt3">
+          <div>${icone("check", 16)} <span>Tela cheia sem barras de navegador</span></div>
+          <div>${icone("check", 16)} <span>Ícone próprio na tela de início</span></div>
+          <div>${icone("check", 16)} <span>Carregamento instantâneo</span></div>
+        </div>`;
+    } else if (disp.ehAndroid) {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Adicionar à Tela de Início no Android</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Toque no menu do seu navegador (os <b>três pontinhos ⋮</b> no topo ou na barra inferior).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Selecione <span class="passo-pill">${icone("celular", 14)} Instalar aplicativo</span> ou <b>Adicionar à tela inicial</b>.
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">3</span>
+            <div class="passo-texto">
+              Confirme a instalação para criar o aplicativo na sua tela de início.
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Tela cheia nativa sem barra de URL</span></div>
+          <div>${icone("check", 16)} <span>Acesso rápido e visual exclusivo</span></div>
+        </div>`;
+    } else {
+      corpo = html`
+        <div class="guia-instalar-topo">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <div>
+            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-sub">Instalar no computador ou tablet</div>
+          </div>
+        </div>
+        <ol class="passos-instalar">
+          <li class="passo-instalar">
+            <span class="passo-numero">1</span>
+            <div class="passo-texto">
+              Na barra de endereços do Chrome, Edge ou Safari, clique no ícone de <b>Instalar aplicativo</b> (ou no menu do navegador).
+            </div>
+          </li>
+          <li class="passo-instalar">
+            <span class="passo-numero">2</span>
+            <div class="passo-texto">
+              Confirme <b>Instalar</b> para abrir o Finance Control em sua própria janela dedicada.
+            </div>
+          </li>
+        </ol>
+        <div class="vantagens-instalar">
+          <div>${icone("check", 16)} <span>Janela própria independente de abas</span></div>
+          <div>${icone("check", 16)} <span>Atalho direto no Dock ou menu Iniciar</span></div>
+        </div>`;
+    }
+
+    const f = FC.ui.folha({
+      titulo: "Adicionar à Tela de Início",
+      corpo,
+      botoes: [{ rotulo: "Entendi", primario: !promptDisponivel, acao: () => f.fechar() }],
+    });
+
+    const btExec = FC.$("#bt-exec-instalar", f.el);
+    if (btExec && promptDisponivel) {
+      btExec.addEventListener("click", async () => {
+        const ev = disp.obterEventoInstall();
+        if (ev) {
+          f.fechar();
+          try {
+            await ev.prompt();
+            const res = await ev.userChoice;
+            if (res && res.outcome === "accepted") {
+              FC.ui.aviso("Instalando aplicativo…");
+            }
+          } catch (e) { console.error(e); }
+        }
+      });
+    }
+  };
+
+  FC.mostraBannerInstalacaoSePreciso = function () {
+    if (!FC.dispositivo.ehMobile || FC.dispositivo.ehInstalado) return;
+    const dispensado = FC.local.ler("pwa-banner-dispensado", 0);
+    if (Date.now() - dispensado < 7 * 24 * 60 * 60 * 1000) return;
+    if (FC.$("#banner-instalar")) return;
+
+    setTimeout(() => {
+      if (FC.dispositivo.ehInstalado || FC.$("#banner-instalar")) return;
+      const b = document.createElement("div");
+      b.className = "banner-instalar";
+      b.id = "banner-instalar";
+      b.setAttribute("role", "dialog");
+      b.setAttribute("aria-label", "Adicionar à Tela de Início");
+      b.innerHTML = String(html`
+        <img class="banner-instalar-icone" src="${FC.dispositivo.ehIOS ? 'assets/img/apple-touch-icon.png' : 'assets/img/icone-192.png'}" alt="App" width="42" height="42">
+        <div class="banner-instalar-info">
+          <div class="banner-instalar-titulo">Adicionar à Tela de Início</div>
+          <div class="banner-instalar-sub">${FC.dispositivo.ehIOS ? 'Abra em tela cheia como app no seu iPhone' : 'Instale no celular para acesso rápido'}</div>
+        </div>
+        <div class="banner-instalar-acoes">
+          <button class="botao pequeno" id="bt-banner-instalar" type="button">Adicionar</button>
+          <button class="banner-instalar-fechar" id="bt-banner-fechar" type="button" aria-label="Fechar aviso">${icone("fechar", 16)}</button>
+        </div>`);
+      document.body.appendChild(b);
+
+      FC.$("#bt-banner-instalar", b).addEventListener("click", () => {
+        b.remove();
+        FC.abreGuiaInstalacao();
+      });
+
+      FC.$("#bt-banner-fechar", b).addEventListener("click", () => {
+        FC.local.gravar("pwa-banner-dispensado", Date.now());
+        b.style.transition = "opacity .25s ease, transform .25s ease";
+        b.style.opacity = "0";
+        b.style.transform = "translateY(12px)";
+        setTimeout(() => b.remove(), 260);
+      });
+    }, 3000);
+  };
+
   // ---------------------------------------------------------------- casca
   function casca() {
     const r = FC.$("#raiz");
     r.innerHTML = String(html`
       <header class="topo"><div class="topo-in">
         <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span><span class="nome-marca">Finance Control</span></a>
-        <nav class="abas" aria-label="Seções">
-          ${ROTAS.filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}
-        </nav>
+        <nav class="abas" aria-label="Seções">${navTopo()}</nav>
         <div class="acoes-topo">
           <button class="icone-bt" id="bt-alertas" title="Avisos e atenção" aria-label="Avisos e atenção">
             ${icone("sino", 19)}
@@ -200,10 +456,7 @@
         </div>
       </div></header>
       <main id="conteudo" tabindex="-1"></main>
-      <div class="barra-abas"><nav aria-label="Seções">
-        ${NO_CELULAR.map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
-        <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>
-      </nav></div>`);
+      <div class="barra-abas"><nav aria-label="Seções">${navCelular()}</nav></div>`);
     FC.$("#bt-alertas").addEventListener("click", () => FC.abreAlertas && FC.abreAlertas());
     FC.$("#bt-privado").addEventListener("click", () => {
       const v = !document.body.classList.contains("privado");
@@ -211,7 +464,7 @@
       aplicaPrivado();
     });
     FC.$("#bt-menu-topo").addEventListener("click", abreMenuTopo);
-    FC.$("#bt-mais").addEventListener("click", abreMais);
+    ligaMais();
     aplicaPrivado();
     if (FC.atualizaBadgeAlertas) FC.atualizaBadgeAlertas();
   }
@@ -228,6 +481,22 @@
             <div class="detalhe">${estaAtualizando ? "Atualizando cotações agora…" : (estado.spotEm ? `Última atualização ${FC.datas.ha(estado.spotEm)}` : "Buscar preços mais recentes")}</div>
           </div>
         </button>
+        <button class="item clicavel" id="menu-ajuda" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)">${icone("ajuda", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Como usar esta tela</div>
+            <div class="detalhe">Explicação e dicas desta seção</div>
+          </div>
+        </button>
+        ${!FC.dispositivo.ehInstalado ? html`
+        <button class="item clicavel" id="menu-instalar" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span style="color:var(--acento)">${icone("celular", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Adicionar à Tela de Início</div>
+            <div class="detalhe">${FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad" : "Instalar no celular como app"}</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </button>` : ""}
         <a class="item clicavel" href="#/ajustes" id="menu-ajustes" style="color:inherit;text-decoration:none">
           <span style="color:var(--acento)">${icone("ajustes", 20)}</span>
           <div class="principal">
@@ -236,6 +505,11 @@
           </div>
           <span class="chevron">${icone("chevron", 18)}</span>
         </a>
+        ${estado.admin ? html`<a class="item clicavel" href="#/admin" id="menu-admin" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("escudo", 20)}</span>
+          <div class="principal"><div class="titulo">Administração</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>` : ""}
         <button class="item clicavel" id="menu-sair" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
           <span style="color:var(--vermelho)">${icone("sair", 20)}</span>
           <div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair da conta</div></div>
@@ -255,12 +529,39 @@
         FC.db.log("erro", { etapa: "atualizar cotações", erro: estado.erroMercado });
       }
     });
+    FC.$("#menu-ajuda", f.el).addEventListener("click", () => {
+      f.fechar();
+      FC.guiaDaTela(rotaAtual().id);
+    });
+    if (FC.$("#menu-instalar", f.el)) {
+      FC.$("#menu-instalar", f.el).addEventListener("click", () => {
+        f.fechar();
+        FC.abreGuiaInstalacao();
+      });
+    }
     FC.$("#menu-ajustes", f.el).addEventListener("click", () => f.fechar());
+    if (FC.$("#menu-admin", f.el)) FC.$("#menu-admin", f.el).addEventListener("click", () => f.fechar());
     FC.$("#menu-sair", f.el).addEventListener("click", async () => {
       f.fechar();
       await FC.sair();
     });
   }
+
+  function navTopo() {
+    return html`${rotasLigadas().filter((x) => !x.oculta).map((x) => html`<a href="#/${x.id}" data-rota="${x.id}">${x.nome}</a>`)}`;
+  }
+  function navCelular() {
+    return html`${noCelular().map((id) => { const x = ROTAS.find((y) => y.id === id); return html`<a href="#/${x.id}" data-rota="${x.id}">${icone(x.icone, 24)}<span>${x.nome}</span></a>`; })}
+      <button type="button" id="bt-mais" data-rota="mais">${icone("mais", 24)}<span>Mais</span></button>`;
+  }
+  function ligaMais() { FC.$("#bt-mais").addEventListener("click", abreMais); }
+  // módulo ligado ou desligado em Ajustes: refaz só os menus
+  FC.atualizaNavegacao = function () {
+    const topo = FC.$(".topo .abas"), baixo = FC.$(".barra-abas nav");
+    if (topo) topo.innerHTML = String(navTopo());
+    if (baixo) { baixo.innerHTML = String(navCelular()); ligaMais(); }
+    marcaRotaAtual();
+  };
 
   FC.aplicaPrivado = aplicaPrivado;
   function aplicaPrivado() {
@@ -284,13 +585,16 @@
   }
 
   function abreMais() {
-    const extras = ROTAS.filter((x) => !NO_CELULAR.includes(x.id));
+    const extras = rotasLigadas().filter((x) => !noCelular().includes(x.id) && x.id !== "retrospectiva" && x.id !== "admin");
     const f = FC.ui.folha({
       titulo: "Mais",
       corpo: html`<div class="lista">
         ${extras.map((x) => html`<a class="item clicavel" href="#/${x.id}" style="color:inherit;text-decoration:none">
           <span style="color:var(--acento)">${icone(x.icone, 22)}</span><div class="principal"><div class="titulo">${x.nome}</div></div>
           <span class="chevron">${icone("chevron", 18)}</span></a>`)}
+        ${estado.admin ? html`<a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("escudo", 22)}</span><div class="principal"><div class="titulo">Administração</div></div>
+          <span class="chevron">${icone("chevron", 18)}</span></a>` : ""}
         <button class="item clicavel" id="mais-sair" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
           <span style="color:var(--vermelho)">${icone("sair", 22)}</span><div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair</div></div></button>
       </div>`,
@@ -300,9 +604,13 @@
   }
 
   FC.sair = async function () {
-    if (FC.app) await FC.app.aoSair();
+    if (FC.uso) FC.uso.para();
+    estado.admin = false;
     await FC.auth.sair();
     FC.local.apagar("ultimo-uso");
+    FC.local.apagar("ultimo-cache-base");
+    FC.local.apagar("ultimo-cache-mercado");
+    document.body.classList.remove("carregando-dados");
     estado.base = null; estado.dados = null;
     clearInterval(relogio);
     FC.mercado.limpaCacheLocal();
@@ -313,8 +621,17 @@
   // ---------------------------------------------------------------- rotas
   function rotaAtual() {
     const partes = (location.hash || "#/inicio").replace(/^#\/?/, "").split("/");
-    const id = ROTAS.some((r) => r.id === partes[0]) ? partes[0] : "inicio";
+    const id = ROTAS.some((r) => r.id === partes[0]) && FC.rotaLigada(partes[0]) && (partes[0] !== "admin" || estado.admin) ? partes[0] : "inicio";
     return { id, params: partes.slice(1).map(decodeURIComponent) };
+  }
+
+  function marcaRotaAtual() {
+    const { id } = rotaAtual();
+    const cel = noCelular();
+    FC.$$("[data-rota]").forEach((a) => {
+      const atual = a.dataset.rota === id || (a.dataset.rota === "mais" && !cel.includes(id));
+      if (atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
   }
 
   let ultimaRota = null;
@@ -322,10 +639,7 @@
     const main = FC.$("#conteudo");
     if (!main || !estado.base) return;
     const { id, params } = rotaAtual();
-    FC.$$("[data-rota]").forEach((a) => {
-      const atual = a.dataset.rota === id || (a.dataset.rota === "mais" && !NO_CELULAR.includes(id));
-      if (atual) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
-    });
+    marcaRotaAtual();
     const mudouDeTela = ultimaRota !== id;
     ultimaRota = id;
     const rolagem = window.scrollY;
@@ -369,6 +683,9 @@
     estado.base = null; estado.dados = null;
     clearInterval(relogio);
     FC.local.apagar(CHAVE_USO);
+    FC.local.apagar("ultimo-cache-base");
+    FC.local.apagar("ultimo-cache-mercado");
+    document.body.classList.remove("carregando-dados");
     FC.mercado.limpaCacheLocal();
     location.hash = "";
     FC.telas.login(FC.$("#raiz"), { aviso: "Sua sessão foi encerrada depois de 7 dias sem uso. Entre de novo." });
@@ -385,21 +702,65 @@
   // ---------------------------------------------------------------- início
   FC.entrarNoApp = async function () {
     const r = FC.$("#raiz");
-    r.innerHTML = '<div class="carregando-tela"><div class="roda"></div><span>Abrindo seus dados…</span></div>';
+    document.body.classList.add("carregando-dados");
+    estado.carregandoInicial = true;
+
+    // Se temos o cache local da última sessão, montamos a casca imediatamente com os valores em blur
+    const cacheBase = FC.local.ler("ultimo-cache-base", null);
+    const cacheMercado = FC.local.ler("ultimo-cache-mercado", null);
+    if (cacheBase) {
+      estado.base = cacheBase;
+      estado.prefs = FC.montaPrefs(cacheBase.prefsBrutas || {});
+      estado.prefs.modulos = FC.resolveModulos((cacheBase.prefsBrutas || {}).modulos, estado.base);
+      if (cacheMercado) {
+        estado.mercado = { ...estado.mercado, ...cacheMercado };
+        if (estado.mercado.indices && typeof estado.mercado.indices.fator !== "function") {
+          estado.mercado.indices = null;
+        }
+      }
+      try {
+        FC.recalcula();
+        casca();
+        await FC.rerender({ semAnimacao: true });
+      } catch (errRecalc) {
+        console.warn("Aviso ao inicializar cache local:", errRecalc);
+      }
+    } else {
+      r.innerHTML = '<div class="carregando-tela"><div class="roda"></div><span>Abrindo seus dados…</span></div>';
+    }
+
     try {
       const s = await FC.auth.sessao();
       FC.auth.usuario = s.user;
       FC.marcaUso();
-      await FC.recarregaBase();
+      // o painel de admin só aparece para quem o banco reconhece
+      const [, adm] = await Promise.all([FC.recarregaBase(), FC.sb.rpc("eh_admin").then((res) => !res.error && res.data === true, () => false)]);
+      estado.admin = adm;
+      if (estado.base) FC.local.gravar("ultimo-cache-base", estado.base);
     } catch (e) {
+      document.body.classList.remove("carregando-dados");
+      estado.carregandoInicial = false;
       FC.ui.erro(e);
       FC.telas.login(r);
       return;
     }
-    casca();
-    await FC.rerender();
+
+    if (!cacheBase) {
+      casca();
+      await FC.rerender({ semAnimacao: true });
+    } else {
+      FC.recalcula();
+      await FC.rerender({ suave: true, semAnimacao: true });
+    }
+
+    // primeiro acesso da conta: a apresentação por passos
+    FC.uso.inicia();
+    if (FC.onboarding.precisa()) FC.onboarding.abre();
+    // pede a coleta anônima depois do onboarding, nunca por cima dele
+    else setTimeout(() => FC.uso.pedeConsentimento(), 2500);
     FC.carregaMercado(false);
     ligaAtualizacaoAutomatica();
+    FC.mostraBannerInstalacaoSePreciso();
   };
 
   async function inicia() {
@@ -412,8 +773,6 @@
     let s = null;
     try { s = await FC.auth.sessao(); } catch (e) { /* sem sessão */ }
     if (!s) return FC.telas.login(FC.$("#raiz"));
-    // no app, com o bloqueio ligado: Face ID / digital antes de abrir os dados
-    if (FC.app) await FC.app.destrava();
     // com verificação em duas etapas ligada, a sessão só vale depois do código
     try {
       const n = await FC.auth.nivel();
@@ -426,9 +785,6 @@
     if (ev === "SIGNED_OUT" && estado.base) { estado.base = null; FC.telas.login(FC.$("#raiz")); }
   });
 
-  document.addEventListener("DOMContentLoaded", async () => {
-    await inicia();
-    if (FC.app) FC.app.escondeAbertura();
-  });
+  document.addEventListener("DOMContentLoaded", inicia);
   if (document.readyState !== "loading") inicia();
 })();

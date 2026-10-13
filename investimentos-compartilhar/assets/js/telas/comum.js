@@ -13,8 +13,8 @@
   C.estadoMercado = function () {
     const e = FC.estado;
     if (e.carregandoMercado && !e.mercado.universo) {
-      return html`<div class="mensagem info mb3"><div class="roda" style="width:16px;height:16px;border-width:2px"></div>
-        <span>Buscando cotações no Fundamentus, Yahoo e Banco Central… a primeira vez do dia leva alguns segundos.</span></div>`;
+      return html`<div class="mensagem info mb3"><div class="roda" style="width:16px;height:16px;border-width:2px;flex:none"></div>
+        <span>Atualizando cotações e calculando patrimônio… os valores serão revelados em instantes.</span></div>`;
     }
     if (e.erroMercado) {
       return html`<div class="mensagem alerta mb3">${icone("alerta", 18)}<span>Não consegui atualizar as cotações (${e.erroMercado}).

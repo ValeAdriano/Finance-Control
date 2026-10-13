@@ -36,7 +36,7 @@
     const escala = Math.max(...d.alocacao.map((l) => Math.max(mostra(l), l.alvo_pct))) * 1.12 || 100;
     return html`<section class="secao">
       <div class="secao-topo"><h2>Alocação por pilar</h2><span class="sub">a barra é o que você tem; o traço, a sua meta${fora.length ? html`. ${fora.map((l) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta` : ""}</span>
-        <div class="direita"><a class="botao texto pequeno" href="#/ajustes">Mudar metas</a></div></div>
+        <div class="direita"><a class="botao texto pequeno" href="#/ajustes/criterios">Mudar metas</a></div></div>
       <div class="lista">${d.alocacao.map((l) => html`
         <div class="item clicavel" data-pilar="${l.chave}" role="button" tabindex="0" aria-expanded="false">
           <span class="ponto-e" style="background:${l.cor};width:12px;height:12px"></span>
@@ -204,7 +204,7 @@
       rend = { abs, pct: capital > 0 ? (abs / capital) * 100 : null };
       serieRend = trecho.map((p) => [p.data, p.valor - p0.valor - (p.fluxo - p0.fluxo)]);
       const ix = FC.estado.mercado.indices;
-      if (ix) cdiPer = (ix.fator("cdi", 100, p0.data, p1.data).f - 1) * 100;
+      if (ix && typeof ix.fator === "function") cdiPer = (ix.fator("cdi", 100, p0.data, p1.data).f - 1) * 100;
     }
     // aportes: o fluxo sem os proventos pagos (que saem do fluxo como dinheiro que voltou)
     const provPer = trecho.length >= 2 ? (p1.proventos || 0) - (p0.proventos || 0) : 0;
@@ -214,7 +214,7 @@
     const cmp = comparar(), refs = [];
     if (trecho.length >= 2) {
       const ix = FC.estado.mercado.indices;
-      if (cmp.selic && ix) {
+      if (cmp.selic && ix && typeof ix.fator === "function") {
         const estimada = !ix.ultimo || !ix.ultimo.selic;
         refs.push({ k: "selic", nome: estimada ? "Selic (pelo CDI)" : "Selic", classe: "lselic",
           pontos: simula(trecho, (a, b) => ix.fator("selic", 100, a, b).f),
@@ -311,7 +311,7 @@
     if (!ok(meu) || dias < 1) return null;
     const ix = FC.estado.mercado && FC.estado.mercado.indices;
     let cdi = null, ipca = null;
-    if (ix && !ix.vazio) {
+    if (ix && !ix.vazio && typeof ix.fator === "function") {
       const taxa = (f) => (anual ? (Math.pow(f, 365 / dias) - 1) * 100 : (f - 1) * 100);
       try {
         const fc = ix.fator("cdi", 100, t.desde, hoje).f, fi = ix.fator("ipca", 0, t.desde, hoje).f;
@@ -466,7 +466,7 @@
         </dl>
         ${alvo ? html`<div class="trilha mt3" style="height:10px;border-radius:5px" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%;background:var(--verde)"></i></div>
           <p class="texto-p mt1"><b>${fmt.num(pct, pct < 10 ? 1 : 0)}%</b> do caminho para viver de renda${pct < 100 ? html` · faltam <span class="rs">${fmt.brlTexto(alvo - mensal)}</span> por mês` : " — meta alcançada!"}</p>`
-        : html`<p class="texto-p mt2">Quanto você quer receber por mês para viver de renda? <a href="#/ajustes">Defina em Ajustes → Objetivos</a> e acompanhe aqui o caminho.</p>`}
+        : html`<p class="texto-p mt2">Quanto você quer receber por mês para viver de renda? <a href="#/ajustes/criterios">Defina em Ajustes → Objetivos</a> e acompanhe aqui o caminho.</p>`}
       </div></section>`;
   }
 

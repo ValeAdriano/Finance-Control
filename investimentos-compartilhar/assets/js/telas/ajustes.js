@@ -14,7 +14,7 @@
   }
   const nomeFator = (f) => (f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "");
 
-  FC.telas.ajustes = async function (raiz) {
+  FC.telas.ajustes = async function (raiz, params = []) {
     const u = FC.auth.usuario;
     const prefs = FC.estado.prefs;
     const fatores = await mfaEstado();
@@ -32,179 +32,236 @@
     const objSalvo = ((b.prefsBrutas || {}).premissas || {}).objetivos || {};
     const obj = FC.objetivos(prefs);
 
+    const ABAS = ["geral", "modulos", "criterios", "dados"];
+    let abaAtiva = (params && params[0] && ABAS.includes(params[0])) ? params[0] : FC.local.ler("ajustes-aba", "geral");
+    if (!ABAS.includes(abaAtiva)) abaAtiva = "geral";
+    const modulosAtivos = FC.MODULOS.filter((m) => FC.modulo(m.chave)).length;
+
     raiz.innerHTML = String(html`<div class="estreita">
       ${C.cabecalho("Ajustes", "Conta, segurança e os critérios que o painel aplica.")}
 
-      ${grupo("Conta", "", html`<div class="lista">
-        <div class="item"><span style="color:var(--acento)">${icone("cadeado", 22)}</span>
-          <div class="principal"><div class="titulo">${u.email}</div>
-            <div class="detalhe">Conta criada em ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
-        <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
-          <input class="entrada" id="aj-nome" style="max-width:200px;min-height:38px" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
-        <div class="item clicavel" id="aj-apresentacao"><span style="color:var(--acento)">${icone("info", 20)}</span>
-          <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
-      </div>`)}
-
-      ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
-        <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-          <div class="campo"><label for="ob-custo">Custo de vida por mês (R$)</label>
-            <input id="ob-custo" name="custo_vida_mensal" inputmode="decimal" value="${objSalvo.custo_vida_mensal ? fmt.num(objSalvo.custo_vida_mensal, 2) : ""}" placeholder="0,00">
-            <span class="dica">quanto você gasta num mês normal</span></div>
-          <div class="campo"><label for="ob-meses">Meses de reserva</label>
-            <input id="ob-meses" name="meses_reserva" inputmode="numeric" value="${obj.meses_reserva}" placeholder="6">
-            <span class="dica">quantos meses a reserva de emergência deve cobrir</span></div>
-          <div class="campo"><label for="ob-renda">Renda passiva desejada por mês (R$)</label>
-            <input id="ob-renda" name="renda_desejada_mensal" inputmode="decimal" value="${objSalvo.renda_desejada_mensal ? fmt.num(objSalvo.renda_desejada_mensal, 2) : ""}" placeholder="igual ao custo de vida">
-            <span class="dica">quanto quer receber de proventos para viver de renda</span></div>
-        </div>
-        <div class="flex entre mt2 quebra"><span id="ob-reserva" class="fraco"></span><button class="botao" type="submit">Salvar objetivos</button></div>
-      </form>`)}
-
-      ${grupo("Categorias e Módulos", "ligue só o que você usa; o resto sai dos menus e telas", html`
-        <div class="mb3 fraco" style="font-size:13px;padding:10px 14px;background:var(--campo);border-radius:12px;line-height:1.4">
-          <b style="color:var(--ink)">Principais (sempre ativas):</b> Início, Investimentos e Aportes.
-        </div>
-        <div class="lista" id="aj-modulos">
-          ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
-            <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
-            <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
-        </div>
-        <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
-
-      ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
-        <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
-          <span class="modulo-ic">${icone("play", 18)}</span>
-          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("mes").rotulo.toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
-          <span class="chevron">${icone("chevron", 18)}</span></a>
-        <a class="item clicavel" href="#/retrospectiva/ano/ajustes" style="color:inherit;text-decoration:none">
-          <span class="modulo-ic ano">${icone("play", 18)}</span>
-          <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("ano").rotulo}${FC.recap.periodoDe("ano").fim < FC.recap.periodoDe("ano").chave + "-12-31" ? " até agora" : ""}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
-          <span class="chevron">${icone("chevron", 18)}</span></a>
-      </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
-
-      ${grupo("Privacidade", "o que o Finance Control registra sobre o uso", html`<div class="lista">
-        <div class="item"><span class="modulo-ic">${icone("escudo", 18)}</span>
-          <div class="principal"><div class="titulo">Ajudar a melhorar o app</div><div class="detalhe">registra de forma anônima as telas e botões que você usa — nunca valores, ativos, nome ou e-mail</div></div>
-          <label class="interruptor"><input type="checkbox" id="aj-uso" aria-label="Coleta anônima de uso" ${FC.uso.lerConsentimento() === true ? "checked" : ""}><span></span></label></div>
+      <div class="segmentado mb4 ajustes-abas" role="tablist" id="seg-ajustes" aria-label="Seções de ajustes">
+        <button type="button" data-aba="geral" role="tab" aria-selected="${abaAtiva === "geral"}" aria-pressed="${abaAtiva === "geral"}">Geral</button>
+        <button type="button" data-aba="modulos" role="tab" aria-selected="${abaAtiva === "modulos"}" aria-pressed="${abaAtiva === "modulos"}">Módulos</button>
+        <button type="button" data-aba="criterios" role="tab" aria-selected="${abaAtiva === "criterios"}" aria-pressed="${abaAtiva === "criterios"}">Critérios</button>
+        <button type="button" data-aba="dados" role="tab" aria-selected="${abaAtiva === "dados"}" aria-pressed="${abaAtiva === "dados"}">Dados</button>
       </div>
-      <p class="texto-p mt2">No lugar da sua conta vai um código aleatório deste aparelho. Os registros são apagados em 180 dias. Erros técnicos, sem dado pessoal, são registrados para manter o app funcionando.</p>`)}
 
-      ${FC.estado.admin ? grupo("Administração", "visível só para administradores", html`<div class="lista">
-        <a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none"><span class="modulo-ic">${icone("escudo", 18)}</span>
-          <div class="principal"><div class="titulo">Painel do administrador</div><div class="detalhe">vídeos de divulgação, cliques, jornadas, logs e insights</div></div>
-          <span class="chevron">${icone("chevron", 18)}</span></a>
-      </div>`) : ""}
+      <div id="painel-geral" class="aj-painel" ${abaAtiva === "geral" ? "" : "hidden"}>
+        ${grupo("Conta", "", html`<div class="lista">
+          <div class="item"><span style="color:var(--acento)">${icone("cadeado", 22)}</span>
+            <div class="principal"><div class="titulo">${u.email}</div>
+              <div class="detalhe">Conta criada em ${FC.datas.br((u.created_at || "").slice(0, 10))} · último acesso ${u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div></div></div>
+          <div class="item"><div class="principal"><div class="titulo">Como quer ser chamado</div><div class="detalhe">aparece na saudação do início</div></div>
+            <input class="entrada aj-input-inline" id="aj-nome" value="${(u.user_metadata || {}).nome || ""}" maxlength="40" placeholder="seu nome"></div>
+          <div class="item clicavel" id="aj-apresentacao"><span style="color:var(--acento)">${icone("info", 20)}</span>
+            <div class="principal"><div class="titulo">Ver a apresentação</div><div class="detalhe">o passo a passo do que o painel faz</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+        </div>`)}
 
-      ${grupo("Segurança", "", html`<div class="lista">
-        <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
-          <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
-            <div class="detalhe">${totp ? "O login pede o código do app autenticador, e o banco recusa qualquer acesso sem ele." : "Opcional. Ligue para exigir um código do celular além da senha."}</div></div>
-          ${fatores.length < 3 ? html`<button class="botao ${totp ? "sec" : ""} pequeno" id="aj-mfa-add">${totp ? "Adicionar reserva" : "Ligar"}</button>` : ""}</div>
-        ${fatores.map((f) => html`<div class="item" style="padding-left:64px">
-          <div class="principal"><div class="titulo" style="font-size:14px">${nomeFator(f)}</div><div class="detalhe">cadastrado em ${FC.datas.br(f.created_at.slice(0, 10))}</div></div>
-          <button class="botao texto pequeno" data-remove-fator="${f.id}" style="color:var(--vermelho)">Remover</button></div>`)}
-        <div class="item clicavel" id="aj-senha"><span style="color:var(--ink-2)">${icone("editar", 20)}</span>
-          <div class="principal"><div class="titulo">Trocar senha</div><div class="detalhe">pede a senha atual${totp ? " (a sessão já passou pelo 2FA)" : ""}</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
-        <div class="item"><span style="color:var(--ink-2)">${icone("info", 20)}</span>
-          <div class="principal"><div class="titulo">Esta sessão</div><div class="detalhe">${nivel && nivel.currentLevel === "aal2" ? "protegida pelo código do autenticador" : "entrou só com a senha"} · encerra sozinha após 7 dias sem uso</div></div>
-          <button class="botao sec pequeno" id="aj-sair-outros">Sair dos outros aparelhos</button></div>
-        <div class="item clicavel" id="aj-sair"><span style="color:var(--vermelho)">${icone("sair", 20)}</span><div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair</div></div></div>
-      </div>
-      <details class="mt2"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Como sua conta é protegida</summary>
-        <ul class="texto-p mt1" style="padding-left:18px;line-height:1.8">
-          <li>Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.</li>
-          <li>Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).</li>
-          <li>Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.</li>
-          <li>Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso.</li>
-        </ul></details>`)}
+        ${grupo("Segurança", "", html`<div class="lista">
+          <div class="item"><span style="color:${totp ? "var(--verde)" : "var(--amarelo)"}">${icone("escudo", 22)}</span>
+            <div class="principal"><div class="titulo">Verificação em duas etapas ${FC.pilula(totp ? "verde" : "cinza", totp ? "ligada" : "desligada")}</div>
+              <div class="detalhe">${totp ? "O login pede o código do app autenticador, e o banco recusa qualquer acesso sem ele." : "Opcional. Ligue para exigir um código do celular além da senha."}</div></div>
+            ${fatores.length < 3 ? html`<button class="botao ${totp ? "sec" : ""} pequeno" id="aj-mfa-add">${totp ? "Adicionar reserva" : "Ligar"}</button>` : ""}</div>
+          ${fatores.map((f) => html`<div class="item subitem">
+            <span class="subitem-ramo">${icone("chave", 16)}</span>
+            <div class="principal"><div class="titulo" style="font-size:14px">${nomeFator(f)}</div><div class="detalhe">cadastrado em ${FC.datas.br(f.created_at.slice(0, 10))}</div></div>
+            <button class="botao texto pequeno" data-remove-fator="${f.id}" style="color:var(--vermelho)">Remover</button></div>`)}
+          <div class="item clicavel" id="aj-senha"><span style="color:var(--ink-2)">${icone("editar", 20)}</span>
+            <div class="principal"><div class="titulo">Trocar senha</div><div class="detalhe">pede a senha atual${totp ? " (a sessão já passou pelo 2FA)" : ""}</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+          <div class="item"><span style="color:var(--ink-2)">${icone("info", 20)}</span>
+            <div class="principal"><div class="titulo">Esta sessão</div><div class="detalhe">${nivel && nivel.currentLevel === "aal2" ? "protegida pelo código do autenticador" : "entrou só com a senha"} · encerra sozinha após 7 dias sem uso</div></div>
+            <button class="botao sec pequeno" id="aj-sair-outros">Sair dos outros aparelhos</button></div>
+          <div class="item clicavel" id="aj-sair"><span style="color:var(--vermelho)">${icone("sair", 20)}</span><div class="principal"><div class="titulo" style="color:var(--vermelho)">Sair</div></div></div>
+        </div>
+        <details class="mt2"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Como sua conta é protegida</summary>
+          <ul class="texto-p mt1" style="padding-left:18px;line-height:1.8">
+            <li>Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.</li>
+            <li>Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).</li>
+            <li>Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.</li>
+            <li>Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso.</li>
+          </ul></details>`)}
 
-      ${grupo("Suas informações", "tudo isto está vinculado à sua conta", html`<div class="cartao">
-        <dl class="kpis">${contagem.map(([n, v]) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${fmt.int(v)}</dd></div>`)}</dl>
-        <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda esta conta, e nenhuma outra conta consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
-      </div>`)}
+        ${grupo("Aparência", "", html`<div class="lista">
+          <div class="item"><div class="principal"><div class="titulo">Tema</div></div>
+            <div class="segmentado" role="group" id="aj-tema">
+              ${[["auto", "Automático"], ["claro", "Claro"], ["escuro", "Escuro"]].map(([k, v]) => html`<button type="button" data-tema="${k}" aria-pressed="${tema === k}">${v}</button>`)}</div></div>
+          <div class="item"><div class="principal"><div class="titulo">Modo privado</div><div class="detalhe">borra os valores em reais; passe o mouse para ver</div></div>
+            <label class="interruptor"><input type="checkbox" id="aj-privado" ${FC.local.ler("privado", false) ? "checked" : ""}><span></span></label></div>
+        </div>`)}
 
-      ${grupo("Aparência", "", html`<div class="lista">
-        <div class="item"><div class="principal"><div class="titulo">Tema</div></div>
-          <div class="segmentado" role="group" id="aj-tema">
-            ${[["auto", "Automático"], ["claro", "Claro"], ["escuro", "Escuro"]].map(([k, v]) => html`<button type="button" data-tema="${k}" aria-pressed="${tema === k}">${v}</button>`)}</div></div>
-        <div class="item"><div class="principal"><div class="titulo">Modo privado</div><div class="detalhe">borra os valores em reais; passe o mouse para ver</div></div>
-          <label class="interruptor"><input type="checkbox" id="aj-privado" ${FC.local.ler("privado", false) ? "checked" : ""}><span></span></label></div>
-      </div>`)}
-
-      ${grupo("Dispositivo e Aplicativo", "", html`<div class="lista">
-        ${FC.dispositivo.ehInstalado ? html`
-          <div class="item">
-            <span style="color:var(--verde)">${icone("check", 20)}</span>
-            <div class="principal">
-              <div class="titulo">Aplicativo na Tela de Início</div>
-              <div class="detalhe">Executando em tela cheia como aplicativo</div>
+        ${grupo("Dispositivo e Aplicativo", "", html`<div class="lista">
+          ${FC.dispositivo.ehInstalado ? html`
+            <div class="item">
+              <span style="color:var(--verde)">${icone("check", 20)}</span>
+              <div class="principal">
+                <div class="titulo">Aplicativo na Tela de Início</div>
+                <div class="detalhe">Executando em tela cheia como aplicativo</div>
+              </div>
+              <span class="badge" style="background:var(--verde-suave);color:var(--verde);font-weight:600;padding:4px 8px;border-radius:6px;font-size:12px">Ativo</span>
             </div>
-            <span class="badge" style="background:var(--verde-suave);color:var(--verde);font-weight:600;padding:4px 8px;border-radius:6px;font-size:12px">Ativo</span>
+          ` : html`
+            <button class="item clicavel" id="aj-instalar-app" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+              <span style="color:var(--acento)">${icone("celular", 20)}</span>
+              <div class="principal">
+                <div class="titulo">Adicionar à Tela de Início</div>
+                <div class="detalhe">${FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad para abrir em tela cheia" : "Instalar no celular ou tablet para acesso rápido"}</div>
+              </div>
+              <span class="chevron">${icone("chevron", 18)}</span>
+            </button>
+          `}
+        </div>`)}
+
+        ${grupo("Privacidade", "o que o Finance Control registra sobre o uso", html`<div class="lista">
+          <div class="item"><span class="modulo-ic">${icone("escudo", 18)}</span>
+            <div class="principal"><div class="titulo">Ajudar a melhorar o app</div><div class="detalhe">registra de forma anônima as telas e botões que você usa — nunca valores, ativos, nome ou e-mail</div></div>
+            <label class="interruptor"><input type="checkbox" id="aj-uso" aria-label="Coleta anônima de uso" ${FC.uso.lerConsentimento() === true ? "checked" : ""}><span></span></label></div>
+        </div>
+        <p class="texto-p mt2">No lugar da sua conta vai um código aleatório deste aparelho. Os registros são apagados em 180 dias. Erros técnicos, sem dado pessoal, são registrados para manter o app funcionando.</p>`)}
+
+        ${FC.estado.admin ? grupo("Administração", "visível só para administradores", html`<div class="lista">
+          <a class="item clicavel" href="#/admin" style="color:inherit;text-decoration:none"><span class="modulo-ic">${icone("escudo", 18)}</span>
+            <div class="principal"><div class="titulo">Painel do administrador</div><div class="detalhe">vídeos de divulgação, cliques, jornadas, logs e insights</div></div>
+            <span class="chevron">${icone("chevron", 18)}</span></a>
+        </div>`) : ""}
+      </div>
+
+      <div id="painel-modulos" class="aj-painel" ${abaAtiva === "modulos" ? "" : "hidden"}>
+        ${grupo("Categorias e Módulos", html`<span id="aj-modulos-contador" class="badge cinza" style="font-weight:600">${modulosAtivos} de ${FC.MODULOS.length} ativos</span>`, html`
+          <div class="mb3 fraco" style="font-size:13px;padding:10px 14px;background:var(--campo);border-radius:12px;line-height:1.4">
+            <b style="color:var(--ink)">Principais (sempre ativas):</b> Início, Investimentos e Aportes.
           </div>
-        ` : html`
-          <button class="item clicavel" id="aj-instalar-app" type="button" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
-            <span style="color:var(--acento)">${icone("celular", 20)}</span>
-            <div class="principal">
-              <div class="titulo">Adicionar à Tela de Início</div>
-              <div class="detalhe">${FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad para abrir em tela cheia" : "Instalar no celular ou tablet para acesso rápido"}</div>
+          <div class="lista" id="aj-modulos">
+            ${FC.MODULOS.map((m) => html`<div class="item"><span class="modulo-ic">${icone(m.icone, 20)}</span>
+              <div class="principal"><div class="titulo">${m.nome}</div><div class="detalhe">${m.desc}</div></div>
+              <label class="interruptor"><input type="checkbox" data-modulo="${m.chave}" aria-label="${m.nome}" ${FC.modulo(m.chave) ? "checked" : ""}><span></span></label></div>`)}
+          </div>
+          <p class="texto-p mt2">Desligar só esconde: o que você já cadastrou continua guardado e somando no patrimônio.</p>`)}
+
+        ${grupo("Retrospectivas", "no Início elas aparecem só no fim do período; aqui, sempre", html`<div class="lista">
+          <a class="item clicavel" href="#/retrospectiva/mes/ajustes" style="color:inherit;text-decoration:none">
+            <span class="modulo-ic">${icone("play", 18)}</span>
+            <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("mes").rotulo.toLowerCase()}</div><div class="detalhe">no Início, nos últimos 5 dias de cada mês</div></div>
+            <span class="chevron">${icone("chevron", 18)}</span></a>
+          <a class="item clicavel" href="#/retrospectiva/ano/ajustes" style="color:inherit;text-decoration:none">
+            <span class="modulo-ic ano">${icone("play", 18)}</span>
+            <div class="principal"><div class="titulo">Retrospectiva de ${FC.recap.periodoDe("ano").rotulo}${FC.recap.periodoDe("ano").fim < FC.recap.periodoDe("ano").chave + "-12-31" ? " até agora" : ""}</div><div class="detalhe">no Início, de 27 a 31 de dezembro</div></div>
+            <span class="chevron">${icone("chevron", 18)}</span></a>
+        </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
+      </div>
+
+      <div id="painel-criterios" class="aj-painel" ${abaAtiva === "criterios" ? "" : "hidden"}>
+        ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
+          <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+            <div class="campo"><label for="ob-custo">Custo de vida por mês (R$)</label>
+              <input id="ob-custo" name="custo_vida_mensal" inputmode="decimal" value="${objSalvo.custo_vida_mensal ? fmt.num(objSalvo.custo_vida_mensal, 2) : ""}" placeholder="0,00">
+              <span class="dica">quanto você gasta num mês normal</span></div>
+            <div class="campo"><label for="ob-meses">Meses de reserva</label>
+              <input id="ob-meses" name="meses_reserva" inputmode="numeric" value="${obj.meses_reserva}" placeholder="6">
+              <span class="dica">quantos meses a reserva de emergência deve cobrir</span></div>
+            <div class="campo"><label for="ob-renda">Renda passiva desejada por mês (R$)</label>
+              <input id="ob-renda" name="renda_desejada_mensal" inputmode="decimal" value="${objSalvo.renda_desejada_mensal ? fmt.num(objSalvo.renda_desejada_mensal, 2) : ""}" placeholder="igual ao custo de vida">
+              <span class="dica">quanto quer receber de proventos para viver de renda</span></div>
+          </div>
+          <div class="flex entre mt2 quebra"><span id="ob-reserva" class="fraco"></span><button class="botao" type="submit">Salvar objetivos</button></div>
+        </form>`)}
+
+        ${grupo("Metas de alocação", "em % do patrimônio; a soma precisa dar 100", html`<form class="cartao" id="f-metas">
+          <div class="mb3">
+            <div class="flex entre fraco mb1" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">
+              <span>Distribuição visual</span>
+              <span id="soma-metas-txt">100%</span>
             </div>
-            <span class="chevron">${icone("chevron", 18)}</span>
-          </button>
-        `}
-      </div>`)}
+            <div class="barra-alocacao" id="barra-metas"></div>
+          </div>
+          <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
+            ${FC.PILARES.filter((p) => !FC.pilaresLigados().includes(p)).map((p) => html`<input type="hidden" name="${p.chave}" value="${alvos[p.chave] ?? 0}">`)}
+            ${FC.pilaresLigados().map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
+              <input id="meta-${p.chave}" name="${p.chave}" inputmode="decimal" value="${alvos[p.chave] ?? 0}"></div>`)}
+          </div>
+          <div class="flex entre mt3 quebra" style="gap:10px"><div id="soma-metas"></div><button class="botao" type="submit">Salvar metas</button></div>
+        </form>`)}
 
-      ${grupo("Metas de alocação", "em % do patrimônio; a soma precisa dar 100", html`<form class="cartao" id="f-metas">
-        <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
-          ${FC.PILARES.filter((p) => !FC.pilaresLigados().includes(p)).map((p) => html`<input type="hidden" name="${p.chave}" value="${alvos[p.chave] ?? 0}">`)}
-          ${FC.pilaresLigados().map((p) => html`<div class="campo"><label for="meta-${p.chave}"><span class="ponto-e" style="background:${p.cor}"></span> ${p.nome}</label>
-            <input id="meta-${p.chave}" name="${p.chave}" inputmode="decimal" value="${alvos[p.chave] ?? 0}"></div>`)}
-        </div>
-        <div class="flex entre mt2"><span id="soma-metas" class="fraco"></span><button class="botao" type="submit">Salvar metas</button></div>
-      </form>`)}
+        ${grupo("Regras de avaliação", "quanto cada lente pesa e onde fica cada veredito", html`<form class="cartao" id="f-regras">
+          <p class="rot fraco mb2" style="font-size:13px;font-weight:500">Peso das lentes</p>
+          <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+            ${[["historica", "Histórico"], ["regra", "Seu alvo"], ["pares", "Pares"], ["macro", "Renda fixa"]].map(([k, v]) => html`<div class="campo"><label for="pl-${k}">${v}</label><input id="pl-${k}" name="pl_${k}" inputmode="decimal" value="${r.pesos_lentes[k]}"></div>`)}
+          </div>
+          <div class="form mt2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+            <div class="campo"><label for="v-atende">“Dentro dos seus critérios” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
+            <div class="campo"><label for="v-observar">“Perto dos seus critérios” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
+            <div class="campo"><label for="v-janela">Janela do histórico (anos)</label><input id="v-janela" name="janela" inputmode="numeric" value="${r.janela_historico_anos}"></div>
+          </div>
+          <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Faixas de cada indicador (avançado)</summary>
+            <p class="texto-p mt2">Cada perfil tem suas métricas com ótimo (nota 100), aceitável (60) e ruim (0). <code>direcao</code> é <code>menor_melhor</code> ou <code>maior_melhor</code>.</p>
+            <div class="campo mt1"><textarea id="regras-json" rows="16" spellcheck="false">${JSON.stringify({ perfis: r.perfis, override_perfil: r.override_perfil, segmentos_papel: r.segmentos_papel }, null, 2)}</textarea></div>
+          </details>
+          <div class="flex entre mt3 quebra"><button class="botao texto" type="button" id="bt-regras-padrao">Voltar ao padrão</button><button class="botao" type="submit">Salvar regras</button></div>
+          <div id="regras-erro" class="mensagem erro mt2" hidden></div>
+        </form>`)}
 
-      ${grupo("Regras de avaliação", "quanto cada lente pesa e onde fica cada veredito", html`<form class="cartao" id="f-regras">
-        <p class="rot fraco mb2" style="font-size:13px;font-weight:500">Peso das lentes</p>
-        <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
-          ${[["historica", "Histórico"], ["regra", "Seu alvo"], ["pares", "Pares"], ["macro", "Renda fixa"]].map(([k, v]) => html`<div class="campo"><label for="pl-${k}">${v}</label><input id="pl-${k}" name="pl_${k}" inputmode="decimal" value="${r.pesos_lentes[k]}"></div>`)}
-        </div>
-        <div class="form mt2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-          <div class="campo"><label for="v-atende">“Dentro dos seus critérios” a partir de</label><input id="v-atende" name="atende" inputmode="decimal" value="${r.vereditos.atende}"></div>
-          <div class="campo"><label for="v-observar">“Perto dos seus critérios” a partir de</label><input id="v-observar" name="observar" inputmode="decimal" value="${r.vereditos.observar}"></div>
-          <div class="campo"><label for="v-janela">Janela do histórico (anos)</label><input id="v-janela" name="janela" inputmode="numeric" value="${r.janela_historico_anos}"></div>
-        </div>
-        <details class="mt3"><summary style="cursor:pointer;color:var(--acento);font-size:14px">Faixas de cada indicador (avançado)</summary>
-          <p class="texto-p mt2">Cada perfil tem suas métricas com ótimo (nota 100), aceitável (60) e ruim (0). <code>direcao</code> é <code>menor_melhor</code> ou <code>maior_melhor</code>.</p>
-          <div class="campo mt1"><textarea id="regras-json" rows="16" spellcheck="false">${JSON.stringify({ perfis: r.perfis, override_perfil: r.override_perfil, segmentos_papel: r.segmentos_papel }, null, 2)}</textarea></div>
-        </details>
-        <div class="flex entre mt3 quebra"><button class="botao texto" type="button" id="bt-regras-padrao">Voltar ao padrão</button><button class="botao" type="submit">Salvar regras</button></div>
-        <div id="regras-erro" class="mensagem erro mt2" hidden></div>
-      </form>`)}
+        ${grupo("Universo da aba Renda", "setores e empresas analisados", html`<form class="cartao" id="f-renda">
+          <p class="texto-p mb2">Setores cujo lucro vem de tarifa regulada, contrato longo ou spread. <code>sem_ebitda: true</code> desliga o critério de dívida (bancos).</p>
+          <div class="campo"><textarea id="renda-json" rows="14" spellcheck="false">${JSON.stringify(prefs.renda, null, 2)}</textarea></div>
+          <div class="flex entre mt2 quebra"><button class="botao texto" type="button" id="bt-renda-padrao">Voltar ao padrão</button><button class="botao" type="submit">Salvar universo</button></div>
+          <div id="renda-erro" class="mensagem erro mt2" hidden></div>
+        </form>`)}
+      </div>
 
-      ${grupo("Universo da aba Renda", "setores e empresas analisados", html`<form class="cartao" id="f-renda">
-        <p class="texto-p mb2">Setores cujo lucro vem de tarifa regulada, contrato longo ou spread. <code>sem_ebitda: true</code> desliga o critério de dívida (bancos).</p>
-        <div class="campo"><textarea id="renda-json" rows="14" spellcheck="false">${JSON.stringify(prefs.renda, null, 2)}</textarea></div>
-        <div class="flex entre mt2 quebra"><button class="botao texto" type="button" id="bt-renda-padrao">Voltar ao padrão</button><button class="botao" type="submit">Salvar universo</button></div>
-        <div id="renda-erro" class="mensagem erro mt2" hidden></div>
-      </form>`)}
+      <div id="painel-dados" class="aj-painel" ${abaAtiva === "dados" ? "" : "hidden"}>
+        ${grupo("Suas informações", "tudo isto está vinculado à sua conta", html`<div class="cartao">
+          <dl class="kpis">${contagem.map(([n, v]) => html`<div class="kpi pequeno"><dt>${n}</dt><dd>${fmt.int(v)}</dd></div>`)}</dl>
+          <p class="texto-p mt2">Conta <code>${u.id.slice(0, 8)}…</code>. Cada linha guarda esta conta, e nenhuma outra conta consegue ler. Para levar tudo para um arquivo, use <b>Baixar backup</b> logo abaixo.</p>
+        </div>`)}
 
-      ${grupo("Log do sistema", "atualizações de preço, registros diários e erros", html`<div class="lista" id="aj-log"><div class="vazio"><div class="roda" style="margin:0 auto"></div></div></div>
-        <p class="texto-p mt2">O registro diário roda sozinho no Supabase todo dia às 18h10 (Brasília), mesmo com o app fechado. Com o app aberto, os preços são atualizados a cada minuto.</p>`)}
+        ${grupo("Seus dados e backup", "guarde ou transfira seus dados com segurança", html`<div class="lista">
+          <div class="item clicavel" id="aj-exportar"><span style="color:var(--acento)">${icone("exportar", 22)}</span>
+            <div class="principal"><div class="titulo">Baixar backup</div><div class="detalhe">tudo em um arquivo JSON: carteira, aportes, agro, ganhos e preferências</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+          <div class="item clicavel" id="aj-restaurar"><span style="color:var(--acento)">${icone("importar", 22)}</span>
+            <div class="principal"><div class="titulo">Restaurar backup</div><div class="detalhe">acrescenta o conteúdo de um backup; o que já existe fica</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
+          <div class="item clicavel" id="aj-apagar"><span style="color:var(--vermelho)">${icone("lixo", 22)}</span>
+            <div class="principal"><div class="titulo" style="color:var(--vermelho)">Apagar todos os dados</div><div class="detalhe">a conta continua; carteira, aportes e agro somem</div></div></div>
+        </div><input type="file" id="aj-arquivo" accept=".json" hidden>`)}
 
-      ${grupo("Histórico mensal", "totais de meses anteriores ao app (ex.: anotados no Notion)", html`<form class="cartao" id="f-hist">
-        <p class="texto-p mb2">Cole o CSV com as colunas <b>Ano</b>, <b>Mês</b> e <b>Total</b> (as outras são ignoradas). Cada mês com total vira um ponto no gráfico de crescimento, no último dia do mês. Meses já existentes são atualizados.</p>
-        <div class="campo"><textarea id="hist-csv" rows="6" spellcheck="false" placeholder="N°,Ano,Mês,Total,Fechado&#10;1,2024,Janeiro,800,false"></textarea></div>
-        <div class="flex entre mt2 quebra"><span class="fraco" id="hist-previa"></span><button class="botao" type="submit">Importar</button></div>
-      </form>`)}
+        ${grupo("Histórico mensal", "totais de meses anteriores ao app (ex.: anotados no Notion)", html`<form class="cartao" id="f-hist">
+          <p class="texto-p mb2">Cole o CSV com as colunas <b>Ano</b>, <b>Mês</b> e <b>Total</b> (as outras são ignoradas). Cada mês com total vira um ponto no gráfico de crescimento, no último dia do mês. Meses já existentes são atualizados.</p>
+          <div class="campo"><textarea id="hist-csv" rows="6" spellcheck="false" placeholder="N°,Ano,Mês,Total,Fechado&#10;1,2024,Janeiro,800,false"></textarea></div>
+          <div class="flex entre mt2 quebra"><span class="fraco" id="hist-previa"></span><button class="botao" type="submit">Importar</button></div>
+        </form>`)}
 
-      ${grupo("Seus dados", "", html`<div class="lista">
-        <div class="item clicavel" id="aj-exportar"><span style="color:var(--acento)">${icone("exportar", 22)}</span>
-          <div class="principal"><div class="titulo">Baixar backup</div><div class="detalhe">tudo em um arquivo JSON: carteira, aportes, agro, ganhos e preferências</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
-        <div class="item clicavel" id="aj-restaurar"><span style="color:var(--acento)">${icone("importar", 22)}</span>
-          <div class="principal"><div class="titulo">Restaurar backup</div><div class="detalhe">acrescenta o conteúdo de um backup; o que já existe fica</div></div><span class="chevron">${icone("chevron", 18)}</span></div>
-        <div class="item clicavel" id="aj-apagar"><span style="color:var(--vermelho)">${icone("lixo", 22)}</span>
-          <div class="principal"><div class="titulo" style="color:var(--vermelho)">Apagar todos os dados</div><div class="detalhe">a conta continua; carteira, aportes e agro somem</div></div></div>
-      </div><input type="file" id="aj-arquivo" accept=".json" hidden>`)}
+        ${grupo("Log do sistema", "atualizações de preço, registros diários e erros", html`<div class="lista" id="aj-log"><div class="vazio"><div class="roda" style="margin:0 auto"></div></div></div>
+          <p class="texto-p mt2">O registro diário roda sozinho no Supabase todo dia às 18h10 (Brasília), mesmo com o app fechado. Com o app aberto, os preços são atualizados a cada minuto.</p>`)}
+      </div>
     </div>`);
+
+    // ---- controle de abas
+    const segEl = FC.$("#seg-ajustes", raiz);
+    if (segEl) FC.ui.segmentado(segEl);
+
+    function trocaAba(novaAba) {
+      if (!ABAS.includes(novaAba)) return;
+      abaAtiva = novaAba;
+      FC.local.gravar("ajustes-aba", novaAba);
+
+      FC.$$("#seg-ajustes button", raiz).forEach((bt) => {
+        const ativa = bt.dataset.aba === novaAba;
+        bt.setAttribute("aria-selected", ativa ? "true" : "false");
+        bt.setAttribute("aria-pressed", ativa ? "true" : "false");
+      });
+      if (segEl) FC.ui.segmentado(segEl);
+
+      ABAS.forEach((a) => {
+        const p = FC.$(`#painel-${a}`, raiz);
+        if (p) p.hidden = a !== novaAba;
+      });
+
+      if (novaAba === "criterios") somaMetas();
+      if (novaAba === "dados") carregaLog(FC.$("#aj-log", raiz));
+    }
+
+    FC.$$("#seg-ajustes button", raiz).forEach((bt) => {
+      bt.addEventListener("click", () => trocaAba(bt.dataset.aba));
+    });
 
     // ---- conta
     let esperaNome = null;
@@ -261,6 +318,11 @@
         FC.estado.base.prefsBrutas.modulos = modulos;
         FC.atualizaNavegacao();
         FC.ui.aviso(`${m.nome} ${cx.checked ? "ligado" : "desligado"}`);
+        const contEl = FC.$("#aj-modulos-contador", raiz);
+        if (contEl) {
+          const n = FC.MODULOS.filter((x) => FC.modulo(x.chave)).length;
+          contEl.textContent = `${n} de ${FC.MODULOS.length} ativos`;
+        }
         FC.rerender({ suave: true, semAnimacao: true });
       } catch (err) { cx.checked = !cx.checked; FC.ui.erro(err); }
     }));
@@ -275,10 +337,41 @@
     const fm = FC.$("#f-metas", raiz);
     const somaMetas = () => {
       const d = FC.dadosDoForm(fm);
-      const s = FC.PILARES.reduce((t, p) => t + (FC.lerNum(d[p.chave]) || 0), 0);
+      const ligados = FC.pilaresLigados();
+      const valores = ligados.map((p) => ({
+        ...p,
+        valor: Math.max(0, FC.lerNum(d[p.chave]) || 0)
+      }));
+      const s = valores.reduce((t, x) => t + x.valor, 0);
+
+      const barra = FC.$("#barra-metas", raiz);
+      if (barra) {
+        if (s <= 0) {
+          barra.innerHTML = '<div class="barra-alocacao-seg" style="width:100%;background:var(--campo)"></div>';
+        } else {
+          barra.innerHTML = valores
+            .filter((x) => x.valor > 0)
+            .map((x) => {
+              const pct = (x.valor / Math.max(s, 100)) * 100;
+              return `<div class="barra-alocacao-seg" style="width:${pct.toFixed(2)}%;background:${x.cor}" title="${x.nome}: ${x.valor}%"></div>`;
+            })
+            .join("");
+        }
+      }
+
+      const txt = FC.$("#soma-metas-txt", raiz);
+      if (txt) txt.textContent = `${fmt.num(s, 0)}%`;
+
       const el = FC.$("#soma-metas", raiz);
-      el.textContent = `Soma: ${fmt.num(s, 0)}%`;
-      el.className = Math.abs(s - 100) < 0.01 ? "pos" : "neg";
+      if (el) {
+        if (Math.abs(s - 100) < 0.01) {
+          el.innerHTML = FC.pilula("verde", "Soma: 100% · Balanceado");
+        } else if (s < 100) {
+          el.innerHTML = FC.pilula("amarelo", `Soma: ${fmt.num(s, 0)}% · Faltam ${fmt.num(100 - s, 0)}%`);
+        } else {
+          el.innerHTML = FC.pilula("vermelho", `Soma: ${fmt.num(s, 0)}% · Excede ${fmt.num(s - 100, 0)}%`);
+        }
+      }
       return s;
     };
     fm.addEventListener("input", somaMetas); somaMetas();
@@ -293,6 +386,7 @@
     // ---- regras
     const fr = FC.$("#f-regras", raiz);
     fr.addEventListener("submit", async (e) => {
+
       e.preventDefault();
       const erro = FC.$("#regras-erro", raiz);
       erro.hidden = true;

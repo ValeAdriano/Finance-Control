@@ -122,7 +122,7 @@
       }
     } else if (daReserva.length || rf.length) {
       saida.push({ nivel: "info", titulo: "Informe seu custo de vida",
-        texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes" });
+        texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes/criterios" });
     }
 
     // ---- exposição ao dólar (só informativo)

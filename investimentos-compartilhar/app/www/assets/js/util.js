@@ -266,7 +266,7 @@
       const pinta = (v) => {
         el.textContent = modo === "brl" ? fmt.brlTexto(v) : modo === "int" ? fmt.int(v) : fmt.num(v, Number(el.dataset.casas || 2));
       };
-      if (!ok(alvo) || parado) { pinta(alvo); return; }
+      if (!ok(alvo) || parado || document.body.classList.contains("carregando-dados")) { pinta(alvo); return; }
       const dur = 1100, t0 = performance.now();
       const passo = (t) => {
         const p = Math.min(1, (t - t0) / dur);
