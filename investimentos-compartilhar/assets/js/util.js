@@ -239,7 +239,7 @@
     return cru(`<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${P[nome] || ""}</svg>`);
   };
   FC.logo = function (tam = 18) {
-    return cru(`<svg width="${tam}" height="${tam}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/></svg>`);
+    return cru(`<img class="logo-bullz" src="assets/img/icone-192.png" width="${tam}" height="${tam}" alt="Bullz" style="display:block;width:${tam}px;height:${tam}px;object-fit:contain;border-radius:inherit">`);
   };
 
   // foguinho roxo da sequência de aportes. Aceso, a chama dança e brilha;

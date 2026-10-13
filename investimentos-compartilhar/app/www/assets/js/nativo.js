@@ -43,7 +43,7 @@
     trava.className = "trava";
     trava.innerHTML = String(html`<div class="trava-in">
       <div class="logo-g">${FC.logo(30)}</div>
-      <h1>Finance Control</h1><p class="sub">Bloqueado</p>
+      <h1>Bullz</h1><p class="sub">Bloqueado</p>
       <button class="botao" type="button">${icone("rosto", 18)} Desbloquear</button></div>`);
     document.body.appendChild(trava);
     FC.$("button", trava).addEventListener("click", () => pede());
@@ -176,7 +176,7 @@
       if (av.checked) {
         if (!(await N.avisos.permitido(true))) {
           av.checked = false;
-          return FC.ui.aviso("Permita as notificações do Finance Control nos ajustes do aparelho.", "erro");
+          return FC.ui.aviso("Permita as notificações do Bullz nos ajustes do aparelho.", "erro");
         }
         FC.local.gravar("avisos", true);
         await agendaAvisos();

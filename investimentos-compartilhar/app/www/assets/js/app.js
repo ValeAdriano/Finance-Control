@@ -241,7 +241,7 @@
     FC.dispositivo.ehInstalado = true;
     const b = FC.$("#banner-instalar");
     if (b) b.remove();
-    if (FC.ui && FC.ui.aviso) FC.ui.aviso("Finance Control instalado com sucesso!");
+    if (FC.ui && FC.ui.aviso) FC.ui.aviso("Bullz instalado com sucesso!");
   });
 
   FC.dispositivo = {
@@ -260,9 +260,9 @@
     if (disp.ehIOS) {
       corpo = html`
         <div class="guia-instalar-topo">
-          <img class="guia-instalar-app-icone" src="assets/img/apple-touch-icon.png" alt="Finance Control" width="56" height="56">
+          <img class="guia-instalar-app-icone" src="assets/img/apple-touch-icon.png" alt="Bullz" width="56" height="56">
           <div>
-            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-nome">Bullz</div>
             <div class="guia-instalar-app-sub">Adicionar à Tela de Início no iOS</div>
           </div>
         </div>
@@ -294,14 +294,14 @@
     } else if (promptDisponivel) {
       corpo = html`
         <div class="guia-instalar-topo">
-          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Bullz" width="56" height="56">
           <div>
-            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-nome">Bullz</div>
             <div class="guia-instalar-app-sub">Instalar aplicativo oficial</div>
           </div>
         </div>
         <p class="texto-p mt2" style="font-size:14.5px;line-height:1.5">
-          Instale o Finance Control no seu dispositivo para ter tela inteira, resposta instantânea e ícone dedicado.
+          Instale o Bullz no seu dispositivo para ter tela inteira, resposta instantânea e ícone dedicado.
         </p>
         <div class="mt3" style="text-align:center">
           <button class="botao" id="bt-exec-instalar" type="button" style="width:100%;padding:14px;font-size:16px;font-weight:600">
@@ -316,9 +316,9 @@
     } else if (disp.ehAndroid) {
       corpo = html`
         <div class="guia-instalar-topo">
-          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Bullz" width="56" height="56">
           <div>
-            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-nome">Bullz</div>
             <div class="guia-instalar-app-sub">Adicionar à Tela de Início no Android</div>
           </div>
         </div>
@@ -349,9 +349,9 @@
     } else {
       corpo = html`
         <div class="guia-instalar-topo">
-          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Finance Control" width="56" height="56">
+          <img class="guia-instalar-app-icone" src="assets/img/icone-192.png" alt="Bullz" width="56" height="56">
           <div>
-            <div class="guia-instalar-app-nome">Finance Control</div>
+            <div class="guia-instalar-app-nome">Bullz</div>
             <div class="guia-instalar-app-sub">Instalar no computador ou tablet</div>
           </div>
         </div>
@@ -365,7 +365,7 @@
           <li class="passo-instalar">
             <span class="passo-numero">2</span>
             <div class="passo-texto">
-              Confirme <b>Instalar</b> para abrir o Finance Control em sua própria janela dedicada.
+              Confirme <b>Instalar</b> para abrir o Bullz em sua própria janela dedicada.
             </div>
           </li>
         </ol>
@@ -444,7 +444,7 @@
     const r = FC.$("#raiz");
     r.innerHTML = String(html`
       <header class="topo"><div class="topo-in">
-        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(16)}</span><span class="nome-marca">Finance Control</span></a>
+        <a class="marca" href="#/inicio"><span class="logo">${FC.logo(32)}</span><span class="nome-marca">Bullz</span></a>
         <nav class="abas" aria-label="Seções">${navTopo()}</nav>
         <div class="acoes-topo">
           <button class="icone-bt" id="bt-alertas" title="Avisos e atenção" aria-label="Avisos e atenção">
@@ -653,7 +653,7 @@
     }
     main.replaceChildren(pagina);
     FC.animar(pagina, { semAnimacao: semAnimacao && !mudouDeTela });
-    if (mudouDeTela) { window.scrollTo(0, 0); document.title = (ROTAS.find((r) => r.id === id) || {}).nome + " · Finance Control"; }
+    if (mudouDeTela) { window.scrollTo(0, 0); document.title = (ROTAS.find((r) => r.id === id) || {}).nome + " · Bullz"; }
     else window.scrollTo(0, rolagem);
   };
 

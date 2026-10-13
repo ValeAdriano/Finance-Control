@@ -70,7 +70,7 @@
 
   function passos(nome) {
     return [
-      { cena: "boasVindas", titulo: nome ? `Olá, ${nome}!` : "Boas-vindas ao Finance Control", texto: "Tudo o que você investe num lugar só: bolsa, cripto, renda fixa e até o gado. Em um minuto, veja o que dá para fazer." },
+      { cena: "boasVindas", titulo: nome ? `Olá, ${nome}!` : "Boas-vindas ao Bullz", texto: "Tudo o que você investe num lugar só: bolsa, cripto, renda fixa e até o gado. Em um minuto, veja o que dá para fazer." },
       { cena: "patrimonio", titulo: "Seu patrimônio, sempre atualizado", texto: "O Início soma tudo com preços de mercado a cada minuto e guarda uma foto por dia. O gráfico mostra quanto você cresceu no mês, no ano ou desde o começo." },
       { cena: "investimentos", titulo: "Cada ativo avaliado", texto: "Em Investimentos, cadastre o que tem ou acompanha. O painel busca cotações e mostra se cada um está dentro, perto ou fora dos seus critérios, olhando o histórico do ativo, suas regras, os pares e a renda fixa. É uma régua sua, não uma recomendação." },
       { cena: "aportes", titulo: "Aportes em dois toques", texto: "Registre cada compra e repita os aportes de sempre informando só quantidade e valor. No Agro, controle compra, venda, custos e o rebanho atual." },
@@ -101,7 +101,7 @@
 
     const fundo = document.createElement("div");
     fundo.className = "ob-fundo";
-    fundo.innerHTML = String(html`<div class="ob" role="dialog" aria-modal="true" aria-label="Apresentação do Finance Control">
+    fundo.innerHTML = String(html`<div class="ob" role="dialog" aria-modal="true" aria-label="Apresentação do Bullz">
       <div class="ob-topo"><div class="ob-progresso"><i></i></div>
         <button class="botao texto pequeno" type="button" data-ob="pular">Pular</button></div>
       <div class="ob-trilho">${lista.map((p, k) => html`<section class="ob-passo" data-k="${k}" aria-hidden="${k ? "true" : "false"}">

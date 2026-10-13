@@ -112,7 +112,7 @@
           `}
         </div>`)}
 
-        ${grupo("Privacidade", "o que o Finance Control registra sobre o uso", html`<div class="lista">
+        ${grupo("Privacidade", "o que o Bullz registra sobre o uso", html`<div class="lista">
           <div class="item"><span class="modulo-ic">${icone("escudo", 18)}</span>
             <div class="principal"><div class="titulo">Ajudar a melhorar o app</div><div class="detalhe">registra de forma anônima as telas e botões que você usa — nunca valores, ativos, nome ou e-mail</div></div>
             <label class="interruptor"><input type="checkbox" id="aj-uso" aria-label="Coleta anônima de uso" ${FC.uso.lerConsentimento() === true ? "checked" : ""}><span></span></label></div>
@@ -443,7 +443,7 @@
       if (!f) return;
       try {
         const b = JSON.parse(await f.text());
-        if (b.app !== "finance-control") throw new Error("este arquivo não é um backup do Finance Control");
+        if (b.app !== "finance-control" && b.app !== "bullz") throw new Error("este arquivo não é um backup do Bullz");
         if (!(await FC.ui.confirma(`Acrescentar ${b.ativos.length} ativo(s), ${b.aportes.length} aporte(s) e ${b.agro_movimentos.length} movimento(s) do agro?`, { botao: "Restaurar" }))) return;
         const sem = (arr, ...campos) => arr.map((x) => { const y = { ...x }; for (const c of ["id", "user_id", "criado_em", "seq", ...campos]) delete y[c]; return y; });
         await FC.db.inserirVarios("ativos", sem(b.ativos), "user_id,ticker");

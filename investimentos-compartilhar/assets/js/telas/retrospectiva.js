@@ -58,7 +58,7 @@
         <div class="historia-topo">
           <div class="historia-barras"></div>
           <div class="historia-cab">
-            <span class="historia-marca">${FC.logo(14)}</span>
+            <span class="historia-marca">${FC.logo(32)}</span>
             <span class="historia-nome"><b>Retrospectiva ${data.tipo === "ano" ? "do ano" : "do mês"}</b><small>${data.rotulo}</small></span>
             <button type="button" class="historia-bt" data-c="mudo"></button>
             <button type="button" class="historia-bt" data-c="privado"></button>

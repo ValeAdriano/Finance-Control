@@ -18,21 +18,21 @@
   const senhaValida = (s) => s.length >= 10 && /[a-z]/.test(s) && /[A-Z]/.test(s) && /\d/.test(s);
 
   FC.telas.login = async function (raiz, { etapa, aviso } = {}) {
-    document.title = "Entrar · Finance Control";
+    document.title = "Entrar · Bullz";
     raiz.innerHTML = '<div class="tela-login"><div class="roda"></div></div>';
     let modo = etapa || "entrar";
     let fatoresMfa = [];
     if (modo === "mfa") { try { fatoresMfa = ((await FC.auth.fatores()).totp || []).filter((f) => f.status === "verified"); } catch (e) { /* segue */ } }
 
     const titulos = {
-      entrar: ["Finance Control", "Entre para ver sua carteira."],
+      entrar: ["Bullz", "Entre para ver sua carteira."],
       criar: ["Criar conta", "Seus investimentos em um lugar só. Só você vê o que cadastrar."],
       mfa: ["Verificação", "Digite o código de 6 dígitos do seu app autenticador."],
     };
     const [t, sub] = titulos[modo];
 
     raiz.innerHTML = String(html`<div class="tela-login"><div class="caixa-login">
-      <div class="logo-g">${FC.logo(30)}</div>
+      <div class="logo-g">${FC.logo(60)}</div>
       <h1>${t}</h1><p class="sub">${sub}</p>
       <form class="form" id="f-login" novalidate>
         ${modo === "mfa" ? html`

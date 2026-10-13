@@ -192,7 +192,7 @@
     el.className = "aviso-uso";
     el.setAttribute("role", "dialog");
     el.setAttribute("aria-label", "Privacidade");
-    el.innerHTML = `<div><b>Ajude a melhorar o Finance Control</b>
+    el.innerHTML = `<div><b>Ajude a melhorar o Bullz</b>
       <p>Podemos registrar, de forma anônima, as telas que você abre e os botões que toca — nunca seus valores, ativos, nome ou e-mail. Os dados somem em 180 dias e você muda de ideia quando quiser em Ajustes → Privacidade.</p></div>
       <div class="aviso-uso-bt"><button class="botao sec pequeno" data-uso="nao">Agora não</button><button class="botao pequeno" data-uso="sim">Aceitar</button></div>`;
     document.body.appendChild(el);

@@ -150,20 +150,21 @@
     ctx.restore();
   }
 
+  const imgLogo = new Image();
+  imgLogo.src = "assets/img/icone-512.png";
+
   function logo(ctx, x, y, tam, desenho = 1, sombra = true) {
     ctx.save();
     ctx.translate(x - tam / 2, y - tam / 2);
-    const g = ctx.createLinearGradient(0, 0, tam, tam);
-    g.addColorStop(0, "#0a84ff"); g.addColorStop(1, "#5e5ce6");
     if (sombra) { ctx.shadowColor = "rgba(0,0,0,0.35)"; ctx.shadowBlur = tam * 0.3; ctx.shadowOffsetY = tam * 0.08; }
-    ctx.beginPath(); ctx.roundRect(0, 0, tam, tam, tam * 0.24); ctx.fillStyle = g; ctx.fill();
-    ctx.shadowColor = "transparent";
-    const k = (tam * 0.62) / 24;
-    ctx.translate(tam * 0.19, tam * 0.19); ctx.scale(k, k);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    // desenha o traço do começo ao fim (os dois trechos têm menos de 40 unidades)
-    if (desenho < 1) ctx.setLineDash([Math.max(0.001, desenho * 40), 40]);
-    for (const p of LOGO) ctx.stroke(new Path2D(p));
+    if (imgLogo.complete && imgLogo.naturalWidth > 0) {
+      if (desenho < 1) ctx.globalAlpha *= clamp(desenho);
+      ctx.drawImage(imgLogo, 0, 0, tam, tam);
+    } else {
+      const g = ctx.createLinearGradient(0, 0, tam, tam);
+      g.addColorStop(0, "#0a84ff"); g.addColorStop(1, "#5e5ce6");
+      ctx.beginPath(); ctx.roundRect(0, 0, tam, tam, tam * 0.24); ctx.fillStyle = g; ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -474,7 +475,7 @@
       ctx.beginPath(); ctx.roundRect(SAFE, 420, W - SAFE * 2, 1000, 56); ctx.fillStyle = "#ffe14d"; ctx.fill();
       ctx.shadowColor = "transparent";
       logo(ctx, SAFE + 110, 540, 120, clamp((lt - 0.3) / 0.8), false);
-      texto(ctx, "Finance Control", SAFE + 200, 530, { tam: 44, peso: 900, cor: "#1b0030", esp: -1 });
+      texto(ctx, "Bullz", SAFE + 200, 530, { tam: 44, peso: 900, cor: "#1b0030", esp: -1 });
       texto(ctx, tx.final.rotulo, SAFE + 200, 580, { tam: 34, peso: 700, cor: "rgba(27,0,48,0.6)" });
       const v = P.rendimento_pct ?? P.variacao_pct, stats = [
         ["Patrimônio", R().brl(P.final, o.privado)],

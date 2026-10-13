@@ -129,15 +129,19 @@
     ctx.save(); ctx.globalAlpha *= alpha; ctx.font = F(peso, tam); ctx.textAlign = alinha; ctx.textBaseline = "alphabetic"; ctx.fillStyle = cor;
     ctx.fillText(s, x, y); ctx.restore();
   }
+  const imgLogoPromo = new Image();
+  imgLogoPromo.src = "assets/img/icone-512.png";
+
   function logo(ctx, x, y, tam, desenho = 1) {
     ctx.save(); ctx.translate(x - tam / 2, y - tam / 2);
-    const g = ctx.createLinearGradient(0, 0, tam, tam); g.addColorStop(0, "#0a84ff"); g.addColorStop(1, "#5e5ce6");
-    ctx.shadowColor = "rgba(10,132,255,0.5)"; ctx.shadowBlur = tam * 0.35;
-    ctx.beginPath(); ctx.roundRect(0, 0, tam, tam, tam * 0.24); ctx.fillStyle = g; ctx.fill(); ctx.shadowColor = "transparent";
-    const k = (tam * 0.62) / 24; ctx.translate(tam * 0.19, tam * 0.19); ctx.scale(k, k);
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    if (desenho < 1) ctx.setLineDash([Math.max(0.001, desenho * 40), 40]);
-    for (const p of LOGO) ctx.stroke(new Path2D(p));
+    ctx.shadowColor = "rgba(10,132,255,0.45)"; ctx.shadowBlur = tam * 0.35;
+    if (imgLogoPromo.complete && imgLogoPromo.naturalWidth > 0) {
+      if (desenho < 1) ctx.globalAlpha *= clamp(desenho);
+      ctx.drawImage(imgLogoPromo, 0, 0, tam, tam);
+    } else {
+      const g = ctx.createLinearGradient(0, 0, tam, tam); g.addColorStop(0, "#0a84ff"); g.addColorStop(1, "#5e5ce6");
+      ctx.beginPath(); ctx.roundRect(0, 0, tam, tam, tam * 0.24); ctx.fillStyle = g; ctx.fill();
+    }
     ctx.restore();
   }
   // título que sobe linha a linha por trás de uma máscara
@@ -389,7 +393,7 @@
     // barra de status e topo do app
     texto(ctx, "9:41", 60, 54, { tam: 24, cor: INK, peso: 700 });
     ctx.beginPath(); ctx.roundRect(SW / 2 - 70, 18, 140, 40, 20); ctx.fillStyle = "#0b0b0f"; ctx.fill();
-    logo(ctx, 62, 105, 40); texto(ctx, "Finance Control", 94, 114, { tam: 25, cor: INK, peso: 700 });
+    logo(ctx, 62, 105, 40); texto(ctx, "Bullz", 94, 114, { tam: 25, cor: INK, peso: 700 });
     // a tela atual entra deslizando da direita, como navegação do app
     const i = CENAS.findIndex((c) => t >= c.ini && t < c.fim);
     const c = CENAS[Math.max(0, i)];
@@ -417,7 +421,7 @@
       const cy = H / 2 - (H > W ? 180 : 110);
       ctx.save(); ctx.translate(W / 2, cy); ctx.scale(lerp(0.5, 1, q), lerp(0.5, 1, q)); ctx.translate(-W / 2, -cy);
       logo(ctx, W / 2, cy, H > W ? 260 : 220, clamp((lt - 0.2) / 0.9)); ctx.restore();
-      texto(ctx, "Finance Control", W / 2, cy + (H > W ? 260 : 210), { tam: H > W ? 96 : 104, peso: 800, alinha: "center", alpha: eOut((lt - 0.4) / 0.5) });
+      texto(ctx, "Bullz", W / 2, cy + (H > W ? 260 : 210), { tam: H > W ? 96 : 104, peso: 800, alinha: "center", alpha: eOut((lt - 0.4) / 0.5) });
       if (c.id === "abertura") {
         texto(ctx, "Todos os seus investimentos.", W / 2, cy + (H > W ? 350 : 290), { tam: 44, peso: 500, cor: "rgba(235,235,245,0.8)", alinha: "center", alpha: eOut((lt - 0.9) / 0.5) });
         texto(ctx, "Um painel só.", W / 2, cy + (H > W ? 410 : 345), { tam: 44, peso: 700, cor: "#64d2ff", alinha: "center", alpha: eOut((lt - 1.3) / 0.5) });

@@ -163,17 +163,18 @@ p { margin: 0; }
   gap: var(--e3); padding: 0 var(--e4);
 }
 .marca {
-  display: flex; align-items: center; gap: 9px; font-weight: 600;
-  font-size: 16px; letter-spacing: -0.024em; color: var(--ink); white-space: nowrap;
+  display: flex; align-items: center; gap: 10px; font-weight: 700;
+  font-size: 17px; letter-spacing: -0.024em; color: var(--ink); white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
 }
 .marca:hover { text-decoration: none; }
 .marca .logo {
-  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
-  background: linear-gradient(145deg, #0a84ff, #5e5ce6); color: #fff;
-  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.32);
+  width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center;
+  background: transparent; color: #fff;
   transition: transform .18s var(--curva);
+  overflow: hidden; flex: none;
 }
+.marca .logo img { width: 100%; height: 100%; object-fit: contain; }
 .marca:active .logo { transform: scale(.92); }
 .abas { display: flex; gap: 2px; margin: 0 auto; }
 .abas a {
@@ -644,10 +645,11 @@ dl { margin: 0; }
   box-shadow: var(--sombra-alta); padding: var(--e5) 40px 40px; animation: surge .7s var(--mola) both;
 }
 .caixa-login .logo-g {
-  width: 64px; height: 64px; border-radius: 18px; margin: 0 auto var(--e4); display: grid; place-items: center;
-  background: linear-gradient(145deg, #0a84ff, #5e5ce6); color: #fff; box-shadow: 0 10px 30px rgba(10, 132, 255, .35);
+  width: 72px; height: 72px; border-radius: 20px; margin: 0 auto var(--e4); display: grid; place-items: center;
+  background: transparent; color: #fff;
   animation: flutua 6s ease-in-out infinite;
 }
+.caixa-login .logo-g img { width: 100%; height: 100%; object-fit: contain; }
 @keyframes flutua { 50% { transform: translateY(-4px); } }
 .caixa-login h1 { font-size: 28px; text-align: center; }
 .caixa-login .sub { text-align: center; color: var(--ink-2); margin: 6px 0 var(--e4); font-size: 15px; }
@@ -788,9 +790,9 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
   .avisos { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 @media (max-width: 640px) {
-  .topo-in { padding: 0 14px; height: 50px; }
-  .marca { font-size: 15px; gap: 8px; }
-  .marca .logo { width: 26px; height: 26px; }
+  .topo-in { padding: 0 14px; height: 52px; }
+  .marca { font-size: 16px; gap: 9px; }
+  .marca .logo { width: 32px; height: 32px; }
   .icone-bt { width: 34px; height: 34px; }
   main { padding: 14px 12px calc(80px + env(safe-area-inset-bottom)); }
   .cabecalho h1 { font-size: 26px; letter-spacing: -0.025em; }
@@ -890,8 +892,9 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 .ob-logo { position: relative; height: 220px; display: grid; place-items: center; }
 .ob-logo-g {
   width: 96px; height: 96px; border-radius: 26px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(145deg, #0a84ff, #5e5ce6); box-shadow: 0 16px 40px rgba(10, 132, 255, .35);
+  background: transparent;
 }
+.ob-logo-g img { width: 100%; height: 100%; object-fit: contain; }
 .atual .ob-logo-g { animation: surge .7s var(--mola) both, flutua 6s ease-in-out 1s infinite; }
 .ob-orbita span {
   position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px; border-radius: 12px;
@@ -1031,9 +1034,10 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
 .historia-barras { display: flex; gap: 5px; }
 .historia-barras span { flex: 1; height: 3.5px; border-radius: 2px; background: rgba(255,255,255,.35); overflow: hidden; }
 .historia-barras i { display: block; height: 100%; background: #fff; transform-origin: left; transform: scaleX(0); }
-.historia-cab { display: flex; align-items: center; gap: 4px; margin-top: 10px; color: #fff; pointer-events: auto; }
-.historia-marca { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff;
-  background: linear-gradient(145deg, #0a84ff, #5e5ce6); flex: none; margin-right: 6px; }
+.historia-cab { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #fff; pointer-events: auto; }
+.historia-marca { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: #fff;
+  background: transparent; flex: none; margin-right: 6px; overflow: hidden; }
+.historia-marca img { width: 100%; height: 100%; object-fit: contain; }
 .historia-nome { display: grid; line-height: 1.15; margin-right: auto; text-shadow: 0 1px 4px rgba(0,0,0,.3); }
 .historia-nome b { font-size: 14px; }
 .historia-nome small { font-size: 11px; opacity: .8; }

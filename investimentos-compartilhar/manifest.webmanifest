@@ -1,6 +1,6 @@
 {
-  "name": "Finance Control",
-  "short_name": "Finance",
+  "name": "Bullz",
+  "short_name": "Bullz",
   "description": "Controle patrimonial, carteira de investimentos e dividendos",
   "start_url": "./index.html",
   "scope": "./",
