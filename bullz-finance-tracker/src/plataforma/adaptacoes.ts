@@ -73,6 +73,14 @@ const ehAndroid = Platform.OS === "android" || /Android/i.test(ua);
 const instaladoWeb = web && typeof window !== "undefined" && (
   (window.navigator as any).standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
 
+// links do site antigo (favoritos, PWA instalada, e-mails): /#/ativos/carteira → /ativos/carteira.
+// A rota "/" (app/index.tsx) e a de "não encontrado" redirecionam para cá.
+/** a rota do site antigo pedida na URL (`#/ativos`), ou null */
+export function rotaLegada(): string | null {
+  if (!web || typeof window === "undefined" || !/^#\/[a-z]/.test(window.location.hash)) return null;
+  return "/" + window.location.hash.replace(/^#\/+/, "");
+}
+
 let eventoInstall: any = null;
 if (web && typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e: any) => { e.preventDefault(); eventoInstall = e; });

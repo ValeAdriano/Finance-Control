@@ -1,2 +1,4 @@
 import { Redirect } from "expo-router";
-export default function NaoAchou() { return <Redirect href="/inicio" />; }
+import { rotaLegada } from "../src/plataforma/adaptacoes";
+// "/#/ativos" (link do site antigo) → "/ativos"; o resto vai para o Início
+export default function NaoAchou() { return <Redirect href={(rotaLegada() || "/inicio") as any} />; }

@@ -1,5 +1,9 @@
 # Finance Control
 
+> **Backup.** O app principal agora é o [`bullz-finance-tracker/`](../bullz-finance-tracker/README.md)
+> (React Native, web e celular). Este site continua funcionando e publicável (`vercel.json`), e os
+> arquivos de `assets/js/` seguem sendo a fonte dos cálculos que o app carrega.
+
 Painel pessoal de investimentos e agronegócio. Front-end estático em
 HTML/CSS/JS, sem build e sem servidor; o único backend é o **Supabase**
 (Auth, Postgres com RLS e uma Edge Function).

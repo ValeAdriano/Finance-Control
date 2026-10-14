@@ -75,8 +75,118 @@ npm run lint
 npx tsc --noEmit
 ```
 
-## Deploy web
+## Gerar o APK (Android)
 
-`vercel.json` deste diretório: `npx expo export -p web` → `dist/`, SPA, mesmos headers de
-segurança do site (CSP sem script inline; o player roda em `/palco.html`, servido de `'self'`).
-O corte (apontar a Vercel para cá) é da F8.
+O APK sai assinado com a chave de debug: instala direto no celular para teste, mas não serve
+para a Play Store (para a loja, use o perfil `production` do EAS, que gera `.aab`). É a versão
+de produção do app: login e dados reais, sem o modo fixture.
+
+### Opção A — na nuvem com EAS (mais simples)
+
+Não precisa de Java nem Android SDK. Precisa de uma conta Expo (gratuita).
+
+```bash
+cd bullz-finance-tracker
+npx eas-cli login                                 # uma vez
+npx eas-cli build -p android --profile preview    # perfil do eas.json que gera APK
+```
+
+Na primeira vez o EAS pergunta se pode criar o projeto e uma chave de assinatura: aceite. O build
+leva ~10–20 min na fila gratuita e termina com um link e um QR code: abra no celular e instale.
+
+### Opção B — nesta máquina
+
+Pré-requisitos (uma vez só; ~3 GB, sem sudo):
+
+```bash
+# Java 17 (Eclipse Temurin)
+mkdir -p ~/.local/jdk17
+curl -fL "https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse" \
+  | tar -xz -C ~/.local/jdk17 --strip-components=1
+
+# Android SDK: ferramentas de linha de comando + pacotes que o Expo SDK 57 pede
+mkdir -p ~/Android/Sdk/cmdline-tools && cd /tmp
+curl -fLO https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip -q commandlinetools-linux-11076708_latest.zip && mv cmdline-tools ~/Android/Sdk/cmdline-tools/latest
+export JAVA_HOME=~/.local/jdk17 ANDROID_HOME=~/Android/Sdk
+export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+sdkmanager --licenses                              # leia e aceite as licenças da Google
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+```
+
+Coloque os três `export` acima no `~/.bashrc` para não repetir.
+
+Build:
+
+```bash
+cd bullz-finance-tracker
+npm install
+npx expo prebuild -p android --clean      # gera a pasta android/ (fora do git)
+echo "sdk.dir=$HOME/Android/Sdk" > android/local.properties
+cd android
+./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+```
+
+O APK fica em `android/app/build/outputs/apk/release/app-release.apk`.
+
+- `-PreactNativeArchitectures=arm64-v8a` compila só para celulares de 64 bits (praticamente todos
+  os atuais): o build fica bem mais rápido e leve. Sem ele, sai um APK para todas as arquiteturas.
+- O primeiro build baixa as dependências do Gradle e compila C++: 15–40 min. Os próximos são
+  bem mais rápidos.
+- Pouca memória? Feche outros programas; se o Gradle morrer por falta de memória, rode com
+  `--no-daemon --max-workers=2`.
+
+### Instalar no celular
+
+- **Cabo USB:** ative *Opções do desenvolvedor → Depuração USB* e rode
+  `adb install -r android/app/build/outputs/apk/release/app-release.apk`.
+- **Sem cabo:** mande o `.apk` para o celular (Drive, Telegram, e-mail…), abra pelo gerenciador
+  de arquivos e permita *instalar apps desconhecidos* para esse app quando o Android pedir.
+- Já tem uma versão instalada com outra assinatura (por exemplo, a do EAS)? Desinstale antes.
+
+## Deploy web (Vercel)
+
+**O app React Native é o site principal.** O site antigo em `../investimentos-compartilhar/`
+(HTML, CSS e JS puros) fica como backup: continua no repositório e continua sendo a fonte dos
+cálculos que o app carrega.
+
+O `vercel.json` deste diretório faz tudo: `npm ci` → `npx expo export -p web` → `dist/`, como
+SPA, com os mesmos headers de segurança do site (CSP sem script inline; o player da
+retrospectiva roda em `/palco.html`, servido de `'self'`).
+
+### Trocar o projeto da Vercel para o app (uma vez)
+
+No painel da Vercel, no projeto que hoje serve o site:
+
+1. **Settings → General → Root Directory**: troque `investimentos-compartilhar` por
+   `bullz-finance-tracker`.
+2. Na mesma tela, deixe **ligado** *Include source files outside of the Root Directory in the Build Step*:
+   o app lê os cálculos de `../investimentos-compartilhar/assets/js` durante o build.
+3. **Framework Preset**: *Other* (o `vercel.json` já define build, saída e headers).
+   **Node.js Version**: 22.x (ou 20.x).
+4. **Environment Variables**: nenhuma é necessária. Não defina `EXPO_PUBLIC_FIXTURE` (ela liga
+   os dados de demonstração).
+5. **Deployments → Redeploy** a última versão da `main` (ou faça um push).
+
+Depois do deploy, confira: login, Início com cotações, uma retrospectiva (Ajustes → Retrospectiva)
+e o console do navegador sem erros de CSP.
+
+Links antigos continuam valendo: `/#/ativos` (favoritos, PWA instalada) abre `/ativos`.
+O domínio não muda, então a URL do site no Supabase (Authentication → URL Configuration) também
+não precisa mudar.
+
+### Voltar para o site antigo (rollback)
+
+- **Imediato:** em *Deployments*, escolha o último deploy do site antigo → *Promote to Production*.
+- **Definitivo:** volte o Root Directory para `investimentos-compartilhar` e faça redeploy.
+
+Para manter o site antigo no ar como backup em outro endereço, crie um **segundo projeto** na
+Vercel apontando para o mesmo repositório com Root Directory `investimentos-compartilhar` (o
+`vercel.json` de lá já está pronto) e um domínio como `backup.seudominio.com`.
+
+### Testar o build de produção localmente
+
+```bash
+npx expo export -p web     # gera dist/
+npx serve dist -s          # SPA em http://localhost:3000
+```

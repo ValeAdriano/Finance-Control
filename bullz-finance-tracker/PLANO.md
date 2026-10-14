@@ -8,8 +8,10 @@
 - **Gates ainda abertos** (dependem da linha de base da F0, que não foi gerada): diff visual
   contra as capturas do site, roteiros em Playwright/Maestro e snapshots de cálculo com fixtures.
   Também falta rodar no aparelho (iOS/Android) — só o web foi validado em runtime.
-- **F8 não foi iniciada**: EAS/TestFlight/Play, o corte da Vercel e a aposentadoria do app
-  Capacitor são passos externos e só acontecem com o seu aceite.
+- **F8 em andamento**: o app React Native passou a ser o principal e o site HTML virou backup.
+  O corte da Vercel está pronto (passo a passo em README › Deploy web: trocar o Root Directory
+  para `bullz-finance-tracker`); links antigos `#/rota` redirecionam. O APK local/EAS está
+  documentado em README › Gerar o APK. Faltam o teste no aparelho, as lojas e o beta.
 
 Cada fase tem quatro etapas, sempre nesta ordem:
 
