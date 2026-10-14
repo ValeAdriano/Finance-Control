@@ -240,9 +240,11 @@ export function Casca({ children }: { children: React.ReactNode }) {
   useEffect(() => { rotaMudou(caminho); }, [caminho]);
   useEffect(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") {
-      document.title = ((ROTAS.find((r) => r.id === id) || {}) as any).nome + " · Bullz";
+      // endereço desconhecido cai no +not-found, mas a rota "válida" seria o Início
+      const conhecida = caminho === "/" || ROTAS.some((r) => r.id === caminho.split("/")[1]);
+      document.title = (conhecida ? ((ROTAS.find((r) => r.id === id) || {}) as any).nome : "Página não encontrada") + " · Bullz";
     }
-  }, [id]);
+  }, [id, caminho]);
   return (
     <View style={{ flex: 1, backgroundColor: t.cores.bg }}>
       <Topo />
