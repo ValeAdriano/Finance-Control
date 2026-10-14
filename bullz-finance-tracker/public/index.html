@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- as mesmas meta tags do index.html do site: PWA instalável no iOS e no Android -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bullz" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Bullz" />
+    <meta name="description" content="Controle patrimonial, carteira de investimentos e dividendos" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Bullz</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/assets/img/icone.svg" />
+    <link rel="alternate icon" href="/assets/img/icone-192.png" />
+    <!-- reset recomendado do react-native-web + o fundo certo antes do JS (sem flash branco no tema escuro) -->
+    <style id="expo-reset">
+      html, body { height: 100%; }
+      body { overflow: hidden; margin: 0; background: #f5f5f7; }
+      @media (prefers-color-scheme: dark) { body { background: #000; } }
+      #root { display: flex; height: 100%; flex: 1; }
+      /* barra de rolagem no estilo do sistema: fina, arredondada, sem setas e sem trilho,
+         na cor do texto terciário do tema (o tema vem de data-tema, posto pelo app) */
+      :root { --rolagem: rgba(0, 0, 0, 0.26); --rolagem-ativa: rgba(0, 0, 0, 0.42); }
+      :root[data-tema="escuro"] { --rolagem: rgba(255, 255, 255, 0.24); --rolagem-ativa: rgba(255, 255, 255, 0.4); }
+      ::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
+      ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+      ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+      ::-webkit-scrollbar-thumb {
+        background-color: var(--rolagem); border-radius: 999px;
+        border: 3px solid transparent; background-clip: content-box; min-height: 36px;
+      }
+      ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--rolagem-ativa); }
+      /* Firefox não tem os pseudo-elementos acima */
+      @supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: var(--rolagem) transparent; } }
+      /* impressão (relatório do perfil): a mesma regra do app.css do site —
+         some a moldura (topo, barra de abas, avisos, ações) e a página
+         inteira entra, não só o trecho visível das áreas roláveis */
+      @media print {
+        [data-imprimir="nao"] { display: none !important; }
+        html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+        #root * { overflow: visible !important; max-height: none !important; }
+        #root [style*="box-shadow"] { box-shadow: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>Ative o JavaScript para usar o Bullz.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

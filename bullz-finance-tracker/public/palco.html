@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- GERADO por scripts/gera-palco.js — não edite à mão. -->
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Bullz · player</title>
+<style>/* o palco da retrospectiva e do vídeo de divulgação — regras de
+ * .historia-* e .promo-* do app.css do site (port fiel). */
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:transparent;overflow:hidden;font-family:-apple-system,"SF Pro Text","Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font:inherit}
+[hidden]{display:none!important}
+.ponto-rec{width:10px;height:10px;border-radius:50%;background:#ff453a;animation:pisca 1s ease-in-out infinite}
+@keyframes pisca{50%{opacity:.3}}
+.historia{--cor:#2a1bff;--curva:cubic-bezier(.25,.1,.25,1);position:fixed;inset:0;display:grid;place-items:center;background:var(--cor);transition:background-color .5s var(--curva),opacity .25s;opacity:0;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.historia.visivel{opacity:1}
+.historia-palco{position:relative;height:calc(100dvh - 40px);aspect-ratio:9/16;max-width:100vw;border-radius:24px;overflow:hidden;background:var(--cor);box-shadow:0 30px 90px rgba(0,0,0,.35);cursor:pointer}
+.historia-palco canvas{width:100%;height:100%;display:block;object-fit:contain}
+.historia-topo{position:absolute;left:0;right:0;top:0;padding:14px 14px 30px;pointer-events:none;background:linear-gradient(rgba(0,0,0,.28),rgba(0,0,0,0));opacity:0;transition:opacity .3s}
+.historia.comecou .historia-topo{opacity:1}
+.historia-barras{display:flex;gap:5px}
+.historia-barras span{flex:1;height:3.5px;border-radius:2px;background:rgba(255,255,255,.35);overflow:hidden}
+.historia-barras i{display:block;height:100%;background:#fff;transform-origin:left;transform:scaleX(0)}
+.historia-cab{display:flex;align-items:center;gap:6px;margin-top:10px;color:#fff;pointer-events:auto}
+.historia-marca{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;flex:none;margin-right:6px;overflow:hidden}
+.historia-marca img{width:100%;height:100%;object-fit:contain}
+.historia-nome{display:grid;line-height:1.15;margin-right:auto;text-shadow:0 1px 4px rgba(0,0,0,.3)}
+.historia-nome b{font-size:14px}.historia-nome small{font-size:11px;opacity:.8}
+.historia-bt{width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:#fff;cursor:pointer;display:grid;place-items:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.35))}
+.historia-bt:hover{background:rgba(255,255,255,.14)}
+.historia-bt[aria-pressed="true"]{background:rgba(255,255,255,.22)}
+.historia-pausa{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:84px;height:84px;border-radius:50%;display:grid;place-items:center;color:#fff;background:rgba(0,0,0,.35);pointer-events:none;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.historia-gravando,.promo-gravando{position:absolute;left:14px;right:14px;bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;color:#fff;font-size:13px;background:rgba(0,0,0,.5);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.historia.gravando .historia-palco,.historia.gravando .historia-seta{pointer-events:none}
+.historia.gravando .historia-cab{opacity:.5}
+.historia-comecar{position:absolute;inset:0;border:0;cursor:pointer;color:#fff;display:grid;place-content:center;justify-items:center;gap:10px;text-align:center;padding:24px;background:rgba(20,10,90,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.historia-comecar b{font-size:26px;font-weight:800;letter-spacing:-.02em;max-width:280px;line-height:1.15}
+.historia-comecar small{font-size:14px;opacity:.85}
+.historia-comecar-ic{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;padding-left:6px;background:#ffe14d;color:#2a1bff;box-shadow:0 16px 40px rgba(0,0,0,.3);margin-bottom:8px;animation:pulsa 1.8s ease-in-out infinite}
+@keyframes pulsa{50%{transform:scale(1.07)}}
+.historia-seta{position:absolute;top:50%;transform:translateY(-50%);width:56px;height:56px;border-radius:50%;border:0;display:grid;place-items:center;cursor:pointer;color:#fff;background:rgba(255,255,255,.16);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:background .2s,transform .2s}
+.historia-seta:hover{background:rgba(255,255,255,.28);transform:translateY(-50%) scale(1.06)}
+.historia-seta.esq{left:max(24px,calc(50% - 50dvh * 9 / 16 - 96px))}
+.historia-seta.dir{right:max(24px,calc(50% - 50dvh * 9 / 16 - 96px))}
+@media (max-width:760px),(max-aspect-ratio:3/4){
+ .historia-palco{height:100dvh;width:100vw;aspect-ratio:auto;border-radius:0;box-shadow:none}
+ .historia-topo{padding-top:calc(var(--seguro-topo,0px) + 10px)}
+ .historia-seta{display:none}
+}
+@media (prefers-reduced-motion:reduce){.historia-comecar-ic{animation:none}}
+.promo-palco{position:fixed;inset:0;display:grid;place-items:center;background:#050f2b}
+.promo-palco canvas{width:100%;height:100%;display:block;object-fit:contain}
+</style></head><body>
+<script src="palco.js"></script></body></html>

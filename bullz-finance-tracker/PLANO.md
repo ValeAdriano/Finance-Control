@@ -1,5 +1,16 @@
 # Plano de migração
 
+## Situação em 2026-10-14
+
+- **F1–F7: desenvolvimento concluído.** Todas as telas, folhas e fluxos do site existem no app e
+  foram exercitados no RN Web com o modo fixture (`?fixture=1`, `?fixture=admin`,
+  `?fixture=vazia`): sem nenhuma tela em "Em migração". Lint, `tsc` e `npm test` limpos.
+- **Gates ainda abertos** (dependem da linha de base da F0, que não foi gerada): diff visual
+  contra as capturas do site, roteiros em Playwright/Maestro e snapshots de cálculo com fixtures.
+  Também falta rodar no aparelho (iOS/Android) — só o web foi validado em runtime.
+- **F8 não foi iniciada**: EAS/TestFlight/Play, o corte da Vercel e a aposentadoria do app
+  Capacitor são passos externos e só acontecem com o seu aceite.
+
 Cada fase tem quatro etapas, sempre nesta ordem:
 
 1. **Planejamento**: itens da fase marcados na `PARIDADE.md` e roteiros escolhidos em `ROTEIROS.md`.
@@ -20,11 +31,11 @@ Cada fase tem quatro etapas, sempre nesta ordem:
 | armazenamento local | `localStorage` síncrono sobre react-native-mmkv (no web, o nativo) | `FC.local` e o cache de mercado funcionam sem mudança |
 | Supabase | `supa.js` reaproveitado com `@supabase/supabase-js` e sessão em MMKV | mesmas consultas, MFA, sessão de 7 dias |
 | estado | Zustand espelhando `FC.estado` (base, prefs, mercado, dados, perfil) | mesma forma de dados que as telas atuais |
-| folhas | `@gorhom/bottom-sheet` no celular; modal centrado no desktop | igual ao `ui.folha` |
+| folhas | `Modal` próprio (`src/ui/folha.tsx`): folha de baixo no celular, centrada no desktop, arrastar para fechar | igual ao `ui.folha` |
 | gráficos | SVG gerado por `graficos.js` renderizado com `SvgXml`; toque/arrasto refeitos com Gesture Handler | mesmo desenho |
 | ícones | o dicionário SVG de `util.js` com `react-native-svg` | mesmos ícones |
 | animação | Reanimated com as curvas `--mola` e `--curva`; respeita "reduzir movimento" | mesma sensação |
-| retrospectiva e vídeo | `recap/*` e `promo/promo.js` numa WebView, compartilhando por `expo-sharing` | canvas, áudio e gravação idênticos |
+| retrospectiva e vídeo | `recap/*` e `promo/promo.js` no "palco" (`src/recap/`): WebView no celular, iframe de `public/palco.html` na web (CSP sem script inline); o vídeo exportado volta em pedaços e sai por `expo-sharing` | canvas, áudio e gravação idênticos |
 | importação | `importador.js` com `@zip.js/zip.js` e `expo-document-picker` | mesmos layouts de extrato |
 
 ### Adaptador do núcleo (`src/nucleo/`)
@@ -69,75 +80,92 @@ Antes disso define `globalThis.window = globalThis` com `FC = {}`, `localStorage
 **Planejamento**: linhas "Núcleo" e "Tema" da matriz; roteiro R0.
 
 **Desenvolvimento**
-- [ ] Projeto Expo + TS + ESLint + Prettier + expo-router
-- [ ] `src/tema/`: tokens extraídos de `app.css` (`:root`, escuro, contraste alto), tipografia do
-  sistema, raios, espaços, sombras, curvas
-- [ ] `src/nucleo/`: adaptador, shims e tipos
-- [ ] `src/ui/icone.tsx` com o dicionário de `util.js`
+- [x] Projeto Expo + TS + ESLint + Prettier + expo-router (`package.json`, `app.json`,
+  `tsconfig.json`, `babel.config.js`, `metro.config.js` com `watchFolders`, `.eslintrc.js`,
+  `.prettierrc`; rota de diagnóstico em `app/`)
+- [x] `src/tema/`: tokens extraídos de `app.css` (`:root`, escuro, contraste alto), raios,
+  espaços, curvas; `useTema()` que segue o esquema do sistema
+- [x] `src/nucleo/`: shim universal (`shim.js`), ordem canônica (`ordem.js`), adaptador RN
+  (`index.ts`) e tipos (`fc.d.ts`); 20 arquivos do site carregam, 82 chaves no `FC`
+- [x] `src/ui/icone.tsx` com o dicionário de `util.js` (gerado por `scripts/gera-icones.js` →
+  `icones.gen.ts`, 46 ícones) e desenhado com `react-native-svg`
 
-**Testes**
-- [ ] Jest: com as fixtures, comparar JSON do app com o JSON do node do site para
-  `FC.carteira.monta`, `FC.rentab.*`, `FC.impostos.*`, `FC.dividendos.analisa`,
-  `FC.projecao.*`, `FC.alertas.calcula`, `FC.salario.*`, `FC.agro.analisa`, `FC.perfil.*`,
-  `FC.recomendacao.gera`, `FC.layout.resolve`, `FC.importador` (extratos de exemplo)
-- [ ] Rodar também `tests/perfil.test.js` e `tests/layout.test.js` contra o núcleo carregado no app
+**Testes** (dependência zero: `npm test` → `node --test testes/*.test.js`)
+- [x] N1 superfície do `FC` (snapshot `superficie-esperada.json`) e ordem de carga = subconjunto
+  não-tela do `index.html`
+- [x] N12 perfil/recomendação, N13 layout, N16 formatação pt-BR — iguais ao site pelo adaptador
+- [x] T1/T2 tema claro e escuro conferidos var a var contra `app.css`; T4 ícones idênticos a `util.js`
+- [ ] Fixtures (F0) + snapshots de `carteira/rentab/impostos/dividendos/projecao/alertas/salario/
+  agro/importador` com dados da conta demo — depende das fixtures ainda não commitadas
+- [~] Rodar o app de verdade: **web validado** (Metro e `expo export -p web`); device (EAS) pendente
 
-**Gate**: 100% de igualdade nos snapshots de cálculo.
+**Gate**: paridade de cálculo sem dados: **OK**. Falta a paridade com fixtures (bloqueada pela F0)
+e a validação em runtime nativo.
 
 ## F2 · Casca e acesso
 
 **Desenvolvimento**
-- [ ] Login, criar conta (força, senha vazada), confirmação por e-mail, MFA (TOTP), sair
-- [ ] Sessão de 7 dias sem uso (mesma regra de `app.js`)
-- [ ] Casca: menu do topo (web/desktop), barra de baixo pelo `FC.layoutAtual()`, "Mais",
+- [x] Login, criar conta (força, senha vazada), confirmação por e-mail, MFA (TOTP), sair
+- [x] Sessão de 7 dias sem uso (mesma regra de `app.js`)
+- [x] Casca: menu do topo (web/desktop), barra de baixo pelo `FC.layoutAtual()`, "Mais",
   "Mais opções", sino com contador, modo privado, tema, carregamento com cache em blur
-- [ ] Cotações a cada minuto e ao voltar para o app (AppState), registro diário
-- [ ] Toasts, confirmações e folhas
+- [x] Cotações a cada minuto e ao voltar para o app (AppState), registro diário
+- [x] Toasts, confirmações e folhas
 
 **Testes**: R1 (login), R2 (MFA), capturas da casca.
 **Gate**: linhas "Acesso" e "Casca" iguais.
 
 ## F3 · Núcleo do dia a dia
 
-- [ ] Início: todos os blocos, ordem e ocultos do layout, contagem dos valores
-- [ ] Investimentos: lista, filtros, detalhe do ativo (4 lentes, notas, proventos), formulários de
+- [x] Início: todos os blocos, ordem e ocultos do layout, contagem dos valores
+- [x] Investimentos: lista, filtros, detalhe do ativo (4 lentes, notas, proventos), formulários de
   ativo e de renda fixa
-- [ ] Aportes: compra, venda, renda fixa, provento, repetir aporte, histórico, importação
+- [x] Aportes: compra, venda, renda fixa, provento, repetir aporte, histórico, importação
 
 **Testes**: R3 (cadastrar ativo), R4 (aportar e ver no Início), R5 (importar extrato).
 **Gate**: linhas "Início", "Investimentos", "Aportes".
 
 ## F4 · Demais abas
 
-- [ ] Dividendos, Salário (ganhos, plano, guia do mês, sequência), Agro (lançamentos, custos,
+- [x] Dividendos, Salário (ganhos, plano, guia do mês, sequência), Agro (lançamentos, custos,
   pesagens, cotação), Imposto de Renda, Renda, Simular, Projeções
-- [ ] Ajustes: Geral, Módulos, Critérios (metas, objetivos, regras, universo), Dados (backup,
+- [x] Ajustes: Geral, Módulos, Critérios (metas, objetivos, regras, universo), Dados (backup,
   restaurar, log, apagar), segurança (senha, 2FA, sair dos outros aparelhos)
 
 **Testes**: R6–R9. **Gate**: linhas de cada aba.
 
 ## F5 · Perfil, onboarding e personalização
 
-- [ ] Questionário (uma pergunta por tela, rascunho, convite e adiamentos), resultado, aplicar
+- [x] Questionário (uma pergunta por tela, rascunho, convite e adiamentos), resultado, aplicar
   plano, relatório (PDF com `expo-print`), checklist e card no Início, revisão 12/24 meses
-- [ ] Editor de layout no Início (arrastar, olho, menu com prévia do celular)
-- [ ] Guias "Como usar esta tela" e apresentação por passos
+- [x] Editor de layout no Início (arrastar, olho, menu com prévia do celular)
+- [x] Guias "Como usar esta tela" e apresentação por passos
 
 **Testes**: R10 (perfil), R11 (layout). **Gate**: linhas "Perfil", "Layout", "Ajuda".
 
 ## F6 · Extras
 
-- [ ] Retrospectiva do mês/ano e vídeo promocional (WebView com os mesmos arquivos)
-- [ ] Administração (vídeos, cliques, jornadas, onboarding, logs)
-- [ ] Telemetria anônima com consentimento (`uso.js`)
+- [x] Retrospectiva do mês/ano e vídeo promocional (WebView com os mesmos arquivos)
+- [x] Administração (vídeos, cliques, jornadas, onboarding, logs)
+- [x] Telemetria anônima com consentimento (`uso.js`)
+
+Notas: o palco é montado por `scripts/gera-palco.js` (`npm run gera:palco`) com os fontes do site
++ `src/recap/motor*.js`. A Administração reaproveita `FC.admin.analisa/insights` e o vídeo usa
+`FC.promo.montaDados`, carregados no núcleo só pela lógica pura.
 
 **Testes**: R12. **Gate**: linhas "Retrospectiva", "Admin".
 
 ## F7 · Web (React Native Web) e desktop
 
-- [ ] Layout de desktop igual (menu do topo, grade de 2/3 colunas, folhas centradas)
-- [ ] Foco, teclado, impressão do relatório, manifest e ícones do PWA
-- [ ] Headers de segurança e CSP do `vercel.json` adaptados ao `expo export -p web`
+- [x] Layout de desktop igual (menu do topo, grade de 2/3 colunas, folhas centradas)
+- [x] Foco, teclado, impressão do relatório, manifest e ícones do PWA
+- [x] Headers de segurança e CSP do `vercel.json` adaptados ao `expo export -p web`
+
+Notas: `public/index.html` (meta tags do site, fundo antes do JS, regra de impressão com
+`data-imprimir="nao"`), `public/manifest.webmanifest` e ícones; guia e banner de instalação
+(`src/telas/instalar.tsx`); `vercel.json` próprio do app (CSP sem `cdn.jsdelivr.net`, exceção de
+`frame-ancestors 'self'` só para `/palco*`), conferido servindo o `expo export` com esses headers.
+O modo fixture só liga em desenvolvimento (ou num build com `EXPO_PUBLIC_FIXTURE`).
 
 **Testes**: diff visual completo da matriz em desktop. **Gate**: todas as linhas "desktop".
 
