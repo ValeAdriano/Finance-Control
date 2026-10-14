@@ -555,7 +555,8 @@ export default function Ajustes() {
             <Lista>
               <Item titulo="Tema" direita={<Segmentado valor={prefTema} aoMudar={definePrefTema} rotuloA11y="Tema"
                 opcoes={[{ v: "auto", rotulo: "Automático" }, { v: "claro", rotulo: "Claro" }, { v: "escuro", rotulo: "Escuro" }]} />} />
-              <Item titulo="Modo privado" detalhe={Platform.OS === "web" ? "borra os valores em reais; passe o mouse para ver" : "borra os valores em reais"}
+              <Item titulo="Modo privado" detalhe={Platform.OS === "web" && typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches
+                  ? "borra os valores em reais; passe o mouse ou clique para ver" : "borra os valores em reais; toque num valor para vê-lo por 5 segundos"}
                 direita={<Interruptor valor={privado} aoMudar={() => alternaPrivado()} />} />
             </Lista>
           </Secao>

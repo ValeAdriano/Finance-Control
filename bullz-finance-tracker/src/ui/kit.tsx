@@ -119,16 +119,46 @@ function estiloBorrado(cor: string, raio: number): TextStyle {
   return { color: "transparent", textShadowColor: cor, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: raio + 3 };
 }
 
-/** Dinheiro do usuário (.rs): borra no modo privado e no carregamento inicial. */
+// computador com mouse: o hover revela; no toque não existe hover
+const temHover = Platform.OS === "web" && typeof window !== "undefined" && !!window.matchMedia
+  && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+const REVELA_TOQUE_MS = 5000;
+
+/** Dinheiro do usuário (.rs): borra no modo privado e no carregamento inicial.
+ *
+ * No modo privado o valor pode ser visto um de cada vez: no computador,
+ * passando o mouse (some ao sair) ou clicando (fica até clicar de novo); no
+ * toque, tocando — aparece por 5 segundos e volta a borrar. */
 export function Rs({ children, style, cls, cor, peso, tam, ...resto }: TProps) {
   const t = useTema();
   const privado = useApp((s) => s.privado);
   const veu = useApp((s) => s.carregandoDados);
+  const [hover, setHover] = useState(false);
+  const [fixo, setFixo] = useState(false);
+  const relogio = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (relogio.current) clearTimeout(relogio.current); }, []);
+  // ligou ou desligou o modo privado: tudo volta a borrar
+  useEffect(() => { setHover(false); setFixo(false); if (relogio.current) clearTimeout(relogio.current); }, [privado]);
+
   const base = corClasse(t, cls) || cor || ((style as any) && (style as any).color) || t.cores.ink;
-  const b = privado || veu;
+  const revelado = privado && !veu && (hover || fixo);
+  const b = veu || (privado && !revelado);
+  const toque = (e: any) => {
+    if (e && e.stopPropagation) e.stopPropagation(); // não abre a linha/cartão por baixo
+    if (temHover) { setFixo((f) => !f); return; }
+    if (relogio.current) clearTimeout(relogio.current);
+    setFixo(true);
+    relogio.current = setTimeout(() => setFixo(false), REVELA_TOQUE_MS);
+  };
+  const interacao: any = privado && !veu ? {
+    onPress: toque,
+    accessibilityHint: temHover ? "Clique para mostrar o valor" : "Toque para mostrar o valor por 5 segundos",
+    ...(temHover ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {}),
+  } : {};
   return (
-    <T {...resto} cls={cls} cor={cor} peso={peso} tam={tam} num
-      style={[style, b ? estiloBorrado(base, privado ? 9 : 8) : null, veu && !privado ? { opacity: 0.65 } : null]}>
+    <T {...resto} {...interacao} cls={cls} cor={cor} peso={peso} tam={tam} num
+      style={[style, Platform.OS === "web" ? ({ transition: "filter 180ms ease-out", cursor: privado && !veu ? "pointer" : undefined } as any) : null,
+        b ? estiloBorrado(base, privado ? 9 : 8) : null, veu && !privado ? { opacity: 0.65 } : null]}>
       {children}
     </T>
   );
