@@ -15,7 +15,7 @@
   const { html, icone } = FC;
   const P = FC.PERFIL;
 
-  const estado = () => FC.estado.perfil || (FC.estado.perfil = { indisponivel: true, atual: null, rascunho: null, plano: null, adiamentos: 0, modo: "educativo" });
+  const estado = () => FC.estado.perfil || (FC.estado.perfil = { indisponivel: false, atual: null, rascunho: null, plano: null, adiamentos: 0, modo: "educativo" });
   const dispo = () => !estado().indisponivel;
   let aberto = null;
 

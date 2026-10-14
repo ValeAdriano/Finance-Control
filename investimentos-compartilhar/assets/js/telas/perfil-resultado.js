@@ -189,7 +189,13 @@
   FC.telas.perfil = async function (raiz, params = []) {
     const e = FC.estado.perfil;
     const aba = params[0] === "relatorio" ? "relatorio" : "resultado";
-    if (!e || e.indisponivel) {
+    if (!e) {
+      // a carga do perfil ainda não terminou: busca agora
+      raiz.innerHTML = '<div class="carregando-tela" style="min-height:240px"><div class="roda"></div><span>Carregando seu perfil…</span></div>';
+      await FC.perfilFluxo.carrega();
+      return FC.telas.perfil(raiz, params);
+    }
+    if (e.indisponivel) {
       raiz.innerHTML = String(html`<div class="estreita">${C.cabecalho("Perfil do investidor", "Seu perfil e o plano que sai dele.")}
         <div class="mensagem alerta">${icone("alerta", 18)}<span>O perfil ainda não está disponível nesta instalação: aplique o schema.sql atualizado no Supabase.</span></div></div>`);
       return;

@@ -169,7 +169,7 @@
         if (atual) {
           plano = checa(await sb.from("plano_investimento").select("*").eq("perfil_id", atual.id).order("criado_em", { ascending: false }).limit(1).maybeSingle());
         }
-        return { atual: atual ? { ...atual, necessidade: num(atual.necessidade) } : null, rascunho, plano, adiamentos: adiados, modo, ativou: ativou > 0 };
+        return { indisponivel: false, atual: atual ? { ...atual, necessidade: num(atual.necessidade) } : null, rascunho, plano, adiamentos: adiados, modo, ativou: ativou > 0 };
       } catch (e) {
         console.warn("perfil indisponível:", e.message || e);
         return { indisponivel: true, atual: null, rascunho: null, plano: null, adiamentos: 0, modo: "educativo", ativou: false };
