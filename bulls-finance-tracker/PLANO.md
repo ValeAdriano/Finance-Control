@@ -48,7 +48,8 @@ Antes disso define `globalThis.window = globalThis` com `FC = {}`, `localStorage
 **Planejamento**
 - [x] Inventário de telas, folhas e estados → `PARIDADE.md`
 - [x] Roteiros de fluxo → `ROTEIROS.md`
-- [ ] Confirmar a conta demo (demo@example.com) e a senha para os testes
+- [x] Conta de teste `teste-rn@example.com` criada (e-mail confirmado, sem 2FA); credenciais em
+  `.env.teste` (fora do git). A conta demo continua intacta.
 
 **Desenvolvimento** (ferramentas, sem app ainda)
 - [ ] `ferramentas/fixtures/`: snapshot da conta demo (tabelas) e do mercado (universo,
