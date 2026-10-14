@@ -345,6 +345,8 @@
   function traduzErro(msg) {
     const m = String(msg);
     if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
+    if (/Email not confirmed/i.test(m)) return "Confirme seu e-mail com o código que enviamos antes de entrar.";
+    if (/otp.*expired|token.*(expired|invalid)/i.test(m)) return "Código incorreto ou vencido. Peça outro.";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Sem conexão. Confira a internet e tente de novo.";
     if (/duplicate key.*ativos_user_id_ticker/i.test(m)) return "Esse ativo já está cadastrado.";
     if (/duplicate key.*renda_fixa_user_id_nome/i.test(m)) return "Já existe um título com esse nome.";

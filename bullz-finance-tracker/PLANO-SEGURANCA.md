@@ -13,6 +13,31 @@ cifrados.
 | S4 | Criptografia de ponta a ponta | servidor lê os dados financeiros | S2, S3 |
 | S5 | Auditoria e testes de segurança | provar que tudo acima funciona | contínuo |
 
+## Andamento (2026-10-14)
+
+| Fase | Código | No ar |
+|---|---|---|
+| S1.1 sessão cifrada | `src/plataforma/armazenamento.ts` (MMKV AES-256, chave no SecureStore, migra o antigo) | precisa de novo build nativo |
+| S1.2 bloqueio | `src/plataforma/bloqueio.tsx` + Ajustes → Segurança | precisa de novo build nativo |
+| S1.3 limite por IP | `functions/acesso`, `privado.tentativas_acesso` no `schema.sql`, `FC.auth` no `supa.js`, espera crescente no login | **no ar** (schema aplicado e função v1 publicada em 2026-10-14; testado: 6ª senha errada → 429 por 15 min); o app e o site passam a usá-la quando forem publicados |
+| S1.4 painel | — | checklist abaixo, com você |
+| S2 código por e-mail | telas no login do app; site sem "Criar conta" | *Confirm email* continua **desligado** até o SMTP próprio |
+| S3 2FA perdido | reserva já existia; "Perdi meu autenticador" no login; `scripts/recupera-2fa.js` | — |
+| S4 ponta a ponta | não começou | espera S2/S3 no ar e o seu aceite do modelo |
+| S5 auditoria | `npm run teste:seguranca` (RLS com duas contas) | falta a conta B de teste em `.env.teste` |
+
+Notas da implementação:
+- A chave do MMKV é texto de até 32 bytes: 32 caracteres base64url = 192 bits de entropia.
+- A função `acesso` chama o Auth do servidor e repassa o IP do cliente em `sb-forwarded-for`.
+  **Conferido no deploy (2026-10-14): o Auth ignora o cabeçalho** — nos logs, os logins vindos
+  da função aparecem com IPs da AWS (pool da Edge Function), não o do cliente. Efeito: o limite
+  nativo de 1.800/h por IP passa a valer por IP de saída da função; com o volume atual não
+  pesa. O limite que importa (por IP real e por conta) é o da própria função.
+- Segredo dos HMAC: gerado no Vault (`fc_acesso_segredo`) pelo `schema.sql` e lido pela função
+  com a RPC `acesso_segredo` (só `service_role`). A variável `ACESSO_SEGREDO`, se criada, vale antes.
+- Recuperação assistida: sem fator, uma sessão antiga que só passou pela senha volta a ler os
+  dados. O script lembra de pedir a troca de senha (que encerra as outras sessões) logo depois.
+
 ---
 
 ## S1 · Endurecimento rápido (1–2 dias)

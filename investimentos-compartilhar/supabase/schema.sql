@@ -741,3 +741,100 @@ grant execute on function public.admin_funil_onboarding(integer) to authenticate
 -- ============================================================
 alter table public.preferencias add column if not exists layout jsonb;
 notify pgrst, 'reload schema';
+
+-- ============================================================
+--  LIMITE DE TENTATIVAS POR IP E POR CONTA (PLANO-SEGURANCA S1.3)
+--  A Edge Function "acesso" intermedeia login, pedido de código por
+--  e-mail e confirmação do código. Antes de cada uma, consulta os
+--  contadores; depois, registra o resultado. IP e e-mail chegam aqui só
+--  como HMAC (segredo da função): dá para contar sem guardar o dado
+--  pessoal. A tabela fica no schema privado (fora da API) e as funções
+--  só podem ser chamadas com a service_role.
+-- ============================================================
+create table if not exists privado.tentativas_acesso (
+  id         bigint generated always as identity primary key,
+  quando     timestamptz not null default now(),
+  acao       text not null check (acao in ('entrar','pedir_codigo','confirmar_codigo')),
+  ip_hash    text not null check (length(ip_hash) between 16 and 128),
+  email_hash text not null check (length(email_hash) between 16 and 128),
+  ok         boolean not null
+);
+create index if not exists tentativas_acesso_ip_idx on privado.tentativas_acesso (ip_hash, acao, quando desc);
+create index if not exists tentativas_acesso_email_idx on privado.tentativas_acesso (email_hash, acao, quando desc);
+revoke all on privado.tentativas_acesso from public, anon, authenticated;
+
+-- Quanto falta para liberar (0 = liberado). Regras:
+--   entrar e confirmar_codigo:
+--     por IP:    5 falhas em 15 min -> 15 min;  20 falhas em 24 h -> 24 h
+--     por conta: 10 falhas em 1 h -> 1 h (vale para qualquer IP)
+--   pedir_codigo (conta qualquer pedido, deu certo ou não):
+--     por conta: 3 a cada 15 min;  por IP: 10 por hora
+create or replace function public.acesso_espera(p_acao text, p_ip text, p_email text)
+returns integer language plpgsql stable security definer set search_path = '' as $$
+declare
+  ate timestamptz := now();
+  x timestamptz;
+begin
+  if p_acao in ('entrar','confirmar_codigo') then
+    select max(quando) + interval '15 minutes' into x from (
+      select quando from privado.tentativas_acesso
+      where ip_hash = p_ip and acao = p_acao and not ok and quando > now() - interval '15 minutes'
+      order by quando desc limit 5) f having count(*) >= 5;
+    ate := greatest(ate, x);
+    select max(quando) + interval '24 hours' into x from (
+      select quando from privado.tentativas_acesso
+      where ip_hash = p_ip and acao = p_acao and not ok and quando > now() - interval '24 hours'
+      order by quando desc limit 20) f having count(*) >= 20;
+    ate := greatest(ate, x);
+    select max(quando) + interval '1 hour' into x from (
+      select quando from privado.tentativas_acesso
+      where email_hash = p_email and acao = p_acao and not ok and quando > now() - interval '1 hour'
+      order by quando desc limit 10) f having count(*) >= 10;
+    ate := greatest(ate, x);
+  elsif p_acao = 'pedir_codigo' then
+    -- janela deslizante: libera quando o mais antigo da janela sair dela
+    select min(quando) + interval '15 minutes' into x from (
+      select quando from privado.tentativas_acesso
+      where email_hash = p_email and acao = p_acao and quando > now() - interval '15 minutes'
+      order by quando desc limit 3) f having count(*) >= 3;
+    ate := greatest(ate, x);
+    select min(quando) + interval '1 hour' into x from (
+      select quando from privado.tentativas_acesso
+      where ip_hash = p_ip and acao = p_acao and quando > now() - interval '1 hour'
+      order by quando desc limit 10) f having count(*) >= 10;
+    ate := greatest(ate, x);
+  else
+    raise exception 'ação desconhecida';
+  end if;
+  return ceil(extract(epoch from (ate - now())))::integer;
+end $$;
+revoke all on function public.acesso_espera(text, text, text) from public, anon, authenticated;
+grant execute on function public.acesso_espera(text, text, text) to service_role;
+
+create or replace function public.acesso_registra(p_acao text, p_ip text, p_email text, p_ok boolean)
+returns void language sql security definer set search_path = '' as $$
+  insert into privado.tentativas_acesso (acao, ip_hash, email_hash, ok) values (p_acao, p_ip, p_email, p_ok);
+$$;
+revoke all on function public.acesso_registra(text, text, text, boolean) from public, anon, authenticated;
+grant execute on function public.acesso_registra(text, text, text, boolean) to service_role;
+
+-- Segredo dos HMAC: gerado aqui mesmo, no Vault (nunca sai do banco a não
+-- ser para a função). Se a função tiver ACESSO_SEGREDO no ambiente, usa
+-- aquele e ignora este.
+do $$
+begin
+  if not exists (select 1 from vault.secrets where name = 'fc_acesso_segredo') then
+    perform vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'fc_acesso_segredo');
+  end if;
+end $$;
+create or replace function public.acesso_segredo()
+returns text language sql stable security definer set search_path = '' as $$
+  select decrypted_secret from vault.decrypted_secrets where name = 'fc_acesso_segredo';
+$$;
+revoke all on function public.acesso_segredo() from public, anon, authenticated;
+grant execute on function public.acesso_segredo() to service_role;
+
+-- o maior período olhado é 24 h: o resto some
+select cron.unschedule('fc-limpa-tentativas') where exists (select 1 from cron.job where jobname = 'fc-limpa-tentativas');
+select cron.schedule('fc-limpa-tentativas', '15 * * * *', $$delete from privado.tentativas_acesso where quando < now() - interval '25 hours'$$);
+notify pgrst, 'reload schema';

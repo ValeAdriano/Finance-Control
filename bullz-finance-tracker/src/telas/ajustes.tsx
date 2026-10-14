@@ -15,6 +15,7 @@ import { folhaForm, ui, type ApiFolha } from "../ui/folha";
 import { depoisDeMudar, gravaPremissas } from "./comum/dados";
 import FC from "../nucleo";
 import EditorLayout from "./layout-editor";
+import { BLOQUEIO_DISPONIVEL, TEMPOS, autentica, gravaBloqueio, recursoDoAparelho, useBloqueio } from "../plataforma/bloqueio";
 
 const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
 const nomeFator = (f: any) => (f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "");
@@ -135,6 +136,34 @@ const removeFator = (fatores: any[], id: string) => folhaForm({
   titulo: fatores.length === 1 ? "Desligar a verificação em duas etapas" : "Remover autenticador", salvar: fatores.length === 1 ? "Desligar" : "Remover",
   corpo: (api, d) => <FormRemoveFator fatores={fatores} id={id} defineSalvar={d} api={api} />,
 });
+
+// ---------------------------------------------------------------- bloqueio do app
+function ItemBloqueio() {
+  const t = useTema();
+  const { ligado, minutos } = useBloqueio();
+  const [rec, setRec] = useState<{ pode: boolean; nome: string } | null>(null);
+  useEffect(() => { recursoDoAparelho().then(setRec); }, []);
+  const muda = async (v: boolean) => {
+    // ligar confirma que a biometria funciona; desligar pede a mesma prova
+    if (!(await autentica(v ? "Confirme para ligar o bloqueio" : "Confirme para desligar o bloqueio"))) return;
+    gravaBloqueio({ ligado: v });
+    FC.db.log("seguranca", { acao: v ? "bloqueio do app ligado" : "bloqueio do app desligado" });
+  };
+  const nome = rec?.nome || "biometria";
+  return (
+    <Item esquerda={<Icone nome="cadeado" tam={20} cor={ligado ? t.cores.verde : t.cores.ink2} />} detalheLinhas={3}
+      titulo={`Bloquear com ${nome}`}
+      detalhe={rec && !rec.pode ? "Cadastre biometria ou um PIN nas configurações do aparelho para usar." : "Pede ao abrir o app e ao voltar depois de um tempo fora. Vale só neste aparelho."}
+      direita={<Interruptor valor={ligado} aoMudar={muda} desabilitado={!rec || !rec.pode} />}>
+      {ligado ? (
+        <View style={{ marginTop: 10 }}>
+          <Segmentado valor={String(minutos)} aoMudar={(v) => gravaBloqueio({ minutos: Number(v) })} rotuloA11y="Pedir depois de"
+            opcoes={TEMPOS.map((m) => ({ v: String(m), rotulo: m ? `${m} min` : "Na hora" }))} />
+        </View>
+      ) : null}
+    </Item>
+  );
+}
 
 // ---------------------------------------------------------------- apagar
 function CorpoApaga({ api }: { api: ApiFolha }) {
@@ -500,6 +529,7 @@ export default function Ajustes() {
                   titulo={<T style={{ fontWeight: "600", fontSize: 14 }}>{nomeFator(f)}</T>} detalhe={`cadastrado em ${FC.datas.br(f.created_at.slice(0, 10))}`}
                   direita={<Botao variante="texto" pequeno onPress={() => removeFator(fatores, f.id)}><Text style={{ color: t.cores.vermelho, fontSize: 13.5, fontWeight: "500" }}>Remover</Text></Botao>} />
               ))}
+              {BLOQUEIO_DISPONIVEL ? <ItemBloqueio /> : null}
               <Item chevron onPress={trocaSenha} esquerda={<Icone nome="editar" tam={20} cor={t.cores.ink2} />} titulo="Trocar senha"
                 detalhe={`pede a senha atual${totp ? " (a sessão já passou pelo 2FA)" : ""}`} />
               <Item esquerda={<Icone nome="info" tam={20} cor={t.cores.ink2} />} titulo="Esta sessão" detalheLinhas={2}
@@ -515,7 +545,8 @@ export default function Ajustes() {
                 {["Senha guardada pelo Supabase Auth só como hash bcrypt; mínimo de 10 caracteres com maiúscula, minúscula e número; senhas que já apareceram em vazamentos são recusadas.",
                   "Todo o tráfego é HTTPS. A sessão é um token assinado que expira em 15 minutos e é renovado com rotação (um token de renovação roubado não serve duas vezes).",
                   "Row Level Security em todas as tabelas: o banco só entrega uma linha ao dono dela. Com o 2FA ligado, o banco também exige que a sessão tenha passado pelo código.",
-                  "Limite de tentativas de login e de código no servidor; a sessão cai sozinha após 7 dias sem uso."].map((x, i) => <T key={i} v="p" style={{ lineHeight: 23 }}>•  {x}</T>)}
+                  "Limite de tentativas de login e de código por IP e por conta: depois de 5 erros seguidos o acesso fica bloqueado por 15 minutos. A sessão cai sozinha após 7 dias sem uso.",
+                  ...(BLOQUEIO_DISPONIVEL ? ["Neste aparelho, a sessão e o cache ficam cifrados com uma chave guardada no chaveiro do sistema, e o app pode pedir biometria ao abrir."] : [])].map((x, i) => <T key={i} v="p" style={{ lineHeight: 23 }}>•  {x}</T>)}
               </View>
             </Detalhes>
           </Secao>

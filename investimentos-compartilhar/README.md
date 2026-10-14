@@ -29,6 +29,8 @@ assets/js/
 supabase/
   schema.sql               tabelas e RLS por usuário
   functions/mercado/       Fundamentus + Yahoo + Banco Central, com cache
+  functions/acesso/        login e código por e-mail com limite de tentativas
+scripts/recupera-2fa.js    recuperação assistida do 2FA (admin, service_role)
 legado-python/             a versão Flask anterior (não é usada)
 ```
 
@@ -216,6 +218,19 @@ SUPABASE_ACCESS_TOKEN=... npx supabase functions deploy mercado \
 
 (`--no-verify-jwt` porque a função confere o usuário por conta própria,
 chamando o Auth com o token recebido.)
+
+A função `acesso` (limite de tentativas de login e de código, ver
+`bullz-finance-tracker/PLANO-SEGURANCA.md` S1.3) usa um segredo para os
+HMAC de IP e e-mail, gerado pelo próprio `schema.sql` no Vault
+(`fc_acesso_segredo`). Ordem: schema → função → app.
+
+```bash
+SUPABASE_ACCESS_TOKEN=... npx supabase functions deploy acesso \
+  --project-ref ahbftafpbailgmjughsq --use-api --no-verify-jwt
+```
+
+(`--no-verify-jwt` porque ela atende quem ainda não entrou. Enquanto ela
+não estiver publicada, o app cai no caminho direto do Supabase.)
 
 ## As quatro lentes
 

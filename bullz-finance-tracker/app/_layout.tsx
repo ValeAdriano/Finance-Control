@@ -17,6 +17,7 @@ import { HostFolhas, HostTelas } from "../src/ui/folha";
 import { Casca } from "../src/casca/casca";
 import { Roda } from "../src/ui/kit";
 import Login from "../src/telas/login";
+import { Bloqueio } from "../src/plataforma/bloqueio";
 
 // SÓ TESTE: com ?fixture=1 (web) ou EXPO_PUBLIC_FIXTURE=1, troca a rede por dados de demonstração
 instalaFixture();
@@ -37,6 +38,7 @@ function Portao() {
       )}
       <HostTelas />
       <HostFolhas />
+      <Bloqueio />
     </View>
   );
 }

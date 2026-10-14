@@ -1,4 +1,7 @@
-/* Login. A senha nunca é guardada por este app: vai por HTTPS para o
+/* Login do site de backup. Criar conta e "esqueci a senha" ficam só no
+ * app (PLANO-SEGURANCA S2): aqui é só entrar.
+ *
+ * A senha nunca é guardada por este app: vai por HTTPS para o
  * Supabase Auth, que armazena só o hash bcrypt. A sessão é um token
  * assinado e renovado automaticamente. Com a verificação em duas etapas
  * ligada, a sessão só é liberada depois do código do autenticador. */
@@ -56,7 +59,7 @@
         <div id="erro-login" class="mensagem erro" hidden></div>
         <button class="botao cheio" type="submit">${modo === "criar" ? "Criar conta" : modo === "mfa" ? "Verificar" : "Entrar"}</button>
         ${modo === "mfa" ? html`<button class="botao texto" type="button" id="bt-sair-mfa">Usar outra conta</button>` : ""}
-        ${modo === "entrar" ? html`<p class="troca-modo">Ainda não tem conta? <button class="botao texto" type="button" id="bt-criar">Criar conta</button></p>` : ""}
+        ${modo === "entrar" ? html`<p class="troca-modo">Para criar conta ou recuperar a senha, use o app Bullz.</p>` : ""}
         ${modo === "criar" ? html`<p class="troca-modo">Já tem conta? <button class="botao texto" type="button" id="bt-entrar">Entrar</button></p>` : ""}
       </form>
       <p class="rodape">${icone("cadeado", 14)} Conexão criptografada · senha protegida com bcrypt · o login fica salvo neste aparelho por até 7 dias sem uso</p>
@@ -70,7 +73,6 @@
       FC.$("#senha", raiz).addEventListener("input", (e) => { FC.$("#forca", raiz).className = "forca n" + forca(e.target.value); });
       FC.$("#bt-entrar", raiz).addEventListener("click", () => FC.telas.login(raiz, { etapa: "entrar" }));
     }
-    if (modo === "entrar") FC.$("#bt-criar", raiz).addEventListener("click", () => FC.telas.login(raiz, { etapa: "criar" }));
     if (modo === "mfa") {
       FC.$("#bt-sair-mfa", raiz).addEventListener("click", async () => { await FC.auth.sair(); FC.telas.login(raiz); });
       FC.$("#codigo", raiz).addEventListener("input", (e) => { e.target.value = e.target.value.replace(/\D/g, ""); if (e.target.value.length === 6) form.requestSubmit(); });

@@ -13,10 +13,51 @@
     return data;
   }
 
+  // ------------------------------------------------------------------ acesso
+  // Login, pedido de código por e-mail e confirmação passam pela Edge
+  // Function "acesso", que limita tentativas por IP e por conta
+  // (PLANO-SEGURANCA S1.3). O erro leva `espera` (segundos) quando bloqueado.
+  async function acesso(corpo) {
+    let r;
+    try {
+      r = await fetch(FC.config.supabaseUrl + "/functions/v1/acesso", { method: "POST",
+        headers: { apikey: FC.config.supabaseChave, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    } catch (e) { throw new Error("Failed to fetch"); }
+    // função ainda não publicada: segue pelo caminho direto do Supabase
+    if (r.status === 404) return { semFuncao: true };
+    let j = {};
+    try { j = await r.json(); } catch (e) { /* sem corpo */ }
+    if (!r.ok) {
+      const err = new Error(j.erro || "Falha no acesso (" + r.status + ")");
+      err.codigo = j.codigo || (r.status === 429 ? "bloqueado" : "");
+      err.espera = r.status === 429 ? Number(j.espera) || 60 : 0;
+      throw err;
+    }
+    return j;
+  }
+  async function abreSessao(s) { return checa(await sb.auth.setSession(s)); }
+
   // ------------------------------------------------------------------ sessão
   FC.auth = {
     async sessao() { return checa(await sb.auth.getSession()).session; },
-    async entrar(email, senha) { return checa(await sb.auth.signInWithPassword({ email, password: senha })); },
+    async entrar(email, senha) {
+      const j = await acesso({ acao: "entrar", email, senha });
+      if (j.semFuncao) return checa(await sb.auth.signInWithPassword({ email, password: senha }));
+      return abreSessao(j.sessao);
+    },
+    // código de 6 dígitos por e-mail: tipo "senha" (esqueci a senha) ou
+    // "cadastro" (confirmar o e-mail). A resposta é a mesma exista a conta ou não.
+    async pedirCodigo(tipo, email) {
+      const j = await acesso({ acao: "pedir_codigo", tipo, email });
+      if (!j.semFuncao) return;
+      if (tipo === "senha") checa(await sb.auth.resetPasswordForEmail(email));
+      else checa(await sb.auth.resend({ type: "signup", email }));
+    },
+    async confirmarCodigo(tipo, email, codigo) {
+      const j = await acesso({ acao: "confirmar_codigo", tipo, email, codigo });
+      if (j.semFuncao) return checa(await sb.auth.verifyOtp({ type: tipo === "senha" ? "recovery" : "signup", email, token: codigo }));
+      return abreSessao(j.sessao);
+    },
     async cadastrar(email, senha, nome = "") {
       return checa(await sb.auth.signUp({ email, password: senha, options: { data: nome ? { nome } : {} } }));
     },

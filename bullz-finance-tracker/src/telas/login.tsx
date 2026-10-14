@@ -1,8 +1,16 @@
-/* Login — port de telas/login.js.
+/* Login — port de telas/login.js, mais os fluxos por código de e-mail
+ * (PLANO-SEGURANCA S2) e a ajuda para quem perdeu o autenticador (S3).
  *
  * A senha nunca é guardada pelo app: vai por HTTPS para o Supabase Auth, que
  * armazena só o hash bcrypt. Com a verificação em duas etapas ligada, a sessão
- * só é liberada depois do código do autenticador. */
+ * só é liberada depois do código do autenticador.
+ *
+ * Login, pedido e confirmação de código passam pela Edge Function "acesso",
+ * que limita tentativas por IP e por conta. Aqui, além disso, cada erro
+ * seguido dobra a espera antes da próxima tentativa (1 s, 2 s, 4 s… até 30 s).
+ *
+ * Esqueci a senha: e-mail → código → 2FA (se houver) → nova senha → encerra
+ * as outras sessões. As mensagens não revelam se o e-mail tem conta. */
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, KeyboardAvoidingView, Platform, ScrollView, View, type TextInput } from "react-native";
 import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
@@ -15,7 +23,7 @@ import { ui } from "../ui/folha";
 import { Icone } from "../ui/icone";
 import FC from "../nucleo";
 
-type Modo = "entrar" | "criar" | "mfa";
+type Modo = "entrar" | "criar" | "mfa" | "confirmar" | "esqueci" | "codigo" | "nova";
 
 function forca(s: string) {
   let n = 0;
@@ -31,7 +39,18 @@ const TITULOS: Record<Modo, [string, string]> = {
   entrar: ["Bullz", "Entre para ver sua carteira."],
   criar: ["Criar conta", "Seus investimentos em um lugar só. Só você vê o que cadastrar."],
   mfa: ["Verificação", "Digite o código de 6 dígitos do seu app autenticador."],
+  confirmar: ["Confirme o e-mail", "Digite o código de 6 dígitos que enviamos para o seu e-mail."],
+  esqueci: ["Esqueci a senha", "Enviamos um código para o e-mail da conta."],
+  codigo: ["Código do e-mail", "Se houver uma conta com esse e-mail, o código chega em instantes. Ele vale por 15 minutos."],
+  nova: ["Nova senha", "Escolha a nova senha. As sessões em outros aparelhos serão encerradas."],
 };
+const MODOS_CODIGO: Modo[] = ["mfa", "confirmar", "codigo"];
+const ROTULO_BOTAO: Record<Modo, string> = {
+  entrar: "Entrar", criar: "Criar conta", mfa: "Verificar", confirmar: "Confirmar", esqueci: "Enviar código", codigo: "Continuar", nova: "Trocar senha",
+};
+const ESPERA_REENVIO = 60;
+/** espera antes da próxima tentativa, em segundos, depois de n erros seguidos */
+const recuo = (n: number) => (n <= 0 ? 0 : Math.min(30, 2 ** (n - 1)));
 
 export default function Login() {
   const t = useTema();
@@ -49,6 +68,20 @@ export default function Login() {
   const [fatores, setFatores] = useState<any[]>([]);
   const [fator, setFator] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // recuperação de senha em andamento: o 2FA leva para a nova senha, não para o app
+  const recuperando = useRef(false);
+  const falhas = useRef(0);
+  const [liberaEm, setLiberaEm] = useState(0);
+  const [reenvioEm, setReenvioEm] = useState(0);
+  const [agora, setAgora] = useState(() => Date.now());
+  const [perdi, setPerdi] = useState(false);
+  useEffect(() => {
+    if (liberaEm <= agora && reenvioEm <= agora) return;
+    const id = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [liberaEm, reenvioEm, agora]);
+  const faltaS = Math.max(0, Math.ceil((liberaEm - agora) / 1000));
+  const reenvioS = Math.max(0, Math.ceil((reenvioEm - agora) / 1000));
   const treme = useRef(new Animated.Value(0)).current;
   const entra = useRef(new Animated.Value(0)).current;
   const flutua = useRef(new Animated.Value(0)).current;
@@ -89,12 +122,31 @@ export default function Login() {
   };
 
   const troca = (m: Modo, av: string | null = null) => {
-    setModo(m); setErro(null); setAviso(av); setSenha(""); setSenha2(""); setCodigo("");
+    setModo(m); setErro(null); setAviso(av); setSenha(""); setSenha2(""); setCodigo(""); setPerdi(false);
+    if (m === "entrar" || m === "criar") recuperando.current = false;
     if (m !== "mfa") useApp.setState({ fase: "login" });
   };
 
+  const pedeCodigo = async (tipo: "senha" | "cadastro") => {
+    await FC.auth.pedirCodigo(tipo, email.trim());
+    setReenvioEm(Date.now() + ESPERA_REENVIO * 1000); setAgora(Date.now());
+  };
+  const reenvia = async () => {
+    if (reenvioS || enviando) return;
+    setErro(null);
+    try { await pedeCodigo(modo === "confirmar" ? "cadastro" : "senha"); setAviso("Código reenviado. Confira também o spam."); }
+    catch (e: any) { erroComEspera(e); }
+  };
+  const erroComEspera = (e: any) => {
+    falhas.current += 1;
+    const s = e && e.espera ? e.espera : recuo(falhas.current);
+    if (s) { setLiberaEm(Date.now() + s * 1000); setAgora(Date.now()); }
+    mostraErro(FC.ui.traduzErro(e.message || String(e)));
+  };
+  const deuCerto = () => { falhas.current = 0; setLiberaEm(0); };
+
   const envia = async (cod?: string) => {
-    if (enviando) return;
+    if (enviando || faltaS) return;
     setErro(null);
     setEnviando(true);
     try {
@@ -102,8 +154,45 @@ export default function Login() {
         const escolhido = fator || (fatores[0] || {}).id;
         if (!escolhido) throw new Error("Nenhum autenticador cadastrado.");
         await FC.auth.verificarTotp(escolhido, cod ?? codigo);
+        deuCerto();
+        if (recuperando.current) { troca("nova"); return; }
         useApp.setState({ avisoLogin: null });
         await FC.entrarNoApp();
+        return;
+      }
+      if (modo === "esqueci") {
+        if (!email.trim()) throw new Error("Digite o e-mail da conta.");
+        await pedeCodigo("senha");
+        recuperando.current = true;
+        troca("codigo");
+        return;
+      }
+      if (modo === "confirmar" || modo === "codigo") {
+        const c = (cod ?? codigo).replace(/\D/g, "");
+        if (c.length !== 6) throw new Error("Digite os 6 dígitos do código.");
+        await FC.auth.confirmarCodigo(modo === "codigo" ? "senha" : "cadastro", email.trim(), c);
+        deuCerto();
+        const n = await FC.auth.nivel();
+        const precisa2fa = n.nextLevel === "aal2" && n.currentLevel !== "aal2";
+        if (modo === "codigo") { if (precisa2fa) troca("mfa"); else troca("nova"); return; }
+        if (precisa2fa) { troca("mfa"); useApp.setState({ fase: "mfa" }); return; }
+        ui.aviso("E-mail confirmado. Bem-vindo!");
+        useApp.setState({ avisoLogin: null });
+        await FC.entrarNoApp();
+        return;
+      }
+      if (modo === "nova") {
+        if (!senhaValida(senha)) throw new Error("A senha precisa de ao menos 10 caracteres, com maiúscula, minúscula e número.");
+        if (senha !== senha2) throw new Error("As senhas não coincidem.");
+        const vazou = await FC.auth.senhaVazada(senha);
+        if (vazou) throw new Error(`Essa senha já apareceu em ${FC.fmt.int(vazou)} vazamento(s) de dados. Escolha outra.`);
+        await FC.auth.trocarSenha(senha);
+        try { await FC.auth.sairDosOutros(); } catch { /* a senha já mudou; segue */ }
+        recuperando.current = false;
+        ui.aviso("Senha trocada. As outras sessões foram encerradas.");
+        useApp.setState({ avisoLogin: null });
+        await FC.entrarNoApp();
+        FC.db.log("seguranca", { acao: "senha redefinida pelo e-mail" });
         return;
       }
       if (!email || !senha) throw new Error("Preencha e-mail e senha.");
@@ -113,21 +202,35 @@ export default function Login() {
         const vazou = await FC.auth.senhaVazada(senha);
         if (vazou) throw new Error(`Essa senha já apareceu em ${FC.fmt.int(vazou)} vazamento(s) de dados. Escolha outra.`);
         const r = await FC.auth.cadastrar(email.trim(), senha, nome.trim());
-        // com confirmação de e-mail ligada no Supabase, a sessão só vem depois do link
-        if (!r.session) { troca("entrar", "Conta criada. Abra o link que enviamos para " + email.trim() + " e depois entre."); return; }
+        // com confirmação de e-mail ligada no Supabase, a sessão só vem depois do código
+        if (!r.session) {
+          setReenvioEm(Date.now() + ESPERA_REENVIO * 1000); setAgora(Date.now());
+          troca("confirmar", "Conta criada. Enviamos um código para " + email.trim() + ".");
+          return;
+        }
         ui.aviso("Conta criada. Bem-vindo!");
         useApp.setState({ avisoLogin: null });
         await FC.entrarNoApp();
         return;
       }
-      await FC.auth.entrar(email.trim(), senha);
+      try { await FC.auth.entrar(email.trim(), senha); }
+      catch (e: any) {
+        // senha certa, e-mail ainda não confirmado: vai para o código
+        if (/Email not confirmed/i.test(e.message || "")) {
+          try { await pedeCodigo("cadastro"); } catch { /* o reenviar fica na tela */ }
+          troca("confirmar", "Falta confirmar o e-mail. Enviamos um código para " + email.trim() + ".");
+          return;
+        }
+        throw e;
+      }
+      deuCerto();
       const n = await FC.auth.nivel();
       if (n.nextLevel === "aal2" && n.currentLevel !== "aal2") { troca("mfa"); useApp.setState({ fase: "mfa" }); return; }
       useApp.setState({ avisoLogin: null });
       await FC.entrarNoApp();
     } catch (e: any) {
-      mostraErro(FC.ui.traduzErro(e.message || String(e)));
-      if (modo === "mfa") setCodigo("");
+      erroComEspera(e);
+      if (MODOS_CODIGO.includes(modo)) setCodigo("");
     } finally {
       setEnviando(false);
     }
@@ -169,9 +272,9 @@ export default function Login() {
 
             <Animated.View style={{ transform: [{ translateX: treme }] }}>
               <Form gap={12}>
-                {modo === "mfa" ? (
+                {MODOS_CODIGO.includes(modo) ? (
                   <>
-                    {fatores.length > 1 ? (
+                    {modo === "mfa" && fatores.length > 1 ? (
                       <Seletor valor={fator} aoMudar={setFator} rotuloA11y="Autenticador"
                         opcoes={fatores.map((f) => ({ v: f.id, rotulo: (f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "") }))} />
                     ) : null}
@@ -179,6 +282,22 @@ export default function Login() {
                       textContentType="oneTimeCode" autoComplete="one-time-code" accessibilityLabel="Código"
                       aoMudar={(v) => { const d = v.replace(/\D/g, ""); setCodigo(d); if (d.length === 6) envia(d); }}
                       style={{ letterSpacing: 12, textAlign: "center", fontSize: 24, fontWeight: "600" }} />
+                  </>
+                ) : modo === "esqueci" ? (
+                  <Entrada ref={primeiro} valor={email} aoMudar={setEmail} placeholder="E-mail" keyboardType="email-address" autoComplete="email"
+                    textContentType="username" accessibilityLabel="E-mail" onSubmitEditing={() => envia()} returnKeyType="send" />
+                ) : modo === "nova" ? (
+                  <>
+                    <View style={{ gap: 6 }}>
+                      <Entrada ref={primeiro} valor={senha} aoMudar={setSenha} placeholder="Nova senha" secureTextEntry accessibilityLabel="Nova senha"
+                        autoComplete="new-password" textContentType="newPassword" returnKeyType="next" />
+                      <View style={{ flexDirection: "row", gap: 4, marginTop: 2 }}>
+                        {[1, 2, 3, 4].map((i) => <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= nForca ? corForca : t.cores.campo }} />)}
+                      </View>
+                      <T v="dica">Mínimo de 10 caracteres, com maiúscula, minúscula e número.</T>
+                    </View>
+                    <Entrada valor={senha2} aoMudar={setSenha2} placeholder="Repita a senha" secureTextEntry accessibilityLabel="Repita a senha"
+                      autoComplete="new-password" textContentType="newPassword" onSubmitEditing={() => envia()} returnKeyType="go" />
                   </>
                 ) : (
                   <>
@@ -209,9 +328,33 @@ export default function Login() {
                 )}
                 {aviso ? <Mensagem tipo="info" icone="cadeado">{aviso}</Mensagem> : null}
                 {erro ? <Mensagem tipo="erro">{erro}</Mensagem> : null}
-                <Botao cheio onPress={() => envia()} carregando={enviando}>{modo === "criar" ? "Criar conta" : modo === "mfa" ? "Verificar" : "Entrar"}</Botao>
+                <Botao cheio onPress={() => envia()} carregando={enviando} desabilitado={faltaS > 0}>
+                  {faltaS > 0 ? `Aguarde ${faltaS} s` : ROTULO_BOTAO[modo]}
+                </Botao>
+                {modo === "entrar" ? (
+                  <Botao variante="texto" pequeno style={{ alignSelf: "center" }} onPress={() => troca("esqueci")}>Esqueci a senha</Botao>
+                ) : null}
+                {modo === "confirmar" || modo === "codigo" ? (
+                  <View style={{ flexDirection: "row", justifyContent: "center", flexWrap: "wrap", gap: 4 }}>
+                    <Botao variante="texto" pequeno onPress={reenvia} desabilitado={reenvioS > 0}>{reenvioS > 0 ? `Reenviar em ${reenvioS} s` : "Reenviar código"}</Botao>
+                    <Botao variante="texto" pequeno onPress={() => troca(modo === "confirmar" ? "criar" : "esqueci")}>Trocar e-mail</Botao>
+                  </View>
+                ) : null}
                 {modo === "mfa" ? (
-                  <Botao variante="texto" style={{ alignSelf: "center" }} onPress={async () => { await FC.auth.sair(); troca("entrar"); }}>Usar outra conta</Botao>
+                  <>
+                    <Botao variante="texto" pequeno style={{ alignSelf: "center" }} onPress={() => setPerdi(!perdi)}>Perdi meu autenticador</Botao>
+                    {perdi ? (
+                      <Mensagem tipo="info" icone="info">
+                        {"Se você cadastrou um autenticador reserva (outro celular ou o gerenciador de senhas), escolha-o acima e use o código dele.\n\n"
+                          + "Sem nenhum autenticador: escreva do e-mail da conta para o administrador pedindo a remoção do 2FA. A identidade é conferida fora do app antes de qualquer mudança. "
+                          + "Depois de entrar, ligue o 2FA de novo e cadastre um reserva."}
+                      </Mensagem>
+                    ) : null}
+                    <Botao variante="texto" style={{ alignSelf: "center" }} onPress={async () => { await FC.auth.sair(); troca("entrar"); }}>Usar outra conta</Botao>
+                  </>
+                ) : null}
+                {modo === "esqueci" || modo === "nova" ? (
+                  <Botao variante="texto" style={{ alignSelf: "center" }} onPress={async () => { if (modo === "nova") await FC.auth.sair(); troca("entrar"); }}>Voltar para o login</Botao>
                 ) : null}
                 <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", flexWrap: "wrap", marginTop: 2 }}>
                   {modo === "entrar" ? <><T style={{ fontSize: 14, color: t.cores.ink2 }}>Ainda não tem conta? </T><Botao variante="texto" pequeno style={{ minHeight: 0, paddingHorizontal: 2 }} onPress={() => troca("criar")}>Criar conta</Botao></> : null}

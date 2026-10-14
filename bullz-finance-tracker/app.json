@@ -28,7 +28,12 @@
     },
     "plugins": [
       "expo-router",
-      "expo-image"
+      "expo-image",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "O Bullz usa o Face ID para desbloquear o app e proteger sua carteira." }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
