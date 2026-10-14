@@ -4,7 +4,7 @@
  * numa folha com a prévia do celular. Tudo salva em preferencias.layout a
  * cada soltar. */
 import React, { useRef, useState } from "react";
-import { Animated, PanResponder, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Animated, PanResponder, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useTema } from "../tema";
@@ -191,7 +191,9 @@ export default function EditorLayout({ embutido = false }: { embutido?: boolean 
 type Ret = { x: number; y: number; w: number; h: number };
 function MenuLayout() {
   const t = useTema();
-  const { estreito } = useMedidas();
+  const { width: largura } = useWindowDimensions();
+  // a folha é larga, mas abaixo de ~700 px as duas prévias lado a lado ficam espremidas
+  const empilha = largura < 700;
   useApp((s) => s.versao);
   const MAX = FC.layout.MAX_CELULAR;
   const ordem: string[] = FC.layoutAtual().nav.ordem;
@@ -271,8 +273,10 @@ function MenuLayout() {
   return (
     <View>
       <T v="p" style={{ marginBottom: t.espaco.e4 }}>Arraste as abas entre a barra do celular (até 4) e “Mais”. O menu do computador mostra todas, na mesma ordem.</T>
-      <View style={{ flexDirection: estreito ? "column" : "row", gap: t.espaco.e4, alignItems: "flex-start" }}>
-        <View style={{ flex: 1, minWidth: 0, width: estreito ? "100%" : undefined }}>
+      {/* empilhado (celular), cada coluna tem a altura do próprio conteúdo: com flex: 1 numa
+          coluna vertical a altura colapsava e "No computador" subia por cima de "Em Mais" */}
+      <View style={{ flexDirection: empilha ? "column" : "row", gap: empilha ? t.espaco.e5 : t.espaco.e4, alignItems: empilha ? "stretch" : "flex-start" }}>
+        <View style={empilha ? { width: "100%" } : { flex: 1, minWidth: 0 }}>
           {rotulo("No celular", "celular")}
           <View style={{ width: "100%", maxWidth: 260, alignSelf: "center", borderRadius: 34, padding: 8, backgroundColor: t.cores.ink, boxShadow: t.cores.sombra } as any}>
             <View style={{ minHeight: 300, borderRadius: 27, overflow: "hidden", backgroundColor: t.cores.bg, justifyContent: "space-between" }}>
@@ -300,7 +304,7 @@ function MenuLayout() {
             )}
           </View>
         </View>
-        <View style={{ flex: 1, minWidth: 0, width: estreito ? "100%" : undefined }}>
+        <View style={empilha ? { width: "100%" } : { flex: 1, minWidth: 0 }}>
           {rotulo("No computador", "ativos")}
           <View style={{ borderWidth: 1, borderColor: t.cores.linha, borderRadius: t.raios.sm, overflow: "hidden", backgroundColor: t.cores.bg, boxShadow: t.cores.sombra } as any}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: t.cores.linha, backgroundColor: t.cores.vidroForte }}>
