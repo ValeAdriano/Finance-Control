@@ -733,3 +733,11 @@ begin
 end $$;
 revoke all on function public.admin_funil_onboarding(integer) from public, anon;
 grant execute on function public.admin_funil_onboarding(integer) to authenticated;
+
+-- ============================================================
+--  LAYOUT PERSONALIZÁVEL
+--  Ordem das abas (topo e barra do celular) e dos blocos do Início:
+--  {nav:{ordem:[…]}, inicio:{ordem:[…], ocultos:[…]}}. Vazio = padrão.
+-- ============================================================
+alter table public.preferencias add column if not exists layout jsonb;
+notify pgrst, 'reload schema';

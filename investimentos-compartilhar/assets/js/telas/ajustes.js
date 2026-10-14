@@ -32,7 +32,7 @@
     const objSalvo = ((b.prefsBrutas || {}).premissas || {}).objetivos || {};
     const obj = FC.objetivos(prefs);
 
-    const ABAS = ["geral", "modulos", "criterios", "dados"];
+    const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
     let abaAtiva = (params && params[0] && ABAS.includes(params[0])) ? params[0] : FC.local.ler("ajustes-aba", "geral");
     if (!ABAS.includes(abaAtiva)) abaAtiva = "geral";
     const modulosAtivos = FC.MODULOS.filter((m) => FC.modulo(m.chave)).length;
@@ -43,6 +43,7 @@
       <div class="segmentado mb4 ajustes-abas" role="tablist" id="seg-ajustes" aria-label="Seções de ajustes">
         <button type="button" data-aba="geral" role="tab" aria-selected="${abaAtiva === "geral"}" aria-pressed="${abaAtiva === "geral"}">Geral</button>
         <button type="button" data-aba="modulos" role="tab" aria-selected="${abaAtiva === "modulos"}" aria-pressed="${abaAtiva === "modulos"}">Módulos</button>
+        <button type="button" data-aba="layout" role="tab" aria-selected="${abaAtiva === "layout"}" aria-pressed="${abaAtiva === "layout"}">Layout</button>
         <button type="button" data-aba="criterios" role="tab" aria-selected="${abaAtiva === "criterios"}" aria-pressed="${abaAtiva === "criterios"}">Critérios</button>
         <button type="button" data-aba="dados" role="tab" aria-selected="${abaAtiva === "dados"}" aria-pressed="${abaAtiva === "dados"}">Dados</button>
       </div>
@@ -150,6 +151,16 @@
         </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
       </div>
 
+      <div id="painel-layout" class="aj-painel" ${abaAtiva === "layout" ? "" : "hidden"}>
+        ${grupo("Abas do menu", "arraste para mudar a ordem; as 4 primeiras ficam na barra do celular", html`
+          <div class="lista lay-lista" id="lay-nav" aria-label="Ordem das abas"></div>
+          <p class="texto-p mt2">No computador o menu do topo mostra todas, nessa ordem. No celular, as 4 primeiras ficam na barra de baixo e o resto vai para “Mais”. Também funciona com o teclado: foque na alça e use as setas.</p>`)}
+        ${grupo("Blocos do Início", "arraste para reorganizar e use o interruptor para ocultar", html`
+          <div class="lista lay-lista" id="lay-inicio" aria-label="Ordem dos blocos do Início"></div>
+          <p class="texto-p mt2">Ocultar só tira o bloco da tela: nada é apagado. Blocos que não têm conteúdo agora (como “Comece por aqui” com a carteira cheia) continuam sem aparecer.</p>`)}
+        <div class="flex entre mt3"><button class="botao texto" type="button" id="lay-padrao">Voltar ao padrão</button><span class="fraco" id="lay-status" style="font-size:13px" aria-live="polite"></span></div>
+      </div>
+
       <div id="painel-criterios" class="aj-painel" ${abaAtiva === "criterios" ? "" : "hidden"}>
         ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
           <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
@@ -255,6 +266,7 @@
         if (p) p.hidden = a !== novaAba;
       });
 
+      if (novaAba === "layout") pintaLayout();
       if (novaAba === "criterios") somaMetas();
       if (novaAba === "dados") carregaLog(FC.$("#aj-log", raiz));
     }
@@ -326,6 +338,108 @@
         FC.rerender({ suave: true, semAnimacao: true });
       } catch (err) { cx.checked = !cx.checked; FC.ui.erro(err); }
     }));
+
+    // ---- layout: abas do menu e blocos do Início (arrastar e soltar)
+    const nomeRota = (id) => (FC.ROTAS.find((r) => r.id === id) || {}).nome || id;
+    const iconeRota = (id) => (FC.ROTAS.find((r) => r.id === id) || {}).icone || "ativos";
+    const padraoLayout = () => FC.layout.resolve(null, { rotas: FC.ROTAS, ligada: FC.rotaLigada });
+    let gravandoLayout = Promise.resolve();
+
+    async function salvaLayout(novo) {
+      const guardar = FC.layout.paraSalvar(novo, padraoLayout());
+      FC.estado.prefs.layout = guardar;
+      FC.estado.base.prefsBrutas.layout = guardar;
+      FC.atualizaNavegacao();
+      FC.local.gravar("ultimo-cache-base", FC.estado.base);
+      const st = FC.$("#lay-status", raiz);
+      gravandoLayout = gravandoLayout.then(async () => {
+        try {
+          await FC.db.gravaPrefs({ layout: guardar });
+          if (st) st.textContent = "Layout salvo";
+        } catch (err) { if (st) st.textContent = ""; FC.ui.erro(err); }
+      });
+      await gravandoLayout;
+      pintaLayout();
+    }
+
+    function itemLayout({ id, nome, desc, ic, ocultavel, oculto, celular }) {
+      return html`<div class="item lay-item" data-id="${id}">
+        <button type="button" class="lay-alca" aria-label="Mover ${nome}. Setas para cima e para baixo reordenam." title="Arrastar">${icone("ordenar", 18)}</button>
+        <span class="modulo-ic">${icone(ic, 18)}</span>
+        <div class="principal"><div class="titulo">${nome}${celular ? html` <span class="badge cinza" style="font-weight:600">celular</span>` : ""}</div>${desc ? html`<div class="detalhe">${desc}</div>` : ""}</div>
+        ${ocultavel ? html`<label class="interruptor"><input type="checkbox" data-mostra="${id}" aria-label="Mostrar ${nome}" ${oculto ? "" : "checked"}><span></span></label>` : ""}
+      </div>`;
+    }
+
+    function pintaLayout() {
+      const lay = FC.layoutAtual();
+      const nav = FC.$("#lay-nav", raiz), ini = FC.$("#lay-inicio", raiz);
+      if (!nav || !ini) return;
+      nav.innerHTML = String(html`${lay.nav.ordem.map((id, k) => itemLayout({ id, nome: nomeRota(id), ic: iconeRota(id), celular: k < FC.layout.MAX_CELULAR }))}`);
+      ini.innerHTML = String(html`${lay.inicio.ordem.map((id) => {
+        const b = FC.LAYOUT_INICIO.find((x) => x.id === id);
+        return itemLayout({ id, nome: b.nome, desc: b.desc, ic: b.icone, ocultavel: !b.fixo, oculto: lay.inicio.ocultos.includes(id) });
+      })}`);
+    }
+
+    // arrastar pela alça (mouse e toque) e reordenar pelo teclado
+    function ordenavel(lista, aoMudar) {
+      let arrasto = null;
+      const ids = () => [...lista.querySelectorAll(".lay-item")].map((x) => x.dataset.id);
+      lista.addEventListener("pointerdown", (e) => {
+        const alca = e.target.closest(".lay-alca");
+        if (!alca) return;
+        arrasto = alca.closest(".lay-item");
+        arrasto.classList.add("arrastando");
+        try { alca.setPointerCapture(e.pointerId); } catch (x) { /* sem captura */ }
+        e.preventDefault();
+      });
+      lista.addEventListener("pointermove", (e) => {
+        if (!arrasto) return;
+        const outros = [...lista.querySelectorAll(".lay-item")].filter((x) => x !== arrasto);
+        const alvo = outros.find((x) => { const r = x.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+        if (alvo) { if (arrasto.nextElementSibling !== alvo) lista.insertBefore(arrasto, alvo); }
+        else if (lista.lastElementChild !== arrasto) lista.appendChild(arrasto);
+      });
+      const fim = () => {
+        if (!arrasto) return;
+        arrasto.classList.remove("arrastando");
+        arrasto = null;
+        aoMudar(ids());
+      };
+      lista.addEventListener("pointerup", fim);
+      lista.addEventListener("pointercancel", fim);
+      lista.addEventListener("keydown", (e) => {
+        const alca = e.target.closest(".lay-alca");
+        if (!alca || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+        e.preventDefault();
+        const item = alca.closest(".lay-item");
+        const vizinho = e.key === "ArrowUp" ? item.previousElementSibling : item.nextElementSibling;
+        if (!vizinho) return;
+        if (e.key === "ArrowUp") lista.insertBefore(item, vizinho); else lista.insertBefore(vizinho, item);
+        const id = item.dataset.id;
+        aoMudar(ids()).then(() => { const a = FC.$(`.lay-item[data-id="${id}"] .lay-alca`, lista); if (a) a.focus(); });
+      });
+    }
+
+    const navEl = FC.$("#lay-nav", raiz), iniEl = FC.$("#lay-inicio", raiz);
+    if (navEl && iniEl) {
+      pintaLayout();
+      ordenavel(navEl, async (ordem) => { const l = FC.layoutAtual(); await salvaLayout({ ...l, nav: { ...l.nav, ordem } }); });
+      ordenavel(iniEl, async (ordem) => { const l = FC.layoutAtual(); await salvaLayout({ ...l, inicio: { ...l.inicio, ordem } }); });
+      iniEl.addEventListener("change", async (e) => {
+        const cx = e.target.closest("[data-mostra]");
+        if (!cx) return;
+        const l = FC.layoutAtual();
+        const ocultos = cx.checked ? l.inicio.ocultos.filter((x) => x !== cx.dataset.mostra) : [...l.inicio.ocultos, cx.dataset.mostra];
+        await salvaLayout({ ...l, inicio: { ...l.inicio, ocultos } });
+      });
+      FC.$("#lay-padrao", raiz).addEventListener("click", async () => {
+        if (!(await FC.ui.confirma("Voltar a ordem das abas e dos blocos do Início ao padrão?", { botao: "Voltar ao padrão" }))) return;
+        await salvaLayout(padraoLayout());
+        FC.ui.aviso("Layout padrão restaurado");
+      });
+    }
 
     // ---- aparência
     FC.$$("#aj-tema button", raiz).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));

@@ -1706,3 +1706,15 @@ code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(-
   .cartao { box-shadow: none; break-inside: avoid; border: 1px solid #ccc; }
   .rel-aviso { font-size: 11px; }
 }
+
+/* ------------------------------------------------------------ layout personalizável */
+.lay-lista .lay-item { gap: 12px; user-select: none; transition: background .15s var(--curva), box-shadow .15s var(--curva); }
+.lay-alca {
+  flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: var(--r-xs);
+  background: transparent; color: var(--ink-2); cursor: grab; touch-action: none;
+}
+.lay-alca:hover { background: var(--campo); }
+.lay-alca:focus-visible { outline: 3px solid var(--campo-foco); }
+.lay-item.arrastando { background: var(--bg-2); box-shadow: var(--sombra-alta); position: relative; z-index: 2; }
+.lay-item.arrastando .lay-alca { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) { .lay-lista .lay-item { transition: none; } }

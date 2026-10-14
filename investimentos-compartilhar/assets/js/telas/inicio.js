@@ -523,24 +523,34 @@
     let avisos = [];
     try { if (FC.alertas) avisos = FC.alertas.calcula(d, FC.estado.base, FC.estado.prefs); } catch (err) { console.error(err); }
 
+    // cada bloco é independente: a ordem e o que fica oculto vêm do layout
+    // salvo (Ajustes → Layout), e um bloco que falha não derruba a tela
+    const blocos = {
+      perfil: () => C.cartaoPerfil(),
+      topo: () => topo(d, imp, seq),
+      checklist: () => C.checklistAtivacao(),
+      plano_realidade: () => C.cartaoPlanoRealidade(),
+      frase: () => (t ? frase(comparativo(t)) : ""),
+      detalhes: () => (t ? detalhesTecnicos(d, imp) : html`<div class="mt3">${macro(d.macro)}</div>`),
+      retrospectivas: () => retrospectivas(),
+      comecar: () => (vazio ? comecar() : ""),
+      proximos30: () => proximos30(d, div),
+      renda_passiva: () => rendaPassiva(div),
+      alocacao: () => alocacao(d),
+      crescimento: () => crescimento(d),
+      proventos: () => proventos(d.historico.renda_mensal, div),
+      agro: () => agroResumo(d.agro),
+      melhores: () => melhores(d),
+    };
+    const layout = FC.layoutAtual().inicio;
+    const corpo = layout.ordem.filter((id) => !layout.ocultos.includes(id)).map((id) => {
+      try { return blocos[id] ? blocos[id]() : ""; } catch (err) { console.error("bloco do Início", id, err); return ""; }
+    });
+
     raiz.innerHTML = String(html`
       ${C.estadoMercado()}
       <p class="fraco" style="font-size:15px;margin-bottom:8px">${saudacao()}${nome ? ", " + nome : ""}.</p>
-      ${C.cartaoPerfil()}
-      ${topo(d, imp, seq)}
-      ${C.checklistAtivacao()}
-      ${C.cartaoPlanoRealidade()}
-      ${t ? frase(comparativo(t)) : ""}
-      ${t ? detalhesTecnicos(d, imp) : html`<div class="mt3">${macro(d.macro)}</div>`}
-      ${retrospectivas()}
-      ${vazio ? comecar() : ""}
-      ${proximos30(d, div)}
-      ${rendaPassiva(div)}
-      ${alocacao(d)}
-      ${crescimento(d)}
-      ${proventos(d.historico.renda_mensal, div)}
-      ${agroResumo(d.agro)}
-      ${melhores(d)}
+      ${corpo}
       ${d.atualizado ? html`<p class="texto-p mt4 centro" style="margin-inline:auto">Preços atualizados ${FC.datas.ha(FC.estado.spotEm) || "—"} (a cada minuto com o app aberto) · cripto pelo CoinGecko, bolsa pelo Yahoo Finance, fundamentos pelo Fundamentus e juros pelo Banco Central.</p>` : ""}
     `);
 

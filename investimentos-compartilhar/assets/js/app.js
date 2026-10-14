@@ -24,10 +24,16 @@
     { id: "admin", nome: "Administração", icone: "escudo", oculta: true },
   ];
   FC.ROTAS = ROTAS;
-  // barra de baixo do celular: as 4 primeiras destas que estiverem ligadas
-  const PREFERIDAS_CELULAR = ["inicio", "ativos", "agro", "aportes", "dividendos", "salario"];
-  const rotasLigadas = () => ROTAS.filter((x) => FC.rotaLigada(x.id) && (x.id !== "admin" || estado.admin));
-  const noCelular = () => PREFERIDAS_CELULAR.filter(FC.rotaLigada).slice(0, 4);
+  // layout salvo (preferencias.layout) resolvido contra o que está ligado agora:
+  // a ordem do topo e as 4 primeiras abas, que formam a barra do celular
+  const layoutAtual = () => FC.layout.resolve(((FC.estado || {}).prefs || {}).layout, { rotas: ROTAS, ligada: FC.rotaLigada });
+  FC.layoutAtual = layoutAtual;
+  const rotasLigadas = () => {
+    const ordem = layoutAtual().nav.ordem;
+    const pos = (id) => { const k = ordem.indexOf(id); return k < 0 ? 1e6 : k; };
+    return ROTAS.filter((x) => FC.rotaLigada(x.id) && (x.id !== "admin" || estado.admin)).sort((a, b) => pos(a.id) - pos(b.id));
+  };
+  const noCelular = () => layoutAtual().nav.celular;
 
   const estado = (FC.estado = { base: null, prefs: null, mercado: { universo: null, historicos: {}, spot: {} }, dados: null,
     carregandoMercado: false, erroMercado: null, spotEm: null, proventos: null, proventosEm: null });
@@ -58,6 +64,7 @@
       renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
       agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),
       plano: FC.mescla(FC.PADRAO_PLANO, brutas.plano),
+      layout: brutas.layout || null,
     };
   };
 
