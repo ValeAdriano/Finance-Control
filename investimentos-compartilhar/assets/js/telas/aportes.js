@@ -21,6 +21,9 @@
     for (const a of ord) {
       if (a.tipo === "provento" || (a.tipo === "caixa" && (a.historico || a.origem || a.valor < 0))) continue;
       if (a.tipo === "ativo" && a.quantidade < 0) continue;
+      // abaixo de R$ 1 (sobra de reinvestimento, fração, ajuste de centavos) não é um aporte
+      // que se repete: não vira o "último" nem conta como recorrente
+      if (!(Math.abs(Number(a.valor ?? (a.quantidade || 0) * (a.preco || 0))) >= 1)) continue;
       const k = a.tipo === "ativo" ? "a:" + a.ticker : "c:" + a.titulo;
       const g = grupos.get(k) || { k, tipo: a.tipo, nome: a.tipo === "ativo" ? a.ticker : a.titulo, n: 0, ultimo: a };
       g.n++;

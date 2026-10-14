@@ -22,11 +22,14 @@ const casasQtd = (a: any) => (a && a.classe === "cripto" ? 8 : 0);
 const arredonda = (v: number, casas: number) => Math.floor(v * 10 ** casas + 1e-9) / 10 ** casas;
 const numTxt = (v: any) => (ok(v) ? String(Number(Number(v).toPrecision(10))).replace(".", ",") : "");
 const pilarDe: Record<string, string> = { acao_br: "acoes", acao_us: "acoes", fii: "real_estate", etf_br: "alternativos", etf_us: "alternativos", cripto: "alternativos" };
-const mem = { tipo: "compra", filtroHist: "todos" };
+const mem = { tipo: "compra", filtroHist: "todos", paginaHist: 0 };
+/** lançamentos desenhados por página no histórico (desenhar centenas de linhas de uma vez pesa) */
+const POR_PAGINA = 30;
 
 // ---------------------------------------------------------------- recorrentes
-// Tudo em que você já aportou vira um atalho; ativos da carteira e títulos
-// ainda sem aporte também aparecem, no fim.
+// Tudo em que você já aportou vira um atalho, com o último aporte de cada
+// ativo (de R$ 1 para cima) como sugestão; ativos da carteira e títulos ainda
+// sem aporte também aparecem, no fim.
 function recorrentes() {
   const b = FC.estado.base;
   const grupos = new Map<string, any>();
@@ -34,6 +37,9 @@ function recorrentes() {
   for (const a of ord) {
     if (a.tipo === "provento" || (a.tipo === "caixa" && (a.historico || a.origem || a.valor < 0))) continue;
     if (a.tipo === "ativo" && a.quantidade < 0) continue;
+    // abaixo de R$ 1 (sobra de reinvestimento, fração, ajuste de centavos) não é um aporte
+    // que se repete: não vira o "último" nem conta como recorrente
+    if (!(Math.abs(Number(a.valor ?? (a.quantidade || 0) * (a.preco || 0))) >= 1)) continue;
     const k = a.tipo === "ativo" ? "a:" + a.ticker : "c:" + a.titulo;
     const g = grupos.get(k) || { k, tipo: a.tipo, nome: a.tipo === "ativo" ? a.ticker : a.titulo, n: 0, ultimo: a };
     g.n++;
@@ -393,10 +399,15 @@ const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho"
 function Historico() {
   const t = useTema();
   const [filtro, setFiltro] = useState(mem.filtroHist);
+  const [pagina, setPagina] = useState(mem.paginaHist);
   let lista = [...FC.estado.base.aportes].sort((a: any, b: any) => b.data.localeCompare(a.data) || String(b.criado_em).localeCompare(String(a.criado_em)));
   if (filtro !== "todos") lista = lista.filter((a: any) => a.tipo === filtro);
   const total = FC.soma(lista.filter((a: any) => a.tipo !== "provento"), (a: any) => a.valor);
-  const itens = lista.slice(0, 400);
+  // os dados já estão na memória (o cálculo da carteira usa todos); só a página atual é desenhada
+  const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
+  const pag = Math.min(pagina, paginas - 1);
+  const itens = lista.slice(pag * POR_PAGINA, (pag + 1) * POR_PAGINA);
+  const vai = (p: number) => { mem.paginaHist = p; setPagina(p); };
   const linhas: React.ReactNode[] = [];
   let mesAnt: string | null = null;
   for (const a of itens) {
@@ -424,13 +435,20 @@ function Historico() {
   return (
     <Secao titulo="Histórico"
       sub={<>{lista.length} lançamento{lista.length === 1 ? "" : "s"}{filtro !== "provento" && total ? <> · <Rs style={{ fontSize: 14, color: t.cores.ink2 }}>{FC.fmt.brlTexto(total)}</Rs> líquido</> : null}</>}
-      direita={<View style={{ width: 140 }}><Seletor compacto valor={filtro} aoMudar={(v) => { mem.filtroHist = v; setFiltro(v); }} rotuloA11y="Filtrar histórico"
+      direita={<View style={{ width: 140 }}><Seletor compacto valor={filtro} aoMudar={(v) => { mem.filtroHist = v; setFiltro(v); vai(0); }} rotuloA11y="Filtrar histórico"
         opcoes={[{ v: "todos", rotulo: "Tudo" }, { v: "ativo", rotulo: "Ativos" }, { v: "caixa", rotulo: "Renda fixa" }, { v: "provento", rotulo: "Proventos" }]} /></View>}>
       <View style={{ backgroundColor: t.cores.bg2, borderRadius: t.raios.r, borderWidth: 1, borderColor: t.cores.linha, overflow: "hidden", boxShadow: t.cores.sombra } as any}>
         {itens.length ? linhas.map((l, i) => <View key={i} style={i ? { borderTopWidth: 1, borderTopColor: t.cores.linha } : null}>{l}</View>)
           : <Vazio icone="🧾" titulo="Nenhum lançamento" texto="Registre a primeira compra acima ou importe o extrato da corretora." />}
       </View>
-      {lista.length > 400 ? <T v="p" style={{ marginTop: t.espaco.e3 }}>Mostrando os 400 mais recentes.</T> : null}
+      {paginas > 1 ? (
+        <View accessibilityRole={"navigation" as any} accessibilityLabel="Páginas do histórico"
+          style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: t.espaco.e2, marginTop: t.espaco.e3 }}>
+          <Botao variante="sec" pequeno desabilitado={pag === 0} onPress={() => vai(pag - 1)} rotuloA11y="Lançamentos mais recentes">‹ Mais recentes</Botao>
+          <T v="peq" num style={{ textAlign: "center", flexShrink: 1 }}>{pag * POR_PAGINA + 1}–{Math.min((pag + 1) * POR_PAGINA, lista.length)} de {lista.length}</T>
+          <Botao variante="sec" pequeno desabilitado={pag >= paginas - 1} onPress={() => vai(pag + 1)} rotuloA11y="Lançamentos mais antigos">Mais antigos ›</Botao>
+        </View>
+      ) : null}
     </Secao>
   );
 }
