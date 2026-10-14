@@ -13,7 +13,6 @@
     },
     "android": {
       "package": "br.com.agvs.bullz",
-      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/img/icone-512.png",
         "backgroundColor": "#000000"
