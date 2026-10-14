@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Bullz",
+    "slug": "bullz-finance-tracker",
+    "scheme": "bullz",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "br.com.agvs.bullz"
+    },
+    "android": {
+      "package": "br.com.agvs.bullz",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/img/icone-512.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/img/icone-192.png",
+      "name": "Bullz",
+      "shortName": "Bullz",
+      "backgroundColor": "#000000"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "icon": "./assets/img/icone-512.png",
+    "splash": {
+      "image": "./assets/img/icone-512.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    }
+  }
+}
