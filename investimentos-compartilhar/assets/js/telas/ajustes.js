@@ -32,7 +32,7 @@
     const objSalvo = ((b.prefsBrutas || {}).premissas || {}).objetivos || {};
     const obj = FC.objetivos(prefs);
 
-    const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
+    const ABAS = ["geral", "modulos", "criterios", "dados"];
     let abaAtiva = (params && params[0] && ABAS.includes(params[0])) ? params[0] : FC.local.ler("ajustes-aba", "geral");
     if (!ABAS.includes(abaAtiva)) abaAtiva = "geral";
     const modulosAtivos = FC.MODULOS.filter((m) => FC.modulo(m.chave)).length;
@@ -43,7 +43,7 @@
       <div class="segmentado mb4 ajustes-abas" role="tablist" id="seg-ajustes" aria-label="Seções de ajustes">
         <button type="button" data-aba="geral" role="tab" aria-selected="${abaAtiva === "geral"}" aria-pressed="${abaAtiva === "geral"}">Geral</button>
         <button type="button" data-aba="modulos" role="tab" aria-selected="${abaAtiva === "modulos"}" aria-pressed="${abaAtiva === "modulos"}">Módulos</button>
-        <button type="button" data-aba="layout" role="tab" aria-selected="${abaAtiva === "layout"}" aria-pressed="${abaAtiva === "layout"}">Layout</button>
+        <button type="button" data-aba="layout" data-vai="#/inicio/editar" title="Editar o layout no próprio Início">Layout</button>
         <button type="button" data-aba="criterios" role="tab" aria-selected="${abaAtiva === "criterios"}" aria-pressed="${abaAtiva === "criterios"}">Critérios</button>
         <button type="button" data-aba="dados" role="tab" aria-selected="${abaAtiva === "dados"}" aria-pressed="${abaAtiva === "dados"}">Dados</button>
       </div>
@@ -151,33 +151,6 @@
         </div><p class="texto-p mt2">Montadas com os seus números: patrimônio, aportes, salário, dividendos e alocação do período. Fora da janela, a do mês mostra o último mês completo.</p>`)}
       </div>
 
-      <div id="painel-layout" class="aj-painel" ${abaAtiva === "layout" ? "" : "hidden"}>
-        ${grupo("Menu de navegação", "arraste as abas para a barra do celular ou para “Mais” e veja o resultado", html`
-          <div class="lay-previa">
-            <div class="lay-quadro">
-              <p class="lay-rotulo">${icone("celular", 15)} No celular</p>
-              <div class="lay-celular" aria-hidden="false">
-                <div class="lay-celular-tela">
-                  <div class="lay-esqueleto"><i></i><i></i><i class="curta"></i><b></b></div>
-                  <div class="lay-barra" id="lay-bar" aria-label="Barra de baixo do celular (até 4 abas)"></div>
-                </div>
-              </div>
-              <p class="lay-rotulo mt2">Em “Mais”</p>
-              <div class="lay-mais" id="lay-tray" aria-label="Abas dentro de Mais"></div>
-            </div>
-            <div class="lay-quadro">
-              <p class="lay-rotulo">${icone("ativos", 15)} No computador</p>
-              <div class="lay-desktop"><div class="lay-desktop-topo"><span class="lay-marca">${icone("inicio", 14)}</span><nav id="lay-topo" class="lay-topo-abas"></nav></div>
-                <div class="lay-esqueleto grande"><i></i><i class="curta"></i><b></b></div></div>
-              <p class="texto-p mt2">O menu do topo mostra todas as abas, na mesma ordem. Arraste uma aba entre a barra e “Mais”, ou use as setas do teclado com a aba focada.</p>
-            </div>
-          </div>`)}
-        ${grupo("Tela de Início", "arraste os blocos para reorganizar; o olho oculta", html`
-          <div class="lay-tela-inicio"><div class="lay-lista" id="lay-inicio" aria-label="Ordem dos blocos do Início"></div></div>
-          <p class="texto-p mt2">Ocultar só tira o bloco da tela: nada é apagado. Blocos sem conteúdo agora (como “Comece por aqui” com a carteira cheia) continuam sem aparecer.</p>`)}
-        <div class="flex entre mt3"><button class="botao texto" type="button" id="lay-padrao">Voltar ao padrão</button><span class="fraco" id="lay-status" style="font-size:13px" aria-live="polite"></span></div>
-      </div>
-
       <div id="painel-criterios" class="aj-painel" ${abaAtiva === "criterios" ? "" : "hidden"}>
         ${grupo("Objetivos", "a base da reserva de emergência e da renda passiva no Início", html`<form class="cartao" id="f-objetivos">
           <div class="form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
@@ -283,13 +256,13 @@
         if (p) p.hidden = a !== novaAba;
       });
 
-      if (novaAba === "layout") pintaLayout();
       if (novaAba === "criterios") somaMetas();
       if (novaAba === "dados") carregaLog(FC.$("#aj-log", raiz));
     }
 
     FC.$$("#seg-ajustes button", raiz).forEach((bt) => {
-      bt.addEventListener("click", () => trocaAba(bt.dataset.aba));
+      // Layout não é aba: leva ao Início em modo edição, com os blocos arrastáveis
+      bt.addEventListener("click", () => (bt.dataset.vai ? (location.hash = bt.dataset.vai) : trocaAba(bt.dataset.aba)));
     });
 
     // ---- conta
@@ -355,195 +328,6 @@
         FC.rerender({ suave: true, semAnimacao: true });
       } catch (err) { cx.checked = !cx.checked; FC.ui.erro(err); }
     }));
-
-    // ---- layout: abas do menu e blocos do Início (arrastar e soltar)
-    const nomeRota = (id) => (FC.ROTAS.find((r) => r.id === id) || {}).nome || id;
-    const iconeRota = (id) => (FC.ROTAS.find((r) => r.id === id) || {}).icone || "ativos";
-    const padraoLayout = () => FC.layout.resolve(null, { rotas: FC.ROTAS, ligada: FC.rotaLigada });
-    let gravandoLayout = Promise.resolve();
-
-    async function salvaLayout(novo) {
-      const guardar = FC.layout.paraSalvar(novo, padraoLayout());
-      FC.estado.prefs.layout = guardar;
-      FC.estado.base.prefsBrutas.layout = guardar;
-      FC.atualizaNavegacao();
-      FC.local.gravar("ultimo-cache-base", FC.estado.base);
-      const st = FC.$("#lay-status", raiz);
-      gravandoLayout = gravandoLayout.then(async () => {
-        try {
-          await FC.db.gravaPrefs({ layout: guardar });
-          if (st) st.textContent = "Layout salvo";
-        } catch (err) { if (st) st.textContent = ""; FC.ui.erro(err); }
-      });
-      await gravandoLayout;
-      pintaLayout();
-    }
-
-    // tipo de esboço de cada bloco do Início, para a prévia
-    const ESBOCO = { topo: "numero", frase: "numero", detalhes: "linha", crescimento: "linha", alocacao: "barras", proventos: "barras",
-      proximos30: "lista", melhores: "lista", checklist: "lista", renda_passiva: "numero" };
-    const esboco = (tipo) => ({
-      numero: html`<span class="lay-esb numero"><i></i><b></b></span>`,
-      linha: html`<span class="lay-esb linha"><svg viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0 24 L18 20 L36 22 L55 12 L74 14 L100 4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span>`,
-      barras: html`<span class="lay-esb barras"><i style="height:40%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:90%"></i><i style="height:65%"></i></span>`,
-      lista: html`<span class="lay-esb lista"><i></i><i></i><i></i></span>`,
-      faixa: html`<span class="lay-esb faixa"><i></i></span>`,
-    })[tipo || "faixa"];
-
-    function blocoLayout(b, oculto) {
-      return html`<div class="lay-item lay-bloco ${oculto ? "oculto" : ""}" data-id="${b.id}">
-        <button type="button" class="lay-alca" aria-label="Mover ${b.nome}. Setas para cima e para baixo reordenam." title="Arrastar">${icone("ordenar", 18)}</button>
-        <div class="lay-bloco-miolo">
-          <div class="lay-bloco-topo"><span class="modulo-ic">${icone(b.icone, 16)}</span><b>${b.nome}</b></div>
-          ${esboco(ESBOCO[b.id])}
-          <small>${b.desc}</small>
-        </div>
-        ${b.fixo ? html`<span class="lay-fixo" title="Sempre visível">${icone("cadeado", 15)}</span>`
-          : html`<label class="lay-olho" title="${oculto ? "Mostrar" : "Ocultar"}"><input type="checkbox" data-mostra="${b.id}" aria-label="Mostrar ${b.nome}" ${oculto ? "" : "checked"}>
-            <span>${icone(oculto ? "olhoFechado" : "olho", 18)}</span></label>`}
-      </div>`;
-    }
-
-    function chip(id) {
-      return html`<button type="button" class="lay-chip" data-id="${id}" aria-label="${nomeRota(id)}. Setas esquerda e direita mudam a posição.">
-        <span class="lay-chip-ic">${icone(iconeRota(id), 20)}</span><span class="lay-chip-nome">${nomeRota(id)}</span></button>`;
-    }
-
-    function pintaLayout() {
-      const lay = FC.layoutAtual();
-      const bar = FC.$("#lay-bar", raiz), tray = FC.$("#lay-tray", raiz), topo = FC.$("#lay-topo", raiz), ini = FC.$("#lay-inicio", raiz);
-      if (!bar || !tray || !ini) return;
-      const naBarra = lay.nav.ordem.slice(0, FC.layout.MAX_CELULAR), emMais = lay.nav.ordem.slice(FC.layout.MAX_CELULAR);
-      const vazios = Math.max(0, FC.layout.MAX_CELULAR - naBarra.length);
-      bar.innerHTML = String(html`${naBarra.map(chip)}${Array.from({ length: vazios }, () => html`<span class="lay-vazio">vazio</span>`)}`);
-      tray.innerHTML = String(emMais.length ? html`${emMais.map(chip)}` : html`<span class="lay-vazio larga">Nada aqui: todas as abas cabem na barra.</span>`);
-      topo.innerHTML = String(html`${lay.nav.ordem.map((id) => html`<span class="${naBarra.includes(id) ? "na-barra" : ""}">${nomeRota(id)}</span>`)}`);
-      ini.innerHTML = String(html`${lay.inicio.ordem.map((id) => blocoLayout(FC.LAYOUT_INICIO.find((x) => x.id === id), lay.inicio.ocultos.includes(id)))}`);
-    }
-
-    // abas: arrastar o cartão entre a barra e "Mais" (ou dentro de cada uma)
-    function ordenavelAbas(aoMudar) {
-      const bar = FC.$("#lay-bar", raiz), tray = FC.$("#lay-tray", raiz);
-      let a = null;
-      const onde = (e) => {
-        const els = document.elementsFromPoint(e.clientX, e.clientY);
-        const alvo = els.find((x) => x.classList && x.classList.contains("lay-chip") && x !== a.el);
-        if (alvo) return { antes: alvo.dataset.id };
-        if (els.includes(bar)) return { fimBarra: true };
-        if (els.includes(tray)) return { fimMais: true };
-        return null;
-      };
-      const marca = (t) => {
-        FC.$$(".lay-chip.alvo, .lay-barra.alvo, .lay-mais.alvo", raiz).forEach((x) => x.classList.remove("alvo"));
-        if (!t) return;
-        if (t.antes) { const x = FC.$(`.lay-chip[data-id="${t.antes}"]`, raiz); if (x) x.classList.add("alvo"); }
-        else (t.fimBarra ? bar : tray).classList.add("alvo");
-      };
-      for (const zona of [bar, tray]) {
-        zona.addEventListener("pointerdown", (e) => {
-          const el = e.target.closest(".lay-chip");
-          if (!el) return;
-          a = { el, x0: e.clientX, y0: e.clientY, alvo: null, moveu: false };
-          el.classList.add("arrastando");
-          try { el.setPointerCapture(e.pointerId); } catch (x) { /* sem captura */ }
-          e.preventDefault();
-        });
-        zona.addEventListener("pointermove", (e) => {
-          if (!a) return;
-          a.moveu = true;
-          a.el.style.transform = `translate(${e.clientX - a.x0}px, ${e.clientY - a.y0}px)`;
-          a.alvo = onde(e);
-          marca(a.alvo);
-        });
-        const fim = async (e) => {
-          if (!a) return;
-          const { el, alvo } = a;
-          el.classList.remove("arrastando"); el.style.transform = "";
-          marca(null);
-          a = null;
-          if (!alvo) return;
-          const ordem = FC.layoutAtual().nav.ordem.filter((x) => x !== el.dataset.id);
-          let pos;
-          if (alvo.antes) pos = ordem.indexOf(alvo.antes);
-          else if (alvo.fimBarra) pos = Math.min(FC.layout.MAX_CELULAR - 1, ordem.length);
-          else pos = ordem.length;
-          ordem.splice(pos, 0, el.dataset.id);
-          await aoMudar(ordem);
-        };
-        zona.addEventListener("pointerup", fim);
-        zona.addEventListener("pointercancel", () => { if (a) { a.el.classList.remove("arrastando"); a.el.style.transform = ""; marca(null); a = null; } });
-        zona.addEventListener("keydown", async (e) => {
-          const el = e.target.closest(".lay-chip");
-          if (!el || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-          e.preventDefault();
-          const ordem = FC.layoutAtual().nav.ordem, de = ordem.indexOf(el.dataset.id);
-          const para = e.key === "ArrowLeft" ? de - 1 : de + 1;
-          if (para < 0 || para >= ordem.length) return;
-          await aoMudar(FC.layout.move(ordem, de, para));
-          const novo = FC.$(`.lay-chip[data-id="${el.dataset.id}"]`, raiz);
-          if (novo) novo.focus();
-        });
-      }
-    }
-
-    // arrastar pela alça (mouse e toque) e reordenar pelo teclado
-    function ordenavel(lista, aoMudar) {
-      let arrasto = null;
-      const ids = () => [...lista.querySelectorAll(".lay-item")].map((x) => x.dataset.id);
-      lista.addEventListener("pointerdown", (e) => {
-        const alca = e.target.closest(".lay-alca");
-        if (!alca) return;
-        arrasto = alca.closest(".lay-item");
-        arrasto.classList.add("arrastando");
-        try { alca.setPointerCapture(e.pointerId); } catch (x) { /* sem captura */ }
-        e.preventDefault();
-      });
-      lista.addEventListener("pointermove", (e) => {
-        if (!arrasto) return;
-        const outros = [...lista.querySelectorAll(".lay-item")].filter((x) => x !== arrasto);
-        const alvo = outros.find((x) => { const r = x.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
-        if (alvo) { if (arrasto.nextElementSibling !== alvo) lista.insertBefore(arrasto, alvo); }
-        else if (lista.lastElementChild !== arrasto) lista.appendChild(arrasto);
-      });
-      const fim = () => {
-        if (!arrasto) return;
-        arrasto.classList.remove("arrastando");
-        arrasto = null;
-        aoMudar(ids());
-      };
-      lista.addEventListener("pointerup", fim);
-      lista.addEventListener("pointercancel", fim);
-      lista.addEventListener("keydown", (e) => {
-        const alca = e.target.closest(".lay-alca");
-        if (!alca || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
-        e.preventDefault();
-        const item = alca.closest(".lay-item");
-        const vizinho = e.key === "ArrowUp" ? item.previousElementSibling : item.nextElementSibling;
-        if (!vizinho) return;
-        if (e.key === "ArrowUp") lista.insertBefore(item, vizinho); else lista.insertBefore(vizinho, item);
-        const id = item.dataset.id;
-        aoMudar(ids()).then(() => { const a = FC.$(`.lay-item[data-id="${id}"] .lay-alca`, lista); if (a) a.focus(); });
-      });
-    }
-
-    const iniEl = FC.$("#lay-inicio", raiz);
-    if (iniEl) {
-      pintaLayout();
-      ordenavelAbas(async (ordem) => { const l = FC.layoutAtual(); await salvaLayout({ ...l, nav: { ...l.nav, ordem } }); });
-      ordenavel(iniEl, async (ordem) => { const l = FC.layoutAtual(); await salvaLayout({ ...l, inicio: { ...l.inicio, ordem } }); });
-      iniEl.addEventListener("change", async (e) => {
-        const cx = e.target.closest("[data-mostra]");
-        if (!cx) return;
-        const l = FC.layoutAtual();
-        const ocultos = cx.checked ? l.inicio.ocultos.filter((x) => x !== cx.dataset.mostra) : [...l.inicio.ocultos, cx.dataset.mostra];
-        await salvaLayout({ ...l, inicio: { ...l.inicio, ocultos } });
-      });
-      FC.$("#lay-padrao", raiz).addEventListener("click", async () => {
-        if (!(await FC.ui.confirma("Voltar a ordem das abas e dos blocos do Início ao padrão?", { botao: "Voltar ao padrão" }))) return;
-        await salvaLayout(padraoLayout());
-        FC.ui.aviso("Layout padrão restaurado");
-      });
-    }
 
     // ---- aparência
     FC.$$("#aj-tema button", raiz).forEach((b) => b.addEventListener("click", () => { FC.local.gravar("tema", b.dataset.tema); FC.aplicaTema(b.dataset.tema); }));

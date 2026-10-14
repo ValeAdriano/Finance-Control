@@ -510,7 +510,8 @@
       </div></section>`;
   }
 
-  FC.telas.inicio = async function (raiz) {
+  FC.telas.inicio = async function (raiz, params = []) {
+    const editando = params[0] === "editar";
     const d = FC.estado.dados;
     const vazio = !d.ativos.length && !d.rendaFixa.length && !d.agro.tem_dados;
     const nome = ((FC.auth.usuario.user_metadata || {}).nome || "").trim();
@@ -543,9 +544,17 @@
       melhores: () => melhores(d),
     };
     const layout = FC.layoutAtual().inicio;
-    const corpo = layout.ordem.filter((id) => !layout.ocultos.includes(id)).map((id) => {
+    const monta = (id) => {
       try { return blocos[id] ? blocos[id]() : ""; } catch (err) { console.error("bloco do Início", id, err); return ""; }
-    });
+    };
+
+    // modo edição (Ajustes → Layout): todos os blocos, com alça e olho
+    if (editando) {
+      raiz.innerHTML = String(html`${FC.layoutEditor.blocos(layout.ordem.map((id) => ({ id, conteudo: layout.ocultos.includes(id) ? "" : monta(id) })), layout.ocultos)}`);
+      FC.layoutEditor.ligaInicio(raiz);
+      return;
+    }
+    const corpo = layout.ordem.filter((id) => !layout.ocultos.includes(id)).map(monta);
 
     raiz.innerHTML = String(html`
       ${C.estadoMercado()}

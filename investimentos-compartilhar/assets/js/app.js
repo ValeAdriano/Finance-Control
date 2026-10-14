@@ -171,7 +171,7 @@
       FC.recalcula();
       gravaRegistroDoDia();
       // não repinta embaixo de quem está digitando ou com uma folha aberta
-      const ocupado = FC.$(".fundo") || (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName));
+      const ocupado = FC.$(".fundo") || document.body.classList.contains("editando-layout") || (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName));
       if (!ocupado) FC.rerender({ suave: true, semAnimacao: true });
     }, 60 * 1000);
   }
@@ -513,6 +513,14 @@
           </div>
           <span class="chevron">${icone("chevron", 18)}</span>
         </a>
+        <a class="item clicavel" href="#/inicio/editar" id="menu-layout" style="color:inherit;text-decoration:none">
+          <span style="color:var(--acento)">${icone("ordenar", 20)}</span>
+          <div class="principal">
+            <div class="titulo">Personalizar layout</div>
+            <div class="detalhe">Arraste os blocos do Início e organize o menu</div>
+          </div>
+          <span class="chevron">${icone("chevron", 18)}</span>
+        </a>
         <a class="item clicavel" href="#/ajustes" id="menu-ajustes" style="color:inherit;text-decoration:none">
           <span style="color:var(--acento)">${icone("ajustes", 20)}</span>
           <div class="principal">
@@ -557,6 +565,7 @@
     }
     FC.$("#menu-ajustes", f.el).addEventListener("click", () => f.fechar());
     FC.$("#menu-perfil", f.el).addEventListener("click", () => f.fechar());
+    FC.$("#menu-layout", f.el).addEventListener("click", () => f.fechar());
     if (FC.$("#menu-admin", f.el)) FC.$("#menu-admin", f.el).addEventListener("click", () => f.fechar());
     FC.$("#menu-sair", f.el).addEventListener("click", async () => {
       f.fechar();
@@ -656,6 +665,8 @@
   FC.rerender = async function ({ suave = false, semAnimacao = false } = {}) {
     const main = FC.$("#conteudo");
     if (!main || !estado.base) return;
+    // não repinta embaixo de um bloco sendo arrastado
+    if (FC.layoutEditor && FC.layoutEditor.arrastando) return;
     const { id, params } = rotaAtual();
     marcaRotaAtual();
     const mudouDeTela = ultimaRota !== id;
