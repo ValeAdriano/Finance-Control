@@ -14,8 +14,9 @@ import { Icone, type NomeIcone } from "../ui/icone";
 import { folhaForm, ui, type ApiFolha } from "../ui/folha";
 import { depoisDeMudar, gravaPremissas } from "./comum/dados";
 import FC from "../nucleo";
+import EditorLayout from "./layout-editor";
 
-const ABAS = ["geral", "modulos", "criterios", "dados"];
+const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
 const nomeFator = (f: any) => (f.friendly_name || "Autenticador").replace(/ \d{10,}$/, "").replace(/ [a-z0-9]{4}$/, "");
 
 function IconeModulo({ nome, ano }: { nome: NomeIcone; ano?: boolean }) {
@@ -453,7 +454,6 @@ export default function Ajustes() {
     ["Ganhos", (b.ganhos || []).length], ["Registros de patrimônio", (b.historico || []).length]];
   const modulosAtivos = FC.MODULOS.filter((m: any) => FC.modulo(m.chave)).length;
   const trocaAba = (v: string) => {
-    if (v === "layout") { router.push("/inicio/editar" as any); return; }
     FC.local.gravar("ajustes-aba", v); setAba(v);
   };
   const mudaModulo = async (m: any, ligado: boolean) => {
@@ -475,6 +475,7 @@ export default function Ajustes() {
           opcoes={[{ v: "geral", rotulo: "Geral" }, { v: "modulos", rotulo: "Módulos" }, { v: "layout", rotulo: "Layout" }, { v: "criterios", rotulo: "Critérios" }, { v: "dados", rotulo: "Dados" }]} />
       </View>
 
+      {aba === "layout" ? <EditorLayout embutido /> : null}
       {aba === "geral" ? (
         <View>
           <Secao titulo="Conta" topo={false}>
@@ -528,9 +529,11 @@ export default function Ajustes() {
             </Lista>
           </Secao>
 
+          {/* só no navegador do celular/tablet: no computador não há Tela de Início e no app nativo já é o app */}
+          {Platform.OS === "web" && FC.dispositivo.ehMobile ? (
           <Secao titulo="Dispositivo e Aplicativo">
             <Lista>
-              {FC.dispositivo.ehInstalado ? (
+              {!FC.dispositivo.podeAdicionarATela() ? (
                 <Item esquerda={<Icone nome="check" tam={20} cor={t.cores.verde} />} titulo={Platform.OS === "web" ? "Aplicativo na Tela de Início" : "Aplicativo instalado"}
                   detalhe="Executando em tela cheia como aplicativo" direita={<Pilula cor="verde" semPonto>Ativo</Pilula>} />
               ) : (
@@ -539,6 +542,7 @@ export default function Ajustes() {
               )}
             </Lista>
           </Secao>
+          ) : null}
 
           <Secao titulo="Privacidade" sub="o que o Bullz registra sobre o uso">
             <Lista>

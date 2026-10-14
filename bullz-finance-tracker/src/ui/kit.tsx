@@ -11,9 +11,9 @@
  *   Vazio, Detalhes, Tabela, Trilha, BarraAlocacao, Composicao, Legenda,
  *   Roda, Ajuda, Indicadores
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Animated, Easing, Platform, Pressable, ScrollView, Text, View,
+  ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, Text, View, useWindowDimensions,
   type StyleProp, type TextStyle, type ViewStyle, type TextProps,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -68,6 +68,9 @@ export interface TProps extends TextProps {
   style?: StyleProp<TextStyle>;
   children?: React.ReactNode;
 }
+/** marca que um filho está dentro de um <Text> (para herdar a cor) */
+export const DentroDeTexto = React.createContext(false);
+
 export function T({ v = "corpo", cor, cls, peso, tam, centro, num, style, children, ...resto }: TProps) {
   const t = useTema();
   const { estreito } = useMedidas();
@@ -93,13 +96,20 @@ export function T({ v = "corpo", cor, cls, peso, tam, centro, num, style, childr
   if (tam) { extra.fontSize = tam; extra.lineHeight = Math.round(tam * 1.35); }
   if (centro) extra.textAlign = "center";
   if (num) extra.fontVariant = ["tabular-nums"];
-  return <Text {...resto} style={[base, extra, style]}>{children}</Text>;
+  return <Text {...resto} style={[base, extra, style]}><DentroDeTexto.Provider value>{children}</DentroDeTexto.Provider></Text>;
 }
 
 /** <b> dentro de texto */
 export const B = ({ children, cor, cls, style }: { children: React.ReactNode; cor?: string; cls?: string | null; style?: StyleProp<TextStyle> }) => {
   const t = useTema();
-  return <Text style={[{ fontWeight: "600" }, cls ? { color: corClasse(t, cls) } : null, cor ? { color: cor } : null, style]}>{children}</Text>;
+  // dentro de um texto herda a cor dele (como o <b> do site); solto, usa a cor do texto
+  // principal — sem isso o RN cai no preto padrão e some no tema escuro
+  const dentro = useContext(DentroDeTexto);
+  return (
+    <Text style={[{ fontWeight: "600" }, dentro ? null : { color: t.cores.ink }, cls ? { color: corClasse(t, cls) } : null, cor ? { color: cor } : null, style]}>
+      <DentroDeTexto.Provider value>{children}</DentroDeTexto.Provider>
+    </Text>
+  );
 };
 
 // ---------------------------------------------------------------- blur de valores
@@ -635,19 +645,34 @@ export function Detalhes({ rotulo = "Ver detalhes", children, tam = 14, style, i
 /** "?" com a explicação (tooltip ao tocar) */
 export function Ajuda({ texto }: { texto: string }) {
   const t = useTema();
-  const [aberto, setAberto] = useState(false);
+  const ref = useRef<View>(null);
+  const [pos, setPos] = useState<{ x: number; y: number; w: number } | null>(null);
+  const [alt, setAlt] = useState(0);
+  // o balão abre numa camada própria (Modal), por cima de tudo: dentro do cartão ele era
+  // cortado pelo overflow do próprio cartão
+  const abre = () => { setAlt(0); ref.current?.measureInWindow((x, y, w) => setPos({ x, y, w })); };
+  const { width: larguraTela } = useWindowDimensions();
+  const LARG = 240;
+  const esq = pos ? Math.max(12, Math.min(larguraTela - LARG - 12, pos.x + pos.w / 2 - LARG / 2)) : 0;
   return (
-    <View>
-      <Pressable onPress={() => setAberto(!aberto)} hitSlop={13} accessibilityRole="button" accessibilityLabel={texto}
+    <View ref={ref} collapsable={false}>
+      <Pressable onPress={abre} hitSlop={13} accessibilityRole="button" accessibilityLabel={texto}
         style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: t.cores.campo, alignItems: "center", justifyContent: "center" }}>
         <Text style={{ fontSize: 11, fontWeight: "700", color: t.cores.ink2 }}>?</Text>
       </Pressable>
-      {aberto ? (
-        <Pressable onPress={() => setAberto(false)}
-          style={{ position: "absolute", bottom: 24, left: -110, width: 240, zIndex: 20, padding: 10, paddingHorizontal: 12, borderRadius: 12,
-            backgroundColor: t.cores.vidroForte, borderWidth: 1, borderColor: t.cores.linha, boxShadow: t.cores.sombra } as any}>
-          <T style={{ fontSize: 12, lineHeight: 17, color: t.cores.ink }}>{texto}</T>
-        </Pressable>
+      {pos ? (
+        <Modal transparent visible animationType="fade" onRequestClose={() => setPos(null)}>
+          <Pressable style={{ flex: 1 }} onPress={() => setPos(null)} accessibilityLabel="Fechar ajuda">
+            <View onLayout={(e) => setAlt(e.nativeEvent.layout.height)}
+              style={{ position: "absolute", left: esq, width: LARG, opacity: alt ? 1 : 0,
+                // acima do "?" quando cabe; senão, abaixo
+                top: alt && pos.y - alt - 8 > 8 ? pos.y - alt - 8 : pos.y + 26,
+                padding: 10, paddingHorizontal: 12, borderRadius: 12,
+                backgroundColor: t.cores.bg2, borderWidth: 1, borderColor: t.cores.linha, boxShadow: t.cores.sombraAlta } as any}>
+              <T style={{ fontSize: 12.5, lineHeight: 18, color: t.cores.ink }}>{texto}</T>
+            </View>
+          </Pressable>
+        </Modal>
       ) : null}
     </View>
   );
@@ -716,5 +741,5 @@ export function Separador() {
 /** <code>/<kbd> */
 export function Codigo({ children }: { children: React.ReactNode }) {
   const t = useTema();
-  return <Text style={{ fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "ui-monospace, SF Mono, Menlo, monospace" }), fontSize: 12.5, backgroundColor: t.cores.campo, borderRadius: 5, paddingHorizontal: 6 }}>{children}</Text>;
+  return <Text style={{ fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "ui-monospace, SF Mono, Menlo, monospace" }), color: t.cores.ink, fontSize: 12.5, backgroundColor: t.cores.campo, borderRadius: 5, paddingHorizontal: 6 }}>{children}</Text>;
 }

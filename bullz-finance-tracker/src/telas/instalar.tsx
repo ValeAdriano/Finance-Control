@@ -2,7 +2,7 @@
  * FC.mostraBannerInstalacaoSePreciso do app.js do site. Só faz sentido no
  * navegador: no app nativo FC.dispositivo.ehInstalado já é true. */
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Platform, Pressable, Text, View } from "react-native";
+import { Animated, Easing, Image, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTema } from "../tema";
 import { useMedidas } from "../ui/medidas";
@@ -122,7 +122,7 @@ export function abreGuiaInstalacao() {
 // ---------------------------------------------------------------- banner (celular, no navegador)
 let mostraBanner: (() => void) | null = null;
 export function mostraBannerInstalacaoSePreciso() {
-  if (Platform.OS !== "web" || !FC.dispositivo.ehMobile || FC.dispositivo.ehInstalado) return;
+  if (!FC.dispositivo.podeAdicionarATela()) return;
   const dispensado = FC.local.ler("pwa-banner-dispensado", 0);
   if (Date.now() - dispensado < 7 * 24 * 60 * 60 * 1000) return;
   setTimeout(() => { if (!FC.dispositivo.ehInstalado && mostraBanner) mostraBanner(); }, 3000);
@@ -143,7 +143,7 @@ export function BannerInstalar() {
   useEffect(() => {
     if (aberto) Animated.timing(a, { toValue: 1, duration: 450, easing: Easing.bezier(0.32, 0.72, 0, 1), useNativeDriver: false }).start();
   }, [aberto, a]);
-  if (!aberto || FC.dispositivo.ehInstalado) return null;
+  if (!aberto || !FC.dispositivo.podeAdicionarATela()) return null;
   const fecha = () => {
     FC.local.gravar("pwa-banner-dispensado", Date.now());
     Animated.timing(a, { toValue: 0, duration: 250, useNativeDriver: false }).start(() => setAberto(false));

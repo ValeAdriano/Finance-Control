@@ -66,7 +66,9 @@ if (Platform.OS !== "web") {
 
 const web = Platform.OS === "web";
 const ua = web && typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
-const ehIOS = Platform.OS === "ios" || /iPad|iPhone|iPod/.test(ua);
+// o iPad no Safari se apresenta como Mac: denuncia-o a tela de toque (mesma regra do app.js)
+const ehIOS = Platform.OS === "ios" || /iPad|iPhone|iPod/.test(ua)
+  || (web && typeof navigator !== "undefined" && navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1);
 const ehAndroid = Platform.OS === "android" || /Android/i.test(ua);
 const instaladoWeb = web && typeof window !== "undefined" && (
   (window.navigator as any).standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches));
@@ -82,6 +84,9 @@ if (web && typeof window !== "undefined") {
 
 FC.dispositivo = {
   ehMobile: !web || ehIOS || ehAndroid || /Mobi|Tablet/i.test(ua),
+  // "Adicionar à Tela de Início" só faz sentido no navegador de um celular/tablet que ainda
+  // não instalou: no computador não existe, e no app nativo já é o próprio app
+  podeAdicionarATela: () => web && (ehIOS || ehAndroid || /Mobi|Tablet/i.test(ua)) && !FC.dispositivo.ehInstalado,
   ehIOS,
   ehAndroid,
   // o app nativo já é "instalado": nada de banner de Tela de Início

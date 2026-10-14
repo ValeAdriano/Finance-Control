@@ -83,10 +83,9 @@ function MenuTopo({ fechar, rotaId }: { fechar: () => void; rotaId: string }) {
           if (erro) ui.aviso(erro, "erro"); else ui.aviso("Cotações atualizadas");
         })}
       {it("ajuda", "Como usar esta tela", "Explicação e dicas desta seção", () => { fechar(); FC.guiaDaTela && FC.guiaDaTela(rotaId); })}
-      {!FC.dispositivo.ehInstalado ? it("celular", "Adicionar à Tela de Início", FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad" : "Instalar no celular como app",
+      {FC.dispositivo.podeAdicionarATela() ? it("celular", "Adicionar à Tela de Início", FC.dispositivo.ehIOS ? "Instalar no iPhone / iPad" : "Instalar no celular como app",
         () => { fechar(); FC.abreGuiaInstalacao && FC.abreGuiaInstalacao(); }, { chevron: true }) : null}
       {it("bussola", "Perfil do investidor", "Seu perfil, o plano e o relatório", vai("/perfil"), { chevron: true })}
-      {it("ordenar", "Personalizar layout", "Arraste os blocos do Início e organize o menu", vai("/inicio/editar"), { chevron: true })}
       {it("ajustes", "Ajustes", "Metas, regras, segurança e módulos", vai("/ajustes"), { chevron: true })}
       {admin ? it("escudo", "Administração", null, vai("/admin"), { chevron: true }) : null}
       {it("sair", "Sair da conta", null, async () => { fechar(); await FC.sair(); }, { perigo: true })}

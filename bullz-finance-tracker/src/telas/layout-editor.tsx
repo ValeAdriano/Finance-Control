@@ -78,7 +78,9 @@ function ConteudoBloco({ render }: { render: () => React.ReactNode }) {
   return <>{render()}</>;
 }
 
-export default function EditorLayout() {
+/** embutido: a aba "Layout" dos Ajustes — sem rolagem própria (a página rola) e sem
+ * "Concluir", porque cada mudança já é salva na hora */
+export default function EditorLayout({ embutido = false }: { embutido?: boolean } = {}) {
   const t = useTema();
   const insets = useSafeAreaInsets();
   const { estreito, celular } = useMedidas();
@@ -135,16 +137,15 @@ export default function EditorLayout() {
   const outrosOrdem = arr ? ordem.filter((x) => x !== arr) : ordem;
   const pad = estreito ? { paddingTop: 14, paddingHorizontal: 12, paddingBottom: 96 + insets.bottom } : celular ? { paddingTop: 24, paddingHorizontal: 16, paddingBottom: 116 + insets.bottom } : { paddingTop: 48, paddingHorizontal: 24, paddingBottom: 96 };
 
-  return (
-    <View style={{ flex: 1 }}>
-      <ScrollView scrollEnabled={!arr} contentContainerStyle={pad} stickyHeaderIndices={[0]}>
+  const conteudo = (
+    <>
         <View style={{ maxWidth: 1180, width: "100%", alignSelf: "center" }}>
           <View accessibilityRole="toolbar" accessibilityLabel="Editar o Início"
             style={{ flexDirection: "row", alignItems: "center", gap: t.espaco.e3, flexWrap: "wrap", paddingVertical: 12, paddingHorizontal: 14, marginBottom: t.espaco.e3,
               borderRadius: t.raios.r, borderWidth: 1, borderColor: t.cores.acento, backgroundColor: t.cores.vidroForte, boxShadow: t.cores.sombra,
               ...(Platform.OS === "web" ? { backdropFilter: "blur(20px) saturate(180%)" } : {}) } as any}>
             <View style={{ flex: 1, minWidth: 200, gap: 2 }}>
-              <T style={{ fontWeight: "600" }}>Editando o Início</T>
+              <T style={{ fontWeight: "600" }}>{embutido ? "Blocos do Início e menu" : "Editando o Início"}</T>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                 <T style={{ fontSize: 13, color: t.cores.ink2 }}>Arraste pela alça</T><Icone nome="ordenar" tam={14} cor={t.cores.ink2} />
                 <T style={{ fontSize: 13, color: t.cores.ink2 }}>e use o olho para ocultar.</T>
@@ -156,7 +157,7 @@ export default function EditorLayout() {
                 if (!(await ui.confirma("Voltar a ordem das abas e dos blocos do Início ao padrão?", { botao: "Voltar ao padrão" }))) return;
                 await salva(padrao()); ui.aviso("Layout padrão restaurado");
               }}>Padrão</Botao>
-              <Botao pequeno onPress={() => { router.replace("/inicio" as any); ui.aviso("Layout salvo"); }}>Concluir</Botao>
+              {embutido ? null : <Botao pequeno onPress={() => { router.replace("/inicio" as any); ui.aviso("Layout salvo"); }}>Concluir</Botao>}
             </View>
           </View>
         </View>
@@ -175,7 +176,13 @@ export default function EditorLayout() {
           })}
           {arr && alvo === outrosOrdem.length ? <View style={{ height: 3, borderRadius: 2, backgroundColor: t.cores.acento }} /> : null}
         </View>
-      </ScrollView>
+    </>
+  );
+  return (
+    <View style={embutido ? undefined : { flex: 1 }}>
+      {embutido ? <View>{conteudo}</View> : (
+        <ScrollView scrollEnabled={!arr} contentContainerStyle={pad} stickyHeaderIndices={[0]}>{conteudo}</ScrollView>
+      )}
     </View>
   );
 }
