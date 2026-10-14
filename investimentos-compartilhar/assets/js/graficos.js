@@ -345,4 +345,6 @@
   }
 
   FC.graficos = { linhas, colunas, composicao, regua, sparkline, faixa52, barraAlocacao, ativar };
+  // o app React Native desenha os mesmos SVGs: lê a função de desenho de cada marcador
+  FC.graficos.registro = registro;
 })();
