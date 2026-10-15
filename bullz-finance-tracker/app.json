@@ -14,8 +14,9 @@
     "android": {
       "package": "br.com.agvs.bullz",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/img/icone-512.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/img/app/android-frente.png",
+        "backgroundImage": "./assets/img/app/android-fundo.png",
+        "backgroundColor": "#ffffff"
       }
     },
     "web": {
@@ -38,7 +39,7 @@
     "experiments": {
       "typedRoutes": true
     },
-    "icon": "./assets/img/icone-512.png",
+    "icon": "./assets/img/app/icone-app-1024.png",
     "splash": {
       "image": "./assets/img/icone-512.png",
       "resizeMode": "contain",

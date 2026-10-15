@@ -113,10 +113,24 @@ export const B = ({ children, cor, cls, style }: { children: React.ReactNode; co
 };
 
 // ---------------------------------------------------------------- blur de valores
-/** estilo que borra um texto (modo privado / carregando) em cada plataforma */
+/** a cor com transparência própria (aceita #rgb, #rrggbb, rgb() e rgba()) */
+function comAlfa(cor: string, a: number): string {
+  const h = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(cor);
+  if (h) {
+    const x = h[1].length === 3 ? h[1].split("").map((c) => c + c).join("") : h[1];
+    return `rgba(${parseInt(x.slice(0, 2), 16)},${parseInt(x.slice(2, 4), 16)},${parseInt(x.slice(4, 6), 16)},${a})`;
+  }
+  const r = /^rgba?\(([^,]+),([^,]+),([^,)]+)/i.exec(cor.replace(/\s/g, ""));
+  return r ? `rgba(${r[1]},${r[2]},${r[3]},${a})` : `rgba(128,128,128,${a})`;
+}
+
+/** estilo que borra um texto (modo privado / carregando) em cada plataforma.
+ * Nativo: o texto fica transparente e só a sombra (desfocada) aparece. A cor
+ * da sombra precisa ter alfa próprio (< 1): no Android, sombra de cor opaca
+ * herda o alfa do texto — zero — e o valor sumia em vez de borrar. */
 function estiloBorrado(cor: string, raio: number): TextStyle {
   if (Platform.OS === "web") return { filter: `blur(${raio}px)`, userSelect: "none" } as any;
-  return { color: "transparent", textShadowColor: cor, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: raio + 3 };
+  return { color: "transparent", textShadowColor: comAlfa(cor, 0.85), textShadowOffset: { width: 0, height: 0 }, textShadowRadius: raio + 3 };
 }
 
 // computador com mouse: o hover revela; no toque não existe hover

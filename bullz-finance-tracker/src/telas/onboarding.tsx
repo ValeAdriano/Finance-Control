@@ -184,17 +184,56 @@ function CenaProjecoes({ ativo }: { ativo: boolean }) {
     </CartaoCena>
   );
 }
-function CenaSeguranca({ ativo }: { ativo: boolean }) {
+// privacidade: quem enxerga o quê
+const ITENS_PRIVACIDADE: Array<[NomeIcone, string]> = [
+  ["cadeado", "Cada conta só enxerga os próprios dados — o banco recusa o resto"],
+  ["celular", "Neste aparelho, a sessão e o cache ficam cifrados"],
+  ["olho", "Modo privado borra os valores; toque num deles para ver por 5 s"],
+  ["exportar", "Backup e exclusão da conta quando quiser, em Ajustes"],
+];
+// acesso: quem consegue entrar
+const ITENS_ACESSO: Array<[NomeIcone, string]> = [
+  ["check", "Verificação em duas etapas, com autenticador reserva"],
+  ["escudo", "Senha forte, checada contra vazamentos, e limite de tentativas"],
+  ["cadeado", "Bloqueio por Face ID, digital ou PIN ao abrir o app"],
+  ["info", "Esqueceu a senha? Um código chega no seu e-mail"],
+];
+function CenaEscudo({ ativo, itens, icone }: { ativo: boolean; itens: Array<[NomeIcone, string]>; icone: NomeIcone }) {
   const t = useTema();
   const a = useEntrada(ativo, 0, 600);
-  const itens: Array<[NomeIcone, string]> = [["cadeado", "Só você vê seus dados"], ["check", "Verificação em duas etapas opcional"], ["olho", "Modo privado borra os valores"]];
   return (
-    <View style={{ alignItems: "center", gap: 16 }}>
-      <Animated.View style={{ width: 92, height: 92, borderRadius: 46, alignItems: "center", justifyContent: "center", backgroundColor: t.cores.verdeSuave, opacity: a, transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }}>
-        <Icone nome="escudo" tam={44} cor={t.cores.verde} />
+    <View style={{ alignItems: "center", gap: 14, width: "100%", maxWidth: 380 }}>
+      <Animated.View style={{ width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", backgroundColor: t.cores.verdeSuave, opacity: a, transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }}>
+        <Icone nome={icone} tam={34} cor={t.cores.verde} />
       </Animated.View>
-      <View style={{ gap: 8 }}>{itens.map(([ic, tx], i) => <ItemSeg key={i} i={i} ativo={ativo} ic={ic} tx={tx} />)}</View>
+      <View style={{ gap: 8, alignSelf: "stretch" }}>{itens.map(([ic, tx], i) => <ItemSeg key={i} i={i} ativo={ativo} ic={ic} tx={tx} />)}</View>
     </View>
+  );
+}
+const CenaSeguranca = ({ ativo }: { ativo: boolean }) => <CenaEscudo ativo={ativo} itens={ITENS_PRIVACIDADE} icone="escudo" />;
+const CenaAcesso = ({ ativo }: { ativo: boolean }) => <CenaEscudo ativo={ativo} itens={ITENS_ACESSO} icone="cadeado" />;
+
+// o que dá para ajustar ao seu jeito
+const NOVIDADES: Array<[NomeIcone, string]> = [
+  ["bussola", "Perfil do investidor"], ["recibo", "Imposto de renda"], ["play", "Retrospectiva do ano"],
+  ["ordenar", "Layout do Início"], ["ajustes", "Módulos ligados"], ["olho", "Modo privado"],
+];
+function CenaSeuJeito({ ativo }: { ativo: boolean }) {
+  const t = useTema();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", maxWidth: 360 }}>
+      {NOVIDADES.map(([ic, tx], i) => <Ladrilho key={tx} i={i} ativo={ativo} ic={ic} tx={tx} cor={t.cores.acento} />)}
+    </View>
+  );
+}
+function Ladrilho({ i, ativo, ic, tx, cor }: { i: number; ativo: boolean; ic: NomeIcone; tx: string; cor: string }) {
+  const t = useTema();
+  const a = useEntrada(ativo, 150 + i * 80);
+  return (
+    <Animated.View style={[{ width: 108, alignItems: "center", gap: 8, backgroundColor: t.cores.bg2, borderWidth: 1, borderColor: t.cores.linha, borderRadius: t.raios.r, paddingVertical: 14, paddingHorizontal: 8 }, sobe(a)]}>
+      <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: t.cores.acentoSuave }}><Icone nome={ic} tam={18} cor={cor} /></View>
+      <T centro style={{ fontSize: 12.5, lineHeight: 16, fontWeight: "500" }}>{tx}</T>
+    </Animated.View>
   );
 }
 function ItemSeg({ i, ativo, ic, tx }: any) {
@@ -202,13 +241,13 @@ function ItemSeg({ i, ativo, ic, tx }: any) {
   const a = useEntrada(ativo, 300 + i * 100);
   return (
     <Animated.View style={[{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: t.cores.bg2, borderWidth: 1, borderColor: t.cores.linha, borderRadius: t.raios.sm, paddingVertical: 10, paddingHorizontal: 14 }, sobe(a)]}>
-      <Icone nome={ic} tam={16} cor={t.cores.acento} /><T style={{ fontSize: 14 }}>{tx}</T>
+      <Icone nome={ic} tam={16} cor={t.cores.acento} /><T style={{ fontSize: 13.5, lineHeight: 19, flexShrink: 1 }}>{tx}</T>
     </Animated.View>
   );
 }
 const CENAS: Record<string, (p: { ativo: boolean }) => React.ReactElement> = {
   boasVindas: CenaBoasVindas, patrimonio: CenaPatrimonio, investimentos: CenaInvestimentos, aportes: CenaAportes,
-  renda: CenaRenda, projecoes: CenaProjecoes, seguranca: CenaSeguranca,
+  renda: CenaRenda, projecoes: CenaProjecoes, seuJeito: CenaSeuJeito, seguranca: CenaSeguranca, acesso: CenaAcesso,
 };
 
 const COMECOS: Array<[string, NomeIcone, string, string]> = [
@@ -225,7 +264,9 @@ function passos(nome: string) {
     { cena: "aportes", titulo: "Aportes em dois toques", texto: "Registre cada compra e repita os aportes de sempre informando só quantidade e valor. No Agro, controle compra, venda, custos e o rebanho atual." },
     { cena: "renda", titulo: "Salário, plano e dividendos", texto: "Cadastre seus ganhos, defina quanto investir e para onde. O guia do mês mostra o que falta aportar, e Dividendos mostra quanto cada ativo paga e quando cai." },
     { cena: "projecoes", titulo: "Onde isso vai dar", texto: "Projeções usa seu plano, reinveste os proventos e mostra três cenários em reais de hoje. Em Simular, teste mudanças antes de fazer." },
-    { cena: "seguranca", titulo: "Seus dados são só seus", texto: "Cada conta enxerga apenas os próprios dados. Em Ajustes você liga a verificação em duas etapas, baixa um backup e troca o tema." },
+    { cena: "seuJeito", titulo: "Do seu jeito", texto: "Responda o perfil do investidor para receber um plano, acompanhe o resumo para o imposto de renda e reveja o ano na retrospectiva. Em Ajustes, escolha os módulos e a ordem dos blocos do Início." },
+    { cena: "seguranca", titulo: "Seus dados são só seus", texto: "Ninguém além de você lê sua carteira. E quando estiver em público, o modo privado esconde os valores com um toque." },
+    { cena: "acesso", titulo: "Sua conta protegida", texto: "Ligue a verificação em duas etapas e o bloqueio por biometria em Ajustes → Segurança. São dois minutos que fecham a porta para quem descobrir sua senha." },
     { final: true, titulo: "Vamos começar?", texto: "Ajuste o básico. Dá para mudar tudo depois em Ajustes." },
   ] as Array<{ cena?: string; final?: boolean; titulo: string; texto: string }>;
 }
@@ -358,15 +399,16 @@ function Apresentacao({ api }: { api: ApiFolha }) {
             {p.final ? final : null}
           </Animated.View>
         </ScrollView>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, paddingTop: 16 }}>
-          <View style={{ opacity: i ? 1 : 0 }} pointerEvents={i ? "auto" : "none"}><Botao variante="sec" style={{ minWidth: estreito ? 96 : 108 }} onPress={() => mostra(i - 1)}>Voltar</Botao></View>
-          <View style={{ flexDirection: "row", gap: 6 }}>
+        {/* no celular, 10 passos + dois botões mal cabem em 343 px: pontinhos e vãos menores */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: estreito ? 8 : 16, paddingTop: 16 }}>
+          <View style={{ opacity: i ? 1 : 0 }} pointerEvents={i ? "auto" : "none"}><Botao variante="sec" style={{ minWidth: estreito ? 88 : 108 }} onPress={() => mostra(i - 1)}>Voltar</Botao></View>
+          <View style={{ flexDirection: "row", gap: estreito ? 4 : 6, flexShrink: 1 }}>
             {lista.map((_, k) => (
               <Pressable key={k} onPress={() => mostra(k)} accessibilityLabel={`Passo ${k + 1}`} hitSlop={6}
-                style={{ width: k === i ? 22 : 7, height: 7, borderRadius: 4, backgroundColor: k === i ? t.cores.acento : t.cores.linha2 }} />
+                style={{ width: k === i ? (estreito ? 16 : 22) : estreito ? 6 : 7, height: estreito ? 6 : 7, borderRadius: 4, backgroundColor: k === i ? t.cores.acento : t.cores.linha2 }} />
             ))}
           </View>
-          <Botao style={{ minWidth: estreito ? 96 : 108 }} onPress={avancar}>{p.final ? "Começar" : i === 0 ? "Vamos lá" : "Próximo"}</Botao>
+          <Botao style={{ minWidth: estreito ? 88 : 108 }} onPress={avancar}>{p.final ? "Começar" : i === 0 ? "Vamos lá" : "Próximo"}</Botao>
         </View>
       </View>
     </View>
