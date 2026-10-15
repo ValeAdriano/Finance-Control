@@ -122,6 +122,7 @@ function opcoesAlvo(tipo: string, sel: string | null) {
 
 function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: number; ganhos: any[] }) {
   const t = useTema();
+  const { estreito } = useMedidas();
   const [modo, setModo] = useState(plano.modo === "valor" ? "valor" : "percentual");
   const [pct, setPct] = useState(String(plano.percentual ?? ""));
   const [val, setVal] = useState(String(plano.valor ?? "").replace(".", ","));
@@ -153,18 +154,43 @@ function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: numb
       </LinhaCampos>
       <T style={{ fontSize: 13, fontWeight: "500", color: t.cores.ink2, marginTop: t.espaco.e4, marginBottom: t.espaco.e3 }}>Para onde vai o dinheiro</T>
       <Lista style={{ boxShadow: "none" } as any}>
-        {dest.map((d, i) => (
-          <View key={i} style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, alignItems: "center", paddingVertical: 12, paddingHorizontal: 16 }}>
-            <View style={{ width: 150 }}><Seletor compacto valor={d.tipo} aoMudar={(v) => muda(i, "tipo", v)} rotuloA11y="Tipo de destino"
-              opcoes={[{ v: "pilar", rotulo: "Pilar" }, { v: "ativo", rotulo: "Ativo" }, { v: "renda_fixa", rotulo: "Renda fixa" }]} /></View>
-            <View style={{ flex: 1, minWidth: 140 }}><Seletor compacto valor={d.alvo ?? ""} aoMudar={(v) => muda(i, "alvo", v)} rotuloA11y="Destino" opcoes={opcoesAlvo(d.tipo, d.alvo)} /></View>
+        {dest.map((d, i) => {
+          const tipo = <Seletor compacto valor={d.tipo} aoMudar={(v) => muda(i, "tipo", v)} rotuloA11y="Tipo de destino"
+            opcoes={[{ v: "pilar", rotulo: "Pilar" }, { v: "ativo", rotulo: "Ativo" }, { v: "renda_fixa", rotulo: "Renda fixa" }]} />;
+          const alvo = <Seletor compacto valor={d.alvo ?? ""} aoMudar={(v) => muda(i, "alvo", v)} rotuloA11y="Destino" opcoes={opcoesAlvo(d.tipo, d.alvo)} />;
+          const pctCampo = (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Entrada compacto valor={String(d.pct)} aoMudar={(v) => muda(i, "pct", v)} decimal style={{ width: 80, textAlign: "right" }} accessibilityLabel="Percentual" />
+              <Entrada compacto valor={String(d.pct)} aoMudar={(v) => muda(i, "pct", v)} decimal style={{ width: 72, textAlign: "right" }} accessibilityLabel="Percentual" />
               <T style={{ color: t.cores.ink2 }}>%</T>
             </View>
-            <BotaoIcone nome="lixo" tam={16} rotulo="Remover destino" onPress={() => setDest(dest.filter((_, k) => k !== i))} />
-          </View>
-        ))}
+          );
+          const lixo = <BotaoIcone nome="lixo" tam={16} rotulo="Remover destino" onPress={() => setDest(dest.filter((_, k) => k !== i))} />;
+          // no celular: grade de 2 linhas com a mesma coluna da direita, para os dois
+          // seletores terem a mesma largura e a lixeira não passar da borda
+          if (estreito) {
+            const DIR = 96;
+            return (
+              <View key={i} style={{ gap: 8, paddingVertical: 12, paddingHorizontal: 14 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>{tipo}</View>
+                  <View style={{ width: DIR, alignItems: "flex-end" }}>{lixo}</View>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>{alvo}</View>
+                  <View style={{ width: DIR, alignItems: "flex-end" }}>{pctCampo}</View>
+                </View>
+              </View>
+            );
+          }
+          return (
+            <View key={i} style={{ flexDirection: "row", gap: 10, alignItems: "center", paddingVertical: 12, paddingHorizontal: 16 }}>
+              <View style={{ width: 150 }}>{tipo}</View>
+              <View style={{ flex: 1, minWidth: 140 }}>{alvo}</View>
+              {pctCampo}
+              {lixo}
+            </View>
+          );
+        })}
       </Lista>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: t.espaco.e3, marginTop: t.espaco.e3 }}>
         <Botao variante="texto" pequeno icone="aportes" onPress={() => {

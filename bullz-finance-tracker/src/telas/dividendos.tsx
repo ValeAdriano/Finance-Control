@@ -23,6 +23,12 @@ const nomeMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1]} de ${m.slice
 
 function LinhaPagamento({ p, comAcao, aoLancar }: { p: any; comAcao: boolean; aoLancar?: (p: any) => Promise<void> }) {
   const t = useTema();
+  const { estreito } = useMedidas();
+  // "lançado" (pílula) e "Lançar" (botão) têm larguras diferentes: na coluna da
+  // direita eles empurravam o valor e cada linha ficava num alinhamento. No
+  // celular a ação vai para baixo do valor; no computador, numa coluna fixa.
+  const acao = comAcao ? (p.lancado ? <Pilula cor="verde">lançado</Pilula>
+    : <Botao variante="texto" pequeno rotuloA11y="Registrar em Aportes como provento" onPress={() => aoLancar && aoLancar(p)}>Lançar</Botao>) : null;
   const quando = p.pagamento ? FC.datas.br(p.pagamento) : "a definir";
   const dia = p.pagamento || p.data_com;
   return (
@@ -40,9 +46,9 @@ function LinhaPagamento({ p, comAcao, aoLancar }: { p: any; comAcao: boolean; ao
       valores={<View style={{ alignItems: "flex-end" }}>
         <Rs cls="pos" style={{ fontWeight: "600", fontSize: 15 }}>{FC.fmt.brlTexto(p.valor)}</Rs>
         <T style={{ fontSize: 12.5, color: t.cores.ink2 }}>{p.status === "pago" ? "recebido" : p.status}</T>
+        {estreito && acao ? <View style={{ marginTop: 6, alignItems: "flex-end" }}>{acao}</View> : null}
       </View>}
-      direita={comAcao ? (p.lancado ? <Pilula cor="verde">lançado</Pilula>
-        : <Botao variante="texto" pequeno rotuloA11y="Registrar em Aportes como provento" onPress={() => aoLancar && aoLancar(p)}>Lançar</Botao>) : null} />
+      direita={!estreito && acao ? <View style={{ width: 96, alignItems: "flex-end" }}>{acao}</View> : null} />
   );
 }
 

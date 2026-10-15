@@ -241,10 +241,12 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio: ch
 }) {
   const t = useTema();
   const { estreito } = useMedidas();
-  // no celular, até 5 opções dividem a largura (e a fonte encolhe se precisar)
-  // em vez de passar da borda da tela; com mais, o controle rola na horizontal
-  const dividido = estreito && opcoes.length <= 5;
-  const cheio = cheioPedido || dividido;
+  // no celular, até 5 opções cabem na largura disponível: cada uma encolhe (e a
+  // fonte também) só se faltar espaço, em vez de passar da borda da tela. Não é
+  // `flex: 1` — dentro de uma linha sem largura (ex.: à direita de um Item) isso
+  // encolhia o controle até sumir. Com mais opções, o controle rola.
+  const dividido = estreito && opcoes.length <= 5 && !cheioPedido;
+  const cheio = !!cheioPedido;
   const rolagem = useRef<ScrollView>(null);
   const pos = useRef<Record<string, { x: number; w: number }>>({}).current;
   const left = useRef(new Animated.Value(0)).current;
@@ -267,7 +269,7 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio: ch
   }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
   const controle = (
     <View accessibilityRole="tablist" accessibilityLabel={rotuloA11y}
-      style={{ flexDirection: "row", alignSelf: cheio ? "stretch" : "flex-start", backgroundColor: t.cores.campo, borderRadius: 10, padding: 2 }}>
+      style={{ flexDirection: "row", alignSelf: cheio ? "stretch" : "flex-start", maxWidth: "100%", backgroundColor: t.cores.campo, borderRadius: 10, padding: 2 }}>
       {pronto ? (
         <Animated.View style={{ position: "absolute", top: 2, bottom: 2, left, width, borderRadius: 8, backgroundColor: t.deslizante,
           boxShadow: "0 3px 8px rgba(0,0,0,.12), 0 3px 1px rgba(0,0,0,.04)" } as any} />
@@ -275,14 +277,15 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio: ch
       {opcoes.map((o) => (
         <Pressable key={o.v} onPress={() => aoMudar(o.v)} accessibilityRole="tab" accessibilityState={{ selected: o.v === valor }}
           onLayout={(e) => { pos[o.v] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; if (o.v === valor) move(false); }}
-          style={[{ paddingVertical: 6, paddingHorizontal: dividido ? 4 : 16, borderRadius: 8, minHeight: 32, justifyContent: "center", alignItems: "center" }, cheio ? { flex: 1, minWidth: 0 } : null]}>
+          style={[{ paddingVertical: 6, paddingHorizontal: dividido ? 10 : 16, borderRadius: 8, minHeight: 32, justifyContent: "center", alignItems: "center" },
+            cheio ? { flex: 1, minWidth: 0 } : dividido ? { flexShrink: 1, minWidth: 0 } : null]}>
           <Text style={{ fontSize: dividido ? 13 : 13.5, color: t.cores.ink, fontWeight: o.v === valor ? "600" : "400" }} numberOfLines={1}
             adjustsFontSizeToFit={dividido} minimumFontScale={0.75}>{o.rotulo}</Text>
         </Pressable>
       ))}
     </View>
   );
-  if (cheio) return controle;
+  if (cheio || dividido) return controle;
   // largo demais para a tela: rola na horizontal em vez de quebrar
   return (
     <ScrollView ref={rolagem} horizontal showsHorizontalScrollIndicator={Platform.OS !== "web"}

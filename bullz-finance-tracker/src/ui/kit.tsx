@@ -99,13 +99,21 @@ export function T({ v = "corpo", cor, cls, peso, tam, centro, num, style, childr
   return <Text {...resto} style={semIndefinidos([base, extra, style])}><DentroDeTexto.Provider value>{children}</DentroDeTexto.Provider></Text>;
 }
 
-/** Junta os estilos e tira as chaves `undefined`. Na web um `color: undefined`
- * é ignorado; no nativo ele APAGA a cor definida antes e o texto cai no cinza
- * padrão do Android — era o "texto da cor errada" das tabelas e listas. */
+/** Junta os estilos ignorando as chaves `undefined` de cada camada. Na web um
+ * `color: undefined` é ignorado; no nativo o flatten copia o `undefined` por
+ * cima da cor definida antes e o texto fica sem cor (preto no Android) — era o
+ * "texto da cor errada" das tabelas e do chip "Hoje". Tem de pular camada a
+ * camada: apagar a chave depois de juntar perderia também a cor de baixo. */
 function semIndefinidos(st: StyleProp<TextStyle>): TextStyle {
-  const f: any = { ...(StyleSheet.flatten(st) || {}) };
-  for (const k of Object.keys(f)) if (f[k] === undefined) delete f[k];
-  return f;
+  const out: any = {};
+  const junta = (s: any) => {
+    if (!s) return;
+    if (Array.isArray(s)) { s.forEach(junta); return; }
+    const o: any = StyleSheet.flatten(s) || {};
+    for (const k in o) if (o[k] !== undefined) out[k] = o[k];
+  };
+  junta(st);
+  return out;
 }
 
 /** <b> dentro de texto */
@@ -521,7 +529,7 @@ export function Item({ esquerda, titulo, detalhe, valores, direita, chevron, onP
   const miolo = (
     <>
       {esquerda}
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View style={{ flex: 1, minWidth: 72 }}>
         {titulo != null ? (typeof titulo === "string"
           ? <T style={{ fontWeight: "600", fontSize: 15, letterSpacing: -0.22 }} numberOfLines={1}>{titulo}</T>
           : titulo) : null}
@@ -530,7 +538,9 @@ export function Item({ esquerda, titulo, detalhe, valores, direita, chevron, onP
           : detalhe) : null}
         {children}
       </View>
-      {valores ? <View style={{ alignItems: "flex-end" }}>{valores}</View> : null}
+      {/* valores no máximo meia linha: um texto longo à direita espremia o título
+          até a largura zero e a linha virava uma coluna alta de letras */}
+      {valores ? <View style={{ alignItems: "flex-end", flexShrink: 1, maxWidth: "50%" }}>{valores}</View> : null}
       {direita}
       {chevron ? <Icone nome="chevron" tam={18} cor={t.cores.ink3} /> : null}
     </>
@@ -776,10 +786,18 @@ export function Tabela({ cabecas, linhas, minimo = 560, destaque, onLinha }: {
     );
   };
   const total = cabecas.reduce((s, _c, k) => s + larg(k), 0);
+  // largura em número (medida), não "100%": no Android o minWidth percentual do
+  // conteúdo de um ScrollView horizontal deslocava a tabela e a 1ª coluna sumia
+  const [vista, setVista] = useState(0);
+  const rolagem = useRef<ScrollView>(null);
+  const posicionou = useRef(false);
+  const largura = Math.max(minimo, total, vista);
   return (
     // no celular a tabela é mais larga que a tela: a barra de rolagem avisa que há mais colunas
-    <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== "web"} contentContainerStyle={{ minWidth: "100%" }}>
-      <View style={{ minWidth: Math.max(minimo, total), flexGrow: 1 }}>
+    <ScrollView ref={rolagem} horizontal showsHorizontalScrollIndicator={Platform.OS !== "web"} contentOffset={{ x: 0, y: 0 }}
+      onLayout={(e) => setVista(Math.round(e.nativeEvent.layout.width))}
+      onContentSizeChange={() => { if (!posicionou.current) { posicionou.current = true; rolagem.current?.scrollTo({ x: 0, animated: false }); } }}>
+      <View style={{ width: largura }}>
         <View style={{ flexDirection: "row", backgroundColor: t.cores.bg3, borderBottomWidth: 1, borderBottomColor: t.cores.linha }}>
           {cabecas.map((c, k) => {
             const rotulo = (
