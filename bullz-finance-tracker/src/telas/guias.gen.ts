@@ -27,15 +27,15 @@ export const GUIAS: Record<string, { resumo: string; partes: [string, string, st
       dicas: ["Em Ajustes → Objetivos, informe o custo de vida e a renda que deseja: o painel passa a medir a reserva de emergência e o caminho para viver de renda.", "Ao editar um título de renda fixa, informe o banco, se é isento de IR e se é a sua reserva — os avisos do FGC e da reserva usam isso.", "Toque no olho do topo para borrar os valores em público."],
     },
     ativos: {
-      resumo: "Tudo o que você tem ou acompanha na bolsa e em cripto, avaliado pelos seus critérios, e a renda fixa contra o CDI.",
+      resumo: "Duas abas: Ativos, para pesquisar o mercado por tipo, e Minha lista, com o que você tem e acompanha.",
       partes: [
-        ["ativos", "Minha lista", "Seus ativos com quantidade, preço médio, valor atual e o veredito: dentro, perto ou fora dos seus critérios. Use o botão “+ Ativo” para cadastrar um novo."],
-        ["info", "Detalhe do ativo", "Toque em um ativo para ver indicadores, evolução da posição e como a nota é formada nas quatro lentes. FIIs ganham um raio-x da CVM e uma análise própria do tipo: tijolo (vacância física e financeira, concentração em imóveis), papel (concentração em CRIs), fundo de fundos e híbrido."],
-        ["moeda", "Pagadoras de dividendos", "Ranking de quem paga: frequência, meses em que paga, quanto do preço devolve por ano e há quantos anos paga sem falhar."],
-        ["renda", "Renda fixa", "Seus títulos com taxa, vencimento e rendimento real (descontada a inflação). “+ Título” cadastra um novo."],
-        ["carteira", "Seu dinheiro investido", "Quanto saiu do seu bolso, quanto vale e o ganho, com um percentual só: ao ano (com cada aporte na sua data) ou, antes de 90 dias, no período. Retorno no período, TIR e cada classe ficam em “Ver detalhes”."],
+        ["ativos", "Ativos", "Pesquise ações e FIIs (todo o Fundamentus), o Tesouro Direto e ETFs, ações dos EUA e cripto. Cada tipo tem os seus filtros e a sua análise: Graham e múltiplos nas ações, P/VP, vacância e segmento nos FIIs, taxa contra o CDI e o IPCA na renda fixa."],
+        ["info", "Detalhe do ativo", "Preço com a variação, quanto custa comprar, gráfico de 1 mês a 5 anos, os indicadores pelas suas regras e os dividendos: quanto pagou em cada mês, ano a ano. FIIs ganham o raio-x da CVM."],
+        ["moeda", "Pagadoras de dividendos", "Em Ativos › Ações ou FIIs, o ranking de quem paga: frequência, meses em que paga, quanto do preço devolve por ano e há quantos anos paga sem falhar."],
+        ["simular", "Comparar", "Escolha 2 ou 3 ativos do mesmo tipo e veja os indicadores lado a lado, com o melhor de cada linha marcado."],
+        ["carteira", "Minha lista", "Seu dinheiro investido, a renda por mês e “Meus ativos” por tipo (ações e ETFs, FIIs, renda fixa e cripto), com subtotal, peso na carteira e quanto cada um rendeu em 12 meses. Abaixo, o que você acompanha."],
       ],
-      dicas: ["O campo “Analisar qualquer código” avalia um ticker sem cadastrar; se gostar, toque em Adicionar.", "Cripto usa a cotação em reais do CoinGecko; ações e FIIs, a da B3."],
+      dicas: ["Achou um ativo em Ativos? Toque em Acompanhar ou Adicionar à carteira para ele entrar na Minha lista.", "Cripto usa a cotação em reais do CoinGecko; ações e FIIs, a da B3; o Tesouro, as taxas do Tesouro Transparente."],
     },
     agro: {
       resumo: "Seu rebanho tratado como investimento: o que entrou, o que saiu, quanto custou e quanto vale.",
@@ -66,7 +66,7 @@ export const GUIAS: Record<string, { resumo: string; partes: [string, string, st
         ["info", "Próximos pagamentos", "Data com, data de pagamento e o valor que cabe a você pela quantidade que tinha na data com."],
         ["carteira", "Por ativo", "Quanto cada ativo paga por ano, o yield sobre o preço atual e a frequência."],
       ],
-      dicas: ["Os valores vêm do Fundamentus e são atualizados a cada 12 horas.", "Para comparar pagadoras que você ainda não tem, use Investimentos → Pagadoras de dividendos."],
+      dicas: ["Os valores vêm do Fundamentus e são atualizados a cada 12 horas.", "Para comparar pagadoras que você ainda não tem, use Investimentos › Ativos › Pagadoras de dividendos."],
     },
     admin: {
       resumo: "Como o sistema está sendo usado de verdade, sem saber quem é quem, e o material de divulgação.",

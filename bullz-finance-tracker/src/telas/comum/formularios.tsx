@@ -203,7 +203,7 @@ function FormRF({ item, novo, api }: { item: any; novo: boolean; api: ApiFolha }
 FormRF.salvar = new Map<number, () => Promise<void>>();
 
 export function formRendaFixa(item?: any) {
-  const novo = !item;
+  const novo = !item || !!item._novo;
   const it = item || { tipo: "cdi", pilar: "caixa" };
   ui.folha({
     titulo: novo ? "Novo título de renda fixa" : "Editar título",

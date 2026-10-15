@@ -10,6 +10,9 @@ import { ui } from "../../ui/folha";
 import { BlocoRentabAtivo } from "./rentab";
 import { acharAtivo } from "./dados";
 import { formAtivo } from "./formularios";
+import { BlocoPreco, GraficoPreco } from "./preco";
+import { BlocoProventos } from "./pagadoras";
+import { abreComparar } from "./comparar";
 import FC from "../../nucleo";
 
 const ok = (v: any) => FC.ok(v);
@@ -147,7 +150,6 @@ export function DetalheAtivo({ a }: { a: any }) {
   const t = useTema();
   if (a.erro) return <Mensagem tipo="alerta" icone="alerta">{a.erro}</Mensagem>;
   const pos = a.posicao;
-  const faixa = FC.graficos.faixa52(a.preco, a.min_52s, a.max_52s);
   return (
     <View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 20, marginBottom: 20, alignItems: "center" }}>
@@ -159,23 +161,21 @@ export function DetalheAtivo({ a }: { a: any }) {
             : a.classe === "cripto" ? <T v="p" style={{ marginTop: t.espaco.e2 }}>Avaliada pelo preço contra a própria história</T> : null}
         </View>
       </View>
-      <Kpis style={{ marginBottom: t.espaco.e4 }}>
-        <Kpi pequeno rotulo="Preço" valor={FC.fmt.preco(a.preco)}
-          peq={<>{ok(a.variacao_dia) ? <><T cls={a.variacao_dia >= 0 ? "pos" : "neg"} style={{ fontSize: 12.5 }}>{FC.fmt.delta(a.variacao_dia, 2)}% {a.classe === "cripto" ? "em 24 h" : "hoje"}</T> · </> : null}{a.fonte_preco || "fechamento"}{a.preco_quando ? " · " + FC.datas.ha(a.preco_quando) : ""}</>} />
-        {faixa ? <Kpi pequeno rotulo="Faixa de 52 semanas" valor={<Grafico marcador={faixa} />} /> : null}
-        {pos ? (
-          <>
-            <Kpi pequeno rotulo="Posição" valor={FC.fmt.brlTexto(pos.atual)} dinheiro peq={`${FC.fmt.qtd(pos.quantidade)} ${FC.unidade(a, pos.quantidade)}`} />
-            {ok(pos.preco_medio) ? <Kpi pequeno rotulo="Preço médio" valor={FC.fmt.preco(pos.preco_medio)} /> : null}
-            {ok(pos.variacao) ? <Kpi pequeno rotulo="Resultado" valor={`${FC.fmt.delta(pos.variacao)}%`} cls={pos.resultado >= 0 ? "pos" : "neg"}
-              peq={<Rs style={{ fontSize: 12.5, color: t.cores.ink2 }}>{FC.fmt.brlTexto(pos.resultado)}</Rs>} /> : null}
-          </>
-        ) : null}
-      </Kpis>
+      <BlocoPreco a={a} />
+      {pos ? (
+        <Kpis style={{ marginBottom: t.espaco.e4 }}>
+          <Kpi pequeno rotulo="Sua posição" valor={FC.fmt.brlTexto(pos.atual)} dinheiro peq={`${FC.fmt.qtd(pos.quantidade)} ${FC.unidade(a, pos.quantidade)}`} />
+          {ok(pos.preco_medio) ? <Kpi pequeno rotulo="Preço médio" valor={FC.fmt.preco(pos.preco_medio)} /> : null}
+          {ok(pos.variacao) ? <Kpi pequeno rotulo="Resultado" valor={`${FC.fmt.delta(pos.variacao)}%`} cls={pos.resultado >= 0 ? "pos" : "neg"}
+            peq={<Rs style={{ fontSize: 12.5, color: t.cores.ink2 }}>{FC.fmt.brlTexto(pos.resultado)}</Rs>} /> : null}
+        </Kpis>
+      ) : null}
+      <GraficoPreco a={a} />
       <BlocoGraham g={a.graham} preco={a.preco} />
       <BlocoFii a={a} />
       <BlocoRentabAtivo ticker={a.ticker} />
       <EvolucaoPosicao a={a} />
+      <BlocoProventos a={a} />
       {(a.avisos || []).map((av: string, i: number) => <Mensagem key={i} tipo="alerta" icone="info" style={{ marginBottom: t.espaco.e3 }}>{av}</Mensagem>)}
       <T style={{ fontSize: 17, fontWeight: "600", marginTop: 20, marginBottom: 4 }}>Indicadores</T>
       <T v="p">Valor de hoje frente a cada referência. Na régua, o melhor fica sempre à direita.</T>
@@ -243,6 +243,7 @@ export function abreAtivo(ticker: string) {
     corpo: () => <DetalheAtivo a={acharAtivo(ticker) || a} />,
     rodape: (api) => (
       <>
+        <Botao variante="sec" onPress={() => { api.fechar(); setTimeout(() => abreComparar([a.ticker], a.classe), 240); }}>Comparar</Botao>
         <Botao variante="sec" icone="editar" onPress={() => { api.fechar(); setTimeout(() => formAtivo(a.item), 240); }}>Editar</Botao>
         <Botao onPress={() => { api.fechar(); router.push(`/aportes/${a.ticker}` as any); }}>Registrar aporte</Botao>
       </>
@@ -250,28 +251,34 @@ export function abreAtivo(ticker: string) {
   });
 }
 
+/** busca o histórico e a cotação de um código fora da lista e avalia (lança erro se não achar) */
+export async function avaliaCodigo(ticker: string, classe: string) {
+  const anos = FC.estado.prefs.regras.janela_historico_anos || 3;
+  const [h, spot] = await Promise.all([
+    FC.mercado.historicos([{ ticker, classe }], anos),
+    FC.mercado.cotacoes([{ ticker, classe }]).catch(() => ({})),
+  ]);
+  const u = FC.estado.mercado.universo || { acoes: {}, fiis: {} };
+  if (h[ticker] && h[ticker].erro && !(u.acoes[ticker] || u.fiis[ticker])) {
+    throw new Error(`Não achei ${ticker} (${FC.CLASSES[classe] || classe}). Confira o código ou escolha o tipo certo.`);
+  }
+  const a = FC.avaliador.avalia(ticker, classe, u, h, FC.estado.prefs.regras, spot[ticker]);
+  if (a.erro) throw new Error(a.erro);
+  const s = spot[ticker];
+  if (s && ok(s.preco)) { a.preco = s.preco; a.variacao_dia = s.variacao_dia; a.fonte_preco = s.fonte; a.preco_quando = s.quando; }
+  a.pilar = ({ fii: "real_estate", acao_br: "acoes", acao_us: "acoes" } as any)[classe] || "alternativos";
+  a.classe = a.classe || classe;
+  return a;
+}
+
 export async function analisaAvulso(ticker: string, classe: string) {
   let a: any;
-  try {
-    const anos = FC.estado.prefs.regras.janela_historico_anos || 3;
-    const [h, spot] = await Promise.all([
-      FC.mercado.historicos([{ ticker, classe }], anos),
-      FC.mercado.cotacoes([{ ticker, classe }]).catch(() => ({})),
-    ]);
-    if (h[ticker] && h[ticker].erro && !(FC.estado.mercado.universo.acoes[ticker] || FC.estado.mercado.universo.fiis[ticker])) {
-      throw new Error(`Não achei ${ticker} (${FC.CLASSES[classe] || classe}). Confira o código ou escolha o tipo certo.`);
-    }
-    a = FC.avaliador.avalia(ticker, classe, FC.estado.mercado.universo, h, FC.estado.prefs.regras, spot[ticker]);
-    if (a.erro) throw new Error(a.erro);
-    const s = spot[ticker];
-    if (s && ok(s.preco)) { a.preco = s.preco; a.variacao_dia = s.variacao_dia; a.fonte_preco = s.fonte; a.preco_quando = s.quando; }
-    a.pilar = ({ fii: "real_estate", acao_br: "acoes", acao_us: "acoes" } as any)[classe] || "alternativos";
-  } catch (e) { ui.erro(e); return; }
+  try { a = await avaliaCodigo(ticker, classe); } catch (e) { ui.erro(e); return; }
   ui.folha({
     titulo: `${a.ticker} · análise`, larga: true, corpo: <DetalheAtivo a={a} />,
     rodape: (api) => (
       <>
-        <View style={{ marginRight: "auto", justifyContent: "center" }}><T v="p">Não está na sua lista.</T></View>
+        <Botao variante="sec" onPress={() => { api.fechar(); setTimeout(() => abreComparar([a.ticker], classe), 240); }}>Comparar</Botao>
         {(["watchlist", "carteira"] as const).map((lista) => (
           <Botao key={lista} variante={lista === "watchlist" ? "sec" : "primario"}
             onPress={() => { api.fechar(); setTimeout(() => formAtivo({ ticker: a.ticker, classe, pilar: a.pilar, lista, quantidade: 0, _novo: true }), 240); }}>

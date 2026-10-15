@@ -15,7 +15,7 @@ import { Grafico } from "../ui/grafico";
 import { Icone, type NomeIcone } from "../ui/icone";
 import { folhaForm, ui } from "../ui/folha";
 import { depoisDeMudar } from "./comum/dados";
-import { BarrasH } from "./ativos";
+import { BarrasH } from "./comum/pagadoras";
 import FC from "../nucleo";
 
 const ok = (v: any) => FC.ok(v);

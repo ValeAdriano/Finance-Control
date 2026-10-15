@@ -337,6 +337,13 @@
       if (d && d.fundos) guarda("fiis_cvm", d);
       return d;
     },
+    // títulos do Tesouro Direto: taxa e preço do último dia útil (cache de 1 h aqui, 6 h no servidor)
+    async tesouro(forcar = false) {
+      if (!forcar) { const c = doNavegador("tesouro", 60 * 60 * 1000); if (c) return c; }
+      const d = await chama({ acao: "tesouro", forcar });
+      if (d && d.titulos) guarda("tesouro", d);
+      return d;
+    },
     // CDI e Selic diários e IPCA mensal desde 2015, lidos direto da tabela
     // (dado público). Antes, pede à Edge Function que complete o que faltar.
     async indices(forcar = false) {

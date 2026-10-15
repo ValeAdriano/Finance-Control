@@ -16,6 +16,7 @@
 //   {acao: "proventos", itens: [{ticker, classe}]} dividendos, JCP e rendimentos
 //                                                com data com e data de pagamento
 //   {acao: "fiis_cvm", forcar?}                  vacância financeira, concentração e tipo de cada FII (CVM)
+//   {acao: "tesouro", forcar?}                   títulos do Tesouro Direto: taxa e preço do último dia
 //   {acao: "indices", forcar?}                   completa CDI, Selic e IPCA em indices_diarios
 //   {acao: "apagar_conta", confirmacao: "APAGAR"} apaga a conta e todos os dados
 //   {acao: "registro_diario"}                    só o agendamento (x-cron-secret):
@@ -697,6 +698,47 @@ async function proventos(itens: { ticker: string; classe: string }[]) {
   return saida;
 }
 
+// ------------------------------------------------------------------ Tesouro Direto
+// O Tesouro Transparente publica um CSV com todas as taxas e preços desde
+// 2002 (~15 MB), com o dia mais recente no começo. Basta ler os primeiros
+// KB: para quando o arquivo chega a um dia anterior e cancela o resto.
+const CSV_TESOURO = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv";
+
+async function tesouro() {
+  const r = await fetch(CSV_TESOURO, { headers: { "User-Agent": UA, "Accept": "text/csv" } });
+  if (!r.ok || !r.body) throw new Error(`${r.status} em tesourotransparente.gov.br`);
+  const leitor = r.body.getReader();
+  const dec = new TextDecoder("utf-8");
+  let texto = "", base: string | null = null, fim = false;
+  const titulos: unknown[] = [];
+  try {
+    while (!fim && texto.length < 2_000_000) {
+      const { value, done } = await leitor.read();
+      if (value) texto += dec.decode(value, { stream: !done });
+      const linhas = texto.split(/\r?\n/);
+      texto = done ? "" : linhas.pop() ?? "";
+      for (const l of linhas) {
+        const c = l.split(";");
+        if (c.length < 7 || c[0] === "Tipo Titulo") continue;
+        const data = dataBr(c[2]);
+        if (!data) continue;
+        if (!base) base = data;
+        if (data !== base) { fim = true; break; }
+        titulos.push({
+          tipo: c[0].trim(), vencimento: dataBr(c[1]),
+          taxa_compra: numBr(c[3]), taxa_venda: numBr(c[4]),
+          pu_compra: numBr(c[5]), pu_venda: numBr(c[6]),
+        });
+      }
+      if (done) break;
+    }
+  } finally {
+    leitor.cancel().catch(() => {});
+  }
+  if (titulos.length < 5) throw new Error("lista do Tesouro veio vazia");
+  return { data_base: base, fonte: "Tesouro Transparente", titulos };
+}
+
 // ------------------------------------------------------------------ registro diário
 // A mesma conta do app, no servidor: posição = quantidade inicial (a não
 // ser que o extrato importado já traga a posição inteira) + aportes;
@@ -905,6 +947,12 @@ Deno.serve(async (req) => {
     // raio-x dos FIIs pela CVM (o informe é trimestral: cache de 7 dias)
     if (corpo.acao === "fiis_cvm") {
       return resposta(await comCache("cvm:fiis", 7 * 24 * HORA, forcar, fiisCvm));
+    }
+
+    // títulos do Tesouro Direto com taxa e preço do último dia útil (cache de 6 h)
+    if (corpo.acao === "tesouro") {
+      const r = await comCacheInfo("tesouro:titulos", 6 * HORA, forcar, tesouro);
+      return resposta({ ...(r.dados as object), velho: r.velho, em: r.em });
     }
 
     if (corpo.acao === "benchmarks") {

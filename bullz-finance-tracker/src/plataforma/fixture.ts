@@ -403,5 +403,24 @@ export function instalaFixture() {
     fiisCvm: async () => fiisCvm(),
     indices: async () => indices(),
     cotacoes: async (itens: any[]) => cotacoes(itens),
+    tesouro: async () => tesouro(),
   });
+}
+
+function tesouro() {
+  const ano = Number(hoje().slice(0, 4));
+  const t = (tipo: string, venc: string, taxa: number, pu: number) =>
+    ({ tipo, vencimento: venc, taxa_compra: taxa, taxa_venda: r2(taxa + 0.12), pu_compra: pu, pu_venda: r2(pu * 0.995) });
+  return { data_base: FC.datas.soma(hoje(), -1), fonte: "fixture", velho: false, em: new Date().toISOString(), titulos: [
+    t("Tesouro Selic", `${ano + 3}-03-01`, 0.05, 20065.82),
+    t("Tesouro Selic", `${ano + 5}-03-01`, 0.09, 20010.2),
+    t("Tesouro Prefixado", `${ano + 1}-01-01`, 13.34, 974),
+    t("Tesouro Prefixado", `${ano + 5}-01-01`, 12.62, 608.58),
+    t("Tesouro Prefixado com Juros Semestrais", `${ano + 9}-01-01`, 12.75, 920.24),
+    t("Tesouro IPCA+", `${ano + 3}-05-15`, 6.72, 4037.5),
+    t("Tesouro IPCA+", `${ano + 9}-05-15`, 6.74, 2734.26),
+    t("Tesouro IPCA+ com Juros Semestrais", `${ano + 14}-08-15`, 6.64, 4562.68),
+    t("Tesouro Renda+ Aposentadoria Extra", `${ano + 23}-12-15`, 6.66, 2187.89),
+    t("Tesouro Educa+", `${ano + 4}-12-15`, 6.64, 3479.41),
+  ] };
 }

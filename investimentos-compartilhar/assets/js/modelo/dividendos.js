@@ -210,9 +210,38 @@
 
     return { ticker, classe, preco, soma12, eventos12, frequencia, intervalo_meses: intervaloMeses, dy12, dy_medio5: dyMedio5,
       anos, anos_com_pagamento: anosComPagamento, estabilidade, crescimento, meses, meses_que_paga: mesesQuePaga,
-      pct_jcp: pctJcp, payout, proximo, ultimo, nota, classificacao: classe_div[0], cor: classe_div[1], alertas,
+      pct_jcp: pctJcp, payout, proximo, ultimo, por_mes: porMes(lista), nota, classificacao: classe_div[0], cor: classe_div[1], alertas,
       notas: { dy: nDy, consistencia: nConsist, frequencia: nFreq, estabilidade: nEstab, crescimento: nCresc, payout: nPayout } };
   }
 
-  FC.dividendos = { analisa, analisaPagadora, COM_DIVIDENDO, IR_JCP, NOMES_MES };
+  // ---------------------------------------------------------------- por mês
+  // Quanto pagou por cota em cada mês, nos últimos `anos` anos (o atual
+  // incluso): pela data de pagamento, ou pela data com quando o pagamento
+  // ainda não foi definido. Pagamento já anunciado e ainda não feito entra
+  // marcado como futuro. Linhas do ano mais novo para o mais velho.
+  function porMes(lista, anos = 5) {
+    const hoje = FC.datas.hoje();
+    const anoAtual = Number(hoje.slice(0, 4));
+    const linhas = [];
+    for (let a = anoAtual; a > anoAtual - anos; a--) {
+      linhas.push({ ano: a, total: 0, meses: Array.from({ length: 12 }, () => ({ valor: 0, futuro: false, eventos: [] })) });
+    }
+    let max = 0;
+    for (const p of lista || []) {
+      const d = p.pagamento || p.data_com;
+      if (!d || !(p.valor > 0)) continue;
+      const linha = linhas.find((l) => l.ano === Number(d.slice(0, 4)));
+      if (!linha) continue;
+      const m = linha.meses[Number(d.slice(5, 7)) - 1];
+      m.valor += p.valor;
+      m.eventos.push(p);
+      if (d > hoje) m.futuro = true;
+      linha.total += p.valor;
+      max = Math.max(max, m.valor);
+    }
+    for (const l of linhas) for (const m of l.meses) m.eventos.sort((a, b) => (a.pagamento || a.data_com).localeCompare(b.pagamento || b.data_com));
+    return { anos: linhas, max };
+  }
+
+  FC.dividendos = { analisa, analisaPagadora, porMes, COM_DIVIDENDO, IR_JCP, NOMES_MES };
 })();
