@@ -1,10 +1,10 @@
 /* Perfil e ativação no Início (comum.js): cartão do perfil (termine, revise,
  * aplique), checklist "Primeiros passos" e "plano contra realidade". */
 import React from "react";
-import { Platform, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { useTema } from "../../tema";
-import { Botao, Cartao, T, Estica } from "../../ui/kit";
+import { Botao, Cartao, T, Estica, degrade } from "../../ui/kit";
 import { Icone } from "../../ui/icone";
 import { useMedidas } from "../../ui/medidas";
 import FC from "../../nucleo";
@@ -39,7 +39,9 @@ export function CartaoPerfil() {
   return (
     <Cartao destaque={destaque} style={{ flexDirection: "row", flexWrap: estreito ? "wrap" : "nowrap", alignItems: "center", gap: t.espaco.e3, marginBottom: t.espaco.e3,
       ...(destaque ? { backgroundColor: t.cores.bg2 } : {}) }}>
-      {destaque ? <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: "70%", backgroundColor: t.cores.acentoSuave, borderTopLeftRadius: t.raios.r, borderTopRightRadius: t.raios.r }} /> : null}
+      {/* brilho de cima para baixo (antes: bloco de 70% com borda reta no meio do cartão) */}
+      {destaque ? <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderRadius: t.raios.r,
+        ...degrade(`linear-gradient(180deg, ${t.cores.acentoSuave}, transparent)`) }} /> : null}
       <View style={{ width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: t.cores.acentoSuave }}>
         <Icone nome="bussola" tam={22} cor={t.cores.acento} />
       </View>
@@ -47,7 +49,9 @@ export function CartaoPerfil() {
         <T style={{ fontSize: 16, fontWeight: "600" }}>{titulo}</T>
         <T style={{ fontSize: 13, color: t.cores.ink2 }}>{texto}</T>
       </View>
-      <Botao pequeno cheio={estreito} onPress={() => abrePerfil(acao)}>{botao}</Botao>
+      {/* no celular o botão vai para a linha de baixo, na largura toda: com `cheio`
+          (alignSelf: stretch) numa linha ele esticava na ALTURA e virava um oval */}
+      <Botao pequeno style={estreito ? { width: "100%", flexBasis: "100%" } : undefined} onPress={() => abrePerfil(acao)}>{botao}</Botao>
     </Cartao>
   );
 }
@@ -75,7 +79,7 @@ export function ChecklistAtivacao() {
       </View>
       <View style={{ height: 10, borderRadius: 6, backgroundColor: t.cores.campo, overflow: "hidden", marginTop: t.espaco.e2 }}>
         <Estica pct={(feitos / itens.length) * 100} style={{ height: "100%", borderRadius: 6, backgroundColor: "#0a84ff",
-          ...(Platform.OS === "web" ? { backgroundImage: "linear-gradient(90deg, #0a84ff, #5e5ce6)" } : {}) } as any} />
+          ...degrade("linear-gradient(90deg, #0a84ff, #5e5ce6)") } as any} />
       </View>
       <View style={{ marginTop: t.espaco.e3 }}>
         {itens.map((x, i) => {

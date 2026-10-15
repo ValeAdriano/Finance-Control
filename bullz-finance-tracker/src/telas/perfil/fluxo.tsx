@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useTema } from "../../tema";
 import { rerender } from "../../estado/app";
-import { B, Botao, Detalhes, T } from "../../ui/kit";
+import { B, Botao, Detalhes, T, degrade } from "../../ui/kit";
 import { Icone, type NomeIcone } from "../../ui/icone";
 import { telaCheia, ui, type ApiFolha } from "../../ui/folha";
 import FC from "../../nucleo";
@@ -333,7 +333,8 @@ function Questionario({ origem, inicial, irPara, api }: { origem: string; inicia
         </View>
         <View style={{ height: 4, borderRadius: 4, backgroundColor: t.cores.campo, overflow: "hidden", marginTop: 8, marginBottom: 16 }}>
           <View style={{ height: "100%", width: `${(i / (total + 1)) * 100}%` as any, borderRadius: 4, backgroundColor: "#0a84ff",
-            ...(Platform.OS === "web" ? { backgroundImage: "linear-gradient(90deg, #0a84ff, #5e5ce6)", transition: "width .4s cubic-bezier(.32,.72,0,1)" } : {}) } as any} />
+            ...degrade("linear-gradient(90deg, #0a84ff, #5e5ce6)"),
+            ...(Platform.OS === "web" ? { transition: "width .4s cubic-bezier(.32,.72,0,1)" } : {}) } as any} />
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 16, paddingHorizontal: 2, paddingBottom: 24 }}>
           <Animated.View style={{ opacity: entra, transform: [{ translateX: entra.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }] }}>{corpo}</Animated.View>

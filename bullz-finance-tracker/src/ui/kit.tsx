@@ -13,7 +13,7 @@
  */
 import React, { useContext, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, Text, View, useWindowDimensions,
+  ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
   type StyleProp, type TextStyle, type ViewStyle, type TextProps,
 } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -96,7 +96,16 @@ export function T({ v = "corpo", cor, cls, peso, tam, centro, num, style, childr
   if (tam) { extra.fontSize = tam; extra.lineHeight = Math.round(tam * 1.35); }
   if (centro) extra.textAlign = "center";
   if (num) extra.fontVariant = ["tabular-nums"];
-  return <Text {...resto} style={[base, extra, style]}><DentroDeTexto.Provider value>{children}</DentroDeTexto.Provider></Text>;
+  return <Text {...resto} style={semIndefinidos([base, extra, style])}><DentroDeTexto.Provider value>{children}</DentroDeTexto.Provider></Text>;
+}
+
+/** Junta os estilos e tira as chaves `undefined`. Na web um `color: undefined`
+ * é ignorado; no nativo ele APAGA a cor definida antes e o texto cai no cinza
+ * padrão do Android — era o "texto da cor errada" das tabelas e listas. */
+function semIndefinidos(st: StyleProp<TextStyle>): TextStyle {
+  const f: any = { ...(StyleSheet.flatten(st) || {}) };
+  for (const k of Object.keys(f)) if (f[k] === undefined) delete f[k];
+  return f;
 }
 
 /** <b> dentro de texto */
@@ -124,14 +133,25 @@ function comAlfa(cor: string, a: number): string {
   return r ? `rgba(${r[1]},${r[2]},${r[3]},${a})` : `rgba(128,128,128,${a})`;
 }
 
-/** estilo que borra um texto (modo privado / carregando) em cada plataforma.
- * Nativo: o texto fica transparente e só a sombra (desfocada) aparece. A cor
- * da sombra precisa ter alfa próprio (< 1): no Android, sombra de cor opaca
- * herda o alfa do texto — zero — e o valor sumia em vez de borrar. */
-function estiloBorrado(cor: string, raio: number): TextStyle {
-  if (Platform.OS === "web") return { filter: `blur(${raio}px)`, userSelect: "none" } as any;
-  return { color: "transparent", textShadowColor: comAlfa(cor, 0.85), textShadowOffset: { width: 0, height: 0 }, textShadowRadius: raio + 3 };
+/** Fundo em degradê (CSS `linear-gradient`/`radial-gradient`) nas duas
+ * plataformas: na web é `backgroundImage`; no nativo (nova arquitetura, RN
+ * 0.76+) é `experimental_backgroundImage`. Antes o nativo caía numa cor
+ * sólida — o brilho do Início virava um círculo duro. */
+export const degrade = (css: string): any =>
+  Platform.OS === "web" ? { backgroundImage: css } : { experimental_backgroundImage: css };
+
+/** estilo que borra um texto na web (modo privado / carregando) */
+function estiloBorrado(raio: number): TextStyle {
+  return { filter: `blur(${raio}px)`, userSelect: "none" } as any;
 }
+
+/* No celular não há como desfocar um trecho de texto: a sombra do texto não
+ * borra o bastante no Android (o número continuava legível) e no iOS some
+ * junto com o texto transparente. Então o valor é trocado por pontos — como
+ * fazem os bancos —, escondendo também quantos dígitos ele tem. */
+const NATIVO = Platform.OS !== "web";
+const mascara = (filhos: React.ReactNode) =>
+  React.Children.map(filhos, (c) => (typeof c === "string" || typeof c === "number" ? String(c).replace(/\d[\d.,]*/g, "•••••") : c));
 
 // computador com mouse: o hover revela; no toque não existe hover
 const temHover = Platform.OS === "web" && typeof window !== "undefined" && !!window.matchMedia
@@ -169,10 +189,19 @@ export function Rs({ children, style, cls, cor, peso, tam, ...resto }: TProps) {
     accessibilityHint: temHover ? "Clique para mostrar o valor" : "Toque para mostrar o valor por 5 segundos",
     ...(temHover ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {}),
   } : {};
+  if (NATIVO) {
+    const oculto = privado && !revelado;
+    return (
+      <T {...resto} {...interacao} cls={cls} cor={cor} peso={peso} tam={tam} num
+        style={[style, oculto ? { color: comAlfa(base, 0.55), letterSpacing: 1 } : null, veu && !privado ? { opacity: 0.45 } : null]}>
+        {oculto ? mascara(children) : children}
+      </T>
+    );
+  }
   return (
     <T {...resto} {...interacao} cls={cls} cor={cor} peso={peso} tam={tam} num
-      style={[style, Platform.OS === "web" ? ({ transition: "filter 180ms ease-out", cursor: privado && !veu ? "pointer" : undefined } as any) : null,
-        b ? estiloBorrado(base, privado ? 9 : 8) : null, veu && !privado ? { opacity: 0.65 } : null]}>
+      style={[style, { transition: "filter 180ms ease-out", cursor: privado && !veu ? "pointer" : undefined } as any,
+        b ? estiloBorrado(privado ? 9 : 8) : null, veu && !privado ? { opacity: 0.65 } : null]}>
       {children}
     </T>
   );
@@ -180,11 +209,9 @@ export function Rs({ children, style, cls, cor, peso, tam, ...resto }: TProps) {
 
 /** Número que só borra durante o carregamento inicial (kpi dd, td.n, .num). */
 export function Num({ children, style, cls, cor, ...resto }: TProps) {
-  const t = useTema();
   const veu = useApp((s) => s.carregandoDados);
-  const base = corClasse(t, cls) || cor || t.cores.ink;
   return (
-    <T {...resto} cls={cls} cor={cor} num style={[style, veu ? [estiloBorrado(base, 8), { opacity: 0.65 }] : null]}>
+    <T {...resto} cls={cls} cor={cor} num style={[style, veu ? (NATIVO ? { opacity: 0.45 } : [estiloBorrado(8), { opacity: 0.65 }]) : null]}>
       {children}
     </T>
   );
@@ -750,12 +777,13 @@ export function Tabela({ cabecas, linhas, minimo = 560, destaque, onLinha }: {
   };
   const total = cabecas.reduce((s, _c, k) => s + larg(k), 0);
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: "100%" }}>
+    // no celular a tabela é mais larga que a tela: a barra de rolagem avisa que há mais colunas
+    <ScrollView horizontal showsHorizontalScrollIndicator={Platform.OS !== "web"} contentContainerStyle={{ minWidth: "100%" }}>
       <View style={{ minWidth: Math.max(minimo, total), flexGrow: 1 }}>
         <View style={{ flexDirection: "row", backgroundColor: t.cores.bg3, borderBottomWidth: 1, borderBottomColor: t.cores.linha }}>
           {cabecas.map((c, k) => {
             const rotulo = (
-              <T style={{ fontSize: 12.5, fontWeight: c.seta ? "700" : "500", color: c.seta ? t.cores.ink : t.cores.ink2 }} numberOfLines={1}>
+              <T style={{ fontSize: 12.5, fontWeight: c.seta ? "700" : "500", color: c.seta ? t.cores.ink : t.cores.ink2, textAlign: c.n ? "right" : "left" }} numberOfLines={2}>
                 {c.t}{c.seta ? (c.seta === "asc" ? " ↑" : " ↓") : ""}
               </T>
             );

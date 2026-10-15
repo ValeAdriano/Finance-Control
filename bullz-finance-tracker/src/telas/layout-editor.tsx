@@ -10,7 +10,7 @@ import { router } from "expo-router";
 import { useTema } from "../tema";
 import { useApp, ocupado, rerender, ROTAS } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
-import { Botao, T } from "../ui/kit";
+import { Botao, T, degrade } from "../ui/kit";
 import { Icone, type NomeIcone } from "../ui/icone";
 import { ui } from "../ui/folha";
 import { Isolado, useBlocosInicio } from "./inicio";
@@ -66,8 +66,8 @@ function Bloco({ id, conteudo, oculto, arrastando, outroArrastando, dy, alca, ao
       <View pointerEvents="none" style={{ maxHeight: 240, overflow: "hidden", borderRadius: t.raios.sm }}>
         {oculto ? <T style={{ padding: 16, fontSize: 13.5, color: t.cores.ink2, textAlign: "center" }}>Oculto no Início</T>
           : conteudo || <T style={{ padding: 16, fontSize: 13.5, color: t.cores.ink2, textAlign: "center" }}>{b.desc}. Sem conteúdo agora: aparece quando houver.</T>}
-        {!oculto && conteudo ? <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 56, backgroundColor: t.cores.bg3, opacity: 0.85,
-          ...(Platform.OS === "web" ? { backgroundColor: "transparent", opacity: 1, backgroundImage: `linear-gradient(transparent, ${t.cores.bg3})` } : {}) } as any} /> : null}
+        {!oculto && conteudo ? <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 56,
+          ...degrade(`linear-gradient(transparent, ${t.cores.bg3})`) } as any} /> : null}
       </View>
     </Animated.View>
   );

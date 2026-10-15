@@ -2,7 +2,7 @@
  * Cada bloco é independente: a ordem e o que fica oculto vêm do layout salvo
  * (Ajustes → Layout), e um bloco que falha não derruba a tela. */
 import React, { useMemo, useState } from "react";
-import { Platform, Pressable, View, Text } from "react-native";
+import { Pressable, View, Text } from "react-native";
 import { router } from "expo-router";
 import { useTema } from "../tema";
 import { useEstado, rerender } from "../estado/app";
@@ -10,7 +10,7 @@ import { useMedidas } from "../ui/medidas";
 import { Pagina } from "../casca/casca";
 import {
   Ajuda, Anel, B, BarraAlocacao, Botao, Cartao, Chip, Conta, Detalhes, Grade, Indicadores, Item, Kpi, KpiValor, Kpis, Legenda,
-  Lista, Mensagem, Num, Pilula, Ponto, Rs, Secao, T, Trilha, Valores,
+  Lista, Mensagem, Num, Pilula, Ponto, Rs, Secao, T, Trilha, Valores, degrade,
 } from "../ui/kit";
 import { CampoData, Segmentado } from "../ui/campos";
 import { Grafico } from "../ui/grafico";
@@ -471,8 +471,8 @@ function Topo({ d, imp, seq }: { d: any; imp: any; seq: any }) {
   const tamValor = estreito ? 38 : 56;
   return (
     <Cartao style={{ paddingTop: estreito ? 24 : 48, paddingHorizontal: estreito ? 24 : 48, paddingBottom: 24, overflow: "hidden" }}>
-      <View pointerEvents="none" style={{ position: "absolute", top: -200, right: -60, width: 520, height: 520, borderRadius: 260, backgroundColor: t.cores.acentoSuave, opacity: 0.55,
-        ...(Platform.OS === "web" ? { backgroundColor: "transparent", opacity: 1, backgroundImage: `radial-gradient(closest-side, ${t.cores.acentoSuave}, transparent 70%)` } : {}) } as any} />
+      <View pointerEvents="none" style={{ position: "absolute", top: -200, right: -60, width: 520, height: 520,
+        ...degrade(`radial-gradient(closest-side, ${t.cores.acentoSuave}, transparent 70%)`) } as any} />
       <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
         <T style={{ fontSize: 15, color: t.cores.ink2 }}>Quanto eu tenho</T><Ajuda texto={dica} />
       </View>
@@ -658,8 +658,7 @@ export function EntradaRecap({ tipo, titulo, sub }: { tipo: string; titulo: stri
   return (
     <Cartao onPress={() => vai(`/retrospectiva/${tipo}`)} style={{ marginTop: t.espaco.e4, flexDirection: "row", alignItems: "center", gap: 14, overflow: "hidden" }}>
       <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 1,
-        backgroundColor: ano ? "rgba(255,225,77,.22)" : "rgba(10,132,255,.12)",
-        ...(Platform.OS === "web" ? { backgroundColor: "transparent", backgroundImage: ano ? "linear-gradient(135deg, rgba(255,225,77,.35), rgba(42,27,255,.18))" : "linear-gradient(135deg, rgba(10,132,255,.14), rgba(94,92,230,.14))" } : {}) } as any} />
+        ...degrade(ano ? "linear-gradient(135deg, rgba(255,225,77,.35), rgba(42,27,255,.18))" : "linear-gradient(135deg, rgba(10,132,255,.14), rgba(94,92,230,.14))") } as any} />
       <View style={{ width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: ano ? "#2a1bff" : "#0a84ff",
         boxShadow: "0 8px 20px rgba(10,132,255,.3)" } as any}>
         <Icone nome="play" tam={22} cor={ano ? "#ffe14d" : "#fff"} />

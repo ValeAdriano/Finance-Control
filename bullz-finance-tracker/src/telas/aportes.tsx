@@ -60,7 +60,7 @@ function CartaoRecorrente({ g }: { g: any }) {
     ? (g.tipo === "ativo" ? `último: ${FC.fmt.qtd(u.quantidade)} por ${FC.fmt.brlTexto(u.valor)}` : `último: ${FC.fmt.brlTexto(u.valor)}`) + ` · ${FC.datas.br(u.data).slice(0, 5)}`
     : "sem aportes ainda";
   return (
-    <Cartao onPress={() => repetir(g)} style={{ paddingVertical: 16, paddingHorizontal: 18, gap: 6, height: "100%" }}>
+    <Cartao onPress={() => repetir(g)} style={{ paddingVertical: 16, paddingHorizontal: 18, gap: 6, flexGrow: 1 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
         <Icone nome={icone as any} tam={22} cor={cor} />
         <T style={{ fontSize: 16, fontWeight: "600", flexShrink: 1 }} numberOfLines={1}>{g.nome}</T>

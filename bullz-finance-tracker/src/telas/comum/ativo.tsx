@@ -1,10 +1,10 @@
 /* Detalhe do ativo (comum.js): detalheAtivo, blocoGraham, blocoFii,
  * evolucaoPosicao, abreAtivo e analisaAvulso. */
 import React from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { useTema } from "../../tema";
-import { Anel, B, Botao, Detalhes, Kpi, KpiValor, Kpis, Legenda, Mensagem, Num, Pilula, Ponto, Rs, T } from "../../ui/kit";
+import { Anel, B, Botao, Detalhes, Kpi, KpiValor, Kpis, Legenda, Mensagem, Num, Pilula, Ponto, Rs, T, degrade } from "../../ui/kit";
 import { Grafico } from "../../ui/grafico";
 import { ui } from "../../ui/folha";
 import { BlocoRentabAtivo } from "./rentab";
@@ -103,8 +103,8 @@ export function BlocoGraham({ g, preco }: { g: any; preco: number }) {
   );
   return (
     <View style={[caixa, { backgroundColor: t.cores.bg2, overflow: "hidden" }]}>
-      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: t.cores.acentoSuave, opacity: 0.6,
-        ...(Platform.OS === "web" ? { backgroundImage: `linear-gradient(135deg, ${t.cores.acentoSuave}, transparent 70%)`, backgroundColor: "transparent", opacity: 1 } : {}) } as any} />
+      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+        ...degrade(`linear-gradient(135deg, ${t.cores.acentoSuave}, transparent 70%)`) } as any} />
       <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <View><Rot>Preço justo de Graham</Rot><Num style={{ fontSize: 30, fontWeight: "700", letterSpacing: -0.9 }}>{FC.fmt.preco(g.valor)}</Num></View>
         <Pilula cor={g.cor}>{g.leitura}</Pilula>

@@ -72,7 +72,7 @@ function Escolha({ fechar }: { fechar: () => void }) {
       {LANCAMENTOS.map((l) => (
         <View key={l.id} style={{ flexBasis: 150, flexGrow: 1 }}>
           <Cartao onPress={() => { fechar(); setTimeout(() => (l.id === "custo" ? formCusto() : l.id === "pesagem" ? formPesagem() : formMovimento(l.id)), 230); }}
-            style={{ padding: 16, height: "100%" }}>
+            style={{ padding: 16, flexGrow: 1 }}>
             <Icone nome={l.icone} tam={24} cor={(t.cores as any)[l.cor]} />
             <T style={{ fontWeight: "600", marginTop: 8 }}>{l.nome}</T>
             <T style={{ fontSize: 12.5, color: t.cores.ink2 }}>{l.desc}</T>

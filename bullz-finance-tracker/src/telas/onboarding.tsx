@@ -10,7 +10,7 @@ import { router } from "expo-router";
 import { useTema, usePrefTema } from "../tema";
 import { rerender } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
-import { Botao, Pilula, T } from "../ui/kit";
+import { Botao, Pilula, T, degrade } from "../ui/kit";
 import { Campo, Entrada, Segmentado } from "../ui/campos";
 import { Icone, type NomeIcone } from "../ui/icone";
 import { telaCheia, ui, type ApiFolha } from "../ui/folha";
@@ -387,7 +387,8 @@ function Apresentacao({ api }: { api: ApiFolha }) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 16, minHeight: 40 }}>
           <View style={{ flex: 1, height: 4, borderRadius: 4, backgroundColor: t.cores.campo, overflow: "hidden" }}>
             <View style={{ height: "100%", width: `${((i + 1) / lista.length) * 100}%` as any, borderRadius: 4, backgroundColor: "#0a84ff",
-              ...(Platform.OS === "web" ? { backgroundImage: "linear-gradient(90deg, #0a84ff, #5e5ce6)", transition: "width .45s cubic-bezier(.32,.72,0,1)" } : {}) } as any} />
+              ...degrade("linear-gradient(90deg, #0a84ff, #5e5ce6)"),
+              ...(Platform.OS === "web" ? { transition: "width .45s cubic-bezier(.32,.72,0,1)" } : {}) } as any} />
           </View>
           <View style={{ opacity: p.final ? 0 : 1 }} pointerEvents={p.final ? "none" : "auto"}><Botao variante="texto" pequeno onPress={() => fecha(false)}>Pular</Botao></View>
         </View>

@@ -7,7 +7,7 @@ import { router } from "expo-router";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useTema } from "../../tema";
-import { B, Botao, Cartao, Codigo, Grade, Kpi, Kpis, T } from "../../ui/kit";
+import { B, Botao, Cartao, Codigo, Grade, Kpi, Kpis, T, degrade } from "../../ui/kit";
 import { ui } from "../../ui/folha";
 import FC from "../../nucleo";
 
@@ -20,7 +20,7 @@ export function Regua({ pct }: { pct: number }) {
   return (
     <View style={{ height: 10, borderRadius: 6, backgroundColor: t.cores.campo, overflow: "hidden" }}>
       <View style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct || 0))}%` as any, borderRadius: 6, backgroundColor: "#0a84ff",
-        ...(Platform.OS === "web" ? { backgroundImage: "linear-gradient(90deg, #0a84ff, #5e5ce6)" } : {}) } as any} />
+        ...degrade("linear-gradient(90deg, #0a84ff, #5e5ce6)") } as any} />
     </View>
   );
 }

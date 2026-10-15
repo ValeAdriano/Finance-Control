@@ -236,10 +236,16 @@ export function Interruptor({ valor, aoMudar, rotulo, desabilitado }: { valor: b
 }
 
 // ---------------------------------------------------------------- segmentado
-export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio, rotuloA11y }: {
+export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio: cheioPedido, rotuloA11y }: {
   opcoes: Array<{ v: V; rotulo: string }>; valor: V; aoMudar: (v: V) => void; cheio?: boolean; rotuloA11y?: string;
 }) {
   const t = useTema();
+  const { estreito } = useMedidas();
+  // no celular, até 5 opções dividem a largura (e a fonte encolhe se precisar)
+  // em vez de passar da borda da tela; com mais, o controle rola na horizontal
+  const dividido = estreito && opcoes.length <= 5;
+  const cheio = cheioPedido || dividido;
+  const rolagem = useRef<ScrollView>(null);
   const pos = useRef<Record<string, { x: number; w: number }>>({}).current;
   const left = useRef(new Animated.Value(0)).current;
   const width = useRef(new Animated.Value(0)).current;
@@ -253,7 +259,12 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio, ro
       Animated.timing(width, { toValue: p.w, duration: 350, easing: Easing.bezier(0.32, 0.72, 0, 1), useNativeDriver: false }),
     ]).start();
   };
-  useEffect(() => { move(pronto); }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    move(pronto);
+    // a opção escolhida fica sempre à vista quando o controle rola
+    const p = pos[valor];
+    if (p && rolagem.current) rolagem.current.scrollTo({ x: Math.max(0, p.x - 24), animated: pronto });
+  }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
   const controle = (
     <View accessibilityRole="tablist" accessibilityLabel={rotuloA11y}
       style={{ flexDirection: "row", alignSelf: cheio ? "stretch" : "flex-start", backgroundColor: t.cores.campo, borderRadius: 10, padding: 2 }}>
@@ -264,8 +275,9 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio, ro
       {opcoes.map((o) => (
         <Pressable key={o.v} onPress={() => aoMudar(o.v)} accessibilityRole="tab" accessibilityState={{ selected: o.v === valor }}
           onLayout={(e) => { pos[o.v] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; if (o.v === valor) move(false); }}
-          style={{ paddingVertical: 6, paddingHorizontal: 16, borderRadius: 8, minHeight: 32, justifyContent: "center", alignItems: "center", flex: cheio ? 1 : undefined }}>
-          <Text style={{ fontSize: 13.5, color: t.cores.ink, fontWeight: o.v === valor ? "600" : "400" }} numberOfLines={1}>{o.rotulo}</Text>
+          style={[{ paddingVertical: 6, paddingHorizontal: dividido ? 4 : 16, borderRadius: 8, minHeight: 32, justifyContent: "center", alignItems: "center" }, cheio ? { flex: 1, minWidth: 0 } : null]}>
+          <Text style={{ fontSize: dividido ? 13 : 13.5, color: t.cores.ink, fontWeight: o.v === valor ? "600" : "400" }} numberOfLines={1}
+            adjustsFontSizeToFit={dividido} minimumFontScale={0.75}>{o.rotulo}</Text>
         </Pressable>
       ))}
     </View>
@@ -273,7 +285,8 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio, ro
   if (cheio) return controle;
   // largo demais para a tela: rola na horizontal em vez de quebrar
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, maxWidth: "100%" }} contentContainerStyle={{ flexGrow: 0 }}>
+    <ScrollView ref={rolagem} horizontal showsHorizontalScrollIndicator={Platform.OS !== "web"}
+      style={{ flexGrow: 0, flexShrink: 1, maxWidth: "100%", alignSelf: "stretch" }} contentContainerStyle={{ flexGrow: 0 }}>
       {controle}
     </ScrollView>
   );

@@ -188,7 +188,9 @@ function BarraAbas() {
   );
   return (
     <View dataSet={{ imprimir: "nao" }} style={{ position: Platform.OS === "web" ? ("fixed" as any) : "absolute", left: 0, right: 0, bottom: 0, zIndex: 40,
-      backgroundColor: t.cores.vidroForte, borderTopWidth: 1, borderTopColor: t.cores.linha,
+      // vidro fosco só existe na web (backdropFilter); no celular o conteúdo que rola
+      // aparecia através da barra, então lá ela é sólida
+      backgroundColor: Platform.OS === "web" ? t.cores.vidroForte : t.cores.bg2, borderTopWidth: 1, borderTopColor: t.cores.linha,
       paddingTop: 6, paddingHorizontal: 10, paddingBottom: 8 + insets.bottom,
       ...(Platform.OS === "web" ? { backdropFilter: "saturate(180%) blur(20px)" } : {}) } as any}>
       <View style={{ flexDirection: "row", justifyContent: "space-around", maxWidth: 580, width: "100%", alignSelf: "center" }} accessibilityRole="tablist">
