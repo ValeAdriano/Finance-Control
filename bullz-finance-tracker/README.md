@@ -81,6 +81,21 @@ O APK sai assinado com a chave de debug: instala direto no celular para teste, m
 para a Play Store (para a loja, use o perfil `production` do EAS, que gera `.aab`). É a versão
 de produção do app: login e dados reais, sem o modo fixture.
 
+### Nesta máquina, num comando
+
+Com o Java 17 e o Android SDK instalados (Opção B abaixo, uma vez só):
+
+```bash
+cd bullz-finance-tracker
+npm run apk              # ~2 min; o APK sai em ../Bullz.apk (raiz do repositório)
+npm run apk -- --limpo   # refaz android/ do zero: depois de mexer em app.json ou em libs nativas
+```
+
+O `Bullz.apk` fica na raiz do repositório (fora do git) para passar ao celular por AirDrop ou
+cabo. O script recusa rodar dentro de pastas do iCloud (Documentos, Mesa): com o disco cheio o
+macOS tira o conteúdo dos arquivos dali e o build sai quebrado. Mantenha o projeto em
+`~/Projetos` ou outra pasta fora do iCloud.
+
 ### Opção A — na nuvem com EAS (mais simples)
 
 Não precisa de Java nem Android SDK. Precisa de uma conta Expo (gratuita).

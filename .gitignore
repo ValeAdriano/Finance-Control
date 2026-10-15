@@ -1,0 +1,4 @@
+# APK gerado por npm run apk (vai por AirDrop, não pelo git)
+*.apk
+# configuração local do preview do Claude
+.claude/launch.json
