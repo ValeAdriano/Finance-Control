@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useTema } from "../../tema";
 import { rerender } from "../../estado/app";
-import { Botao, Cartao, Item, Kpi, Kpis, Lista, Mensagem, Num, Pilula, Roda, T } from "../../ui/kit";
+import { Botao, Cartao, GrupoTitulo, Item, Kpi, Kpis, Lista, Mensagem, Num, Pilula, Roda, T } from "../../ui/kit";
 import { Campo, Entrada, Segmentado } from "../../ui/campos";
 import { ui } from "../../ui/folha";
 import { formRendaFixa } from "./formularios";
@@ -128,7 +128,7 @@ export function ListaTesouro({ busca }: { busca: string }) {
     .sort((a: any, b: any) => a.idx.localeCompare(b.idx) || a.tipo.localeCompare(b.tipo) || a.vencimento.localeCompare(b.vencimento));
   return (
     <View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between", marginBottom: t.espaco.e3 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3, alignItems: "center", justifyContent: "space-between", marginBottom: t.espaco.e3 }}>
         <Segmentado rotuloA11y="Indexador" valor={idx} aoMudar={setIdx}
           opcoes={[{ v: "todos", rotulo: "Todos" }, { v: "selic", rotulo: "Selic" }, { v: "pre", rotulo: "Prefixado" }, { v: "ipca", rotulo: "IPCA+" }]} />
         <T v="p">CDI {ok(macro.cdi) ? FC.fmt.num(macro.cdi) + "%" : "—"} · IPCA 12m {ok(macro.ipca_12m) ? FC.fmt.num(macro.ipca_12m) + "%" : "—"}{d.data_base ? ` · taxas de ${FC.datas.br(d.data_base)}` : ""}{d.velho ? " (fonte fora do ar: último dado guardado)" : ""}</T>
@@ -136,14 +136,17 @@ export function ListaTesouro({ busca }: { busca: string }) {
       {lista.length ? (
         <Lista>
           {lista.map((r: any, i: number) => (
-            <Item key={i} chevron onPress={() => abreTitulo(r)} detalheLinhas={2}
-              titulo={`${r.tipo} ${r.vencimento.slice(0, 4)}`}
-              detalhe={`vence ${FC.datas.br(r.vencimento)}${r.minimo ? " · mínimo " + FC.fmt.brlTexto(r.minimo) : ""}${ok(r.real) && r.idx !== "ipca" ? ` · real ${FC.fmt.num(r.real)}%` : ""}`}
-              valores={
-                <View style={{ alignItems: "flex-end", gap: 3 }}>
-                  <Num style={{ fontWeight: "600", fontSize: 15 }}>{r.idx === "pre" ? `${FC.fmt.num(r.taxa_compra)}%` : r.idx === "selic" ? `Selic + ${FC.fmt.num(r.taxa_compra)}%` : `IPCA + ${FC.fmt.num(r.taxa_compra)}%`}</Num>
-                  <T style={{ fontSize: 12.5, color: t.cores.ink2 }}>{ok(r.pct_cdi) ? `≈ ${FC.fmt.num(r.pct_cdi, 0)}% do CDI` : ""}</T>
-                </View>} />
+            <React.Fragment key={i}>
+              {i === 0 || lista[i - 1].idx !== r.idx ? <GrupoTitulo>{ROTULO_IDX[r.idx as Indexador]} · {lista.filter((x: any) => x.idx === r.idx).length} títulos</GrupoTitulo> : null}
+              <Item chevron onPress={() => abreTitulo(r)} detalheLinhas={2}
+                titulo={`${r.tipo} ${r.vencimento.slice(0, 4)}`}
+                detalhe={`vence ${FC.datas.br(r.vencimento)} (${FC.fmt.num(r.anos, r.anos < 10 ? 1 : 0)} anos)${r.minimo ? " · mínimo " + FC.fmt.brlTexto(r.minimo) : ""}${r.semestral ? " · juros a cada 6 meses" : ""}`}
+                valores={
+                  <View style={{ alignItems: "flex-end", gap: 3 }}>
+                    <Num style={{ fontWeight: "600", fontSize: 15 }}>{r.idx === "pre" ? `${FC.fmt.num(r.taxa_compra)}% a.a.` : r.idx === "selic" ? `Selic + ${FC.fmt.num(r.taxa_compra)}%` : `IPCA + ${FC.fmt.num(r.taxa_compra)}%`}</Num>
+                    <T style={{ fontSize: 13, color: t.cores.ink2 }}>{ok(r.nominal) ? `≈ ${FC.fmt.num(r.nominal, 1)}% a.a. · ${FC.fmt.num(r.pct_cdi, 0)}% do CDI` : ""}</T>
+                  </View>} />
+            </React.Fragment>
           ))}
         </Lista>
       ) : <Lista><T style={{ padding: 24, color: t.cores.ink2 }}>Nenhum título com esse filtro.</T></Lista>}

@@ -2,20 +2,19 @@
  * Fundamentus (todo o universo), a renda fixa do Tesouro Direto e os outros
  * tipos pela análise de qualquer código. Cada tipo abre a sua análise. */
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useTema } from "../tema";
 import { useEstado } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
 import { Pagina } from "../casca/casca";
-import { Botao, Cartao, Item, Lista, Num, Pilula, Roda, T, Vazio } from "../ui/kit";
+import { Botao, Item, Lista, Num, Pilula, Roda, T, Vazio } from "../ui/kit";
 import { Campo, Entrada, Segmentado, Seletor } from "../ui/campos";
-import { Icone } from "../ui/icone";
 import { ui } from "../ui/folha";
 import { EstadoMercado } from "./comum/alertas";
 import { abreAtivo, analisaAvulso } from "./comum/ativo";
 import { acharAtivo, adivinhaClasse } from "./comum/dados";
-import { CabecalhoInvestimentos } from "./comum/investimentos";
+import { BarraFiltros, CabecalhoInvestimentos, ContagemResultados, Filtro } from "./comum/investimentos";
 import { Pagadoras } from "./comum/pagadoras";
 import { Variacao } from "./comum/preco";
 import { ListaTesouro } from "./comum/tesouro";
@@ -93,7 +92,7 @@ function LinhaMercado({ x, tipo }: { x: any; tipo: "acoes" | "fiis" }) {
 }
 
 // ---------------------------------------------------------------- ações e FIIs
-function ListaMercado({ tipo, busca }: { tipo: "acoes" | "fiis"; busca: string }) {
+function ListaMercado({ tipo, busca, ver }: { tipo: "acoes" | "fiis"; busca: string; ver: React.ReactNode }) {
   const t = useTema();
   const [ordem, setOrdem] = useState(mem.ordem[tipo]);
   const [liq, setLiq] = useState(mem.liq[tipo]);
@@ -128,18 +127,20 @@ function ListaMercado({ tipo, busca }: { tipo: "acoes" | "fiis"; busca: string }
   const qFormatoTicker = /^[A-Z]{4}\d{1,2}$/.test(q);
   return (
     <View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "flex-end", marginBottom: t.espaco.e3 }}>
-        <View style={{ flexGrow: 1, flexBasis: 150, maxWidth: 260 }}><Campo rotulo="Ordenar"><Seletor valor={ordem} aoMudar={mudaOrdem} rotuloA11y="Ordenar" opcoes={ORDENS[tipo].map(({ v, rotulo }) => ({ v, rotulo }))} /></Campo></View>
-        <View style={{ flexGrow: 1, flexBasis: 150, maxWidth: 260 }}><Campo rotulo="Liquidez"><Seletor valor={liq} aoMudar={mudaLiq} rotuloA11y="Liquidez mínima" opcoes={LIQUIDEZ} /></Campo></View>
+      <BarraFiltros>
+        {ver}
+        <Filtro rotulo="Ordenar"><Seletor valor={ordem} aoMudar={mudaOrdem} rotuloA11y="Ordenar" opcoes={ORDENS[tipo].map(({ v, rotulo }) => ({ v, rotulo }))} /></Filtro>
+        <Filtro rotulo="Liquidez"><Seletor valor={liq} aoMudar={mudaLiq} rotuloA11y="Liquidez mínima" opcoes={LIQUIDEZ} /></Filtro>
         {tipo === "fiis" ? (
-          <View style={{ flexGrow: 1, flexBasis: 150, maxWidth: 260 }}><Campo rotulo="Segmento"><Seletor valor={seg} aoMudar={mudaSeg} rotuloA11y="Segmento"
-            opcoes={[{ v: "todos", rotulo: "Todos" }, ...segmentos.map((s) => ({ v: s, rotulo: s }))]} /></Campo></View>
+          <Filtro rotulo="Segmento"><Seletor valor={seg} aoMudar={mudaSeg} rotuloA11y="Segmento"
+            opcoes={[{ v: "todos", rotulo: "Todos" }, ...segmentos.map((s) => ({ v: s, rotulo: s }))]} /></Filtro>
         ) : null}
-        <Botao variante="sec" icone="simular" onPress={() => abreComparar([], classe)}>Comparar</Botao>
-      </View>
+      </BarraFiltros>
       {l.length ? (
         <>
-          <T v="p" style={{ marginBottom: t.espaco.e2 }}>{l.length} {tipo === "fiis" ? "fundos" : "ações"}{q ? ` com “${busca.trim()}”` : ""}{!q && minimo ? " com essa liquidez" : ""}</T>
+          <ContagemResultados direita={<Botao variante="sec" pequeno icone="simular" onPress={() => abreComparar([], classe)}>Comparar</Botao>}>
+            {l.length} {tipo === "fiis" ? "fundos" : "ações"}{q ? ` com “${busca.trim()}”` : ""}{!q && minimo ? " com essa liquidez" : ""}
+          </ContagemResultados>
           <Lista>{l.slice(0, qtd).map((x) => <LinhaMercado key={x.ticker} x={x} tipo={tipo} />)}</Lista>
           {l.length > qtd ? <View style={{ alignItems: "center", marginTop: t.espaco.e3 }}><Botao variante="sec" onPress={() => setQtd(qtd + PAGINA)}>Ver mais {Math.min(PAGINA, l.length - qtd)}</Botao></View> : null}
         </>
@@ -175,27 +176,22 @@ function Outros() {
   const meus = ((FC.estado.dados && FC.estado.dados.ativos) || []).filter((a: any) => a.classe === classe);
   return (
     <View>
-      <Cartao style={{ paddingVertical: 16, paddingHorizontal: 20, marginBottom: t.espaco.e4 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-          <View style={{ width: 190 }}>
-            <Seletor valor={classe} aoMudar={setClasse} rotuloA11y="Tipo" opcoes={outras.map(([k, v]: any) => ({ v: k, rotulo: v }))} />
-          </View>
-          <View style={{ flex: 1, minWidth: 180 }}>
-            <Entrada valor={cod} aoMudar={setCod} maiusculas placeholder={`Código: ${(exemplos[classe] || []).slice(0, 2).join(", ")}…`}
+      <BarraFiltros>
+        <Filtro rotulo="Tipo"><Seletor valor={classe} aoMudar={setClasse} rotuloA11y="Tipo" opcoes={outras.map(([k, v]: any) => ({ v: k, rotulo: v }))} /></Filtro>
+        <View style={{ flexGrow: 2, flexBasis: 220 }}>
+          <Campo rotulo="Código">
+            <Entrada valor={cod} aoMudar={setCod} maiusculas placeholder={`${(exemplos[classe] || []).slice(0, 2).join(", ")}…`}
               accessibilityLabel="Código para analisar" onSubmitEditing={() => analisa()} returnKeyType="search" />
-          </View>
-          <Botao onPress={() => analisa()}>Analisar</Botao>
+          </Campo>
         </View>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-          {(exemplos[classe] || []).map((s) => (
-            <Pressable key={s} onPress={() => { setCod(s); analisa(s); }}
-              style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 980, backgroundColor: t.cores.campo }}>
-              <Text style={{ fontSize: 13, color: t.cores.ink }}>{s}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <T v="p" style={{ marginTop: t.espaco.e3 }}>{classe === "cripto" ? "Criptomoedas são avaliadas pelo preço contra a própria história (CoinGecko, em reais)." : "ETFs e ações dos EUA são avaliados pelo preço contra a própria história (Yahoo Finance, convertido para reais)."}</T>
-      </Cartao>
+      </BarraFiltros>
+      <ContagemResultados direita={<Botao pequeno onPress={() => analisa()}>Analisar</Botao>}>
+        Exemplos:{" "}
+        {(exemplos[classe] || []).map((s, i) => (
+          <Text key={s} onPress={() => { setCod(s); analisa(s); }} accessibilityRole="button" style={{ color: t.cores.acento, fontWeight: "600" }}>{i ? " · " : ""}{s}</Text>
+        ))}
+      </ContagemResultados>
+      <T v="p" style={{ marginBottom: t.espaco.e4 }}>{classe === "cripto" ? "Criptomoedas são avaliadas pelo preço contra a própria história (CoinGecko, em reais)." : "ETFs e ações dos EUA são avaliados pelo preço contra a própria história (Yahoo Finance, convertido para reais)."}</T>
       {meus.length ? (
         <>
           <T v="h3" style={{ marginBottom: t.espaco.e2 }}>Na sua lista</T>
@@ -232,29 +228,25 @@ export default function Ativos() {
   const mudaTipo = (v: Tipo) => { mem.tipo = v; setTipo(v); };
   const mudaModo = (v: Modo) => { mem.modo = v; setModo(v); };
   const bolsa = tipoAtual === "acoes" || tipoAtual === "fiis";
+  // indicadores ou ranking de dividendos: o primeiro filtro da barra, igual nos dois modos
+  const ver = (
+    <Filtro rotulo="Ver"><Seletor valor={modo} aoMudar={(v) => mudaModo(v as Modo)} rotuloA11y="Ver"
+      opcoes={[{ v: "indicadores", rotulo: "Indicadores" }, { v: "dividendos", rotulo: "Dividendos" }]} /></Filtro>
+  );
   return (
     <Pagina>
       <CabecalhoInvestimentos aba="ativos" sub="Pesquise o mercado: ações e FIIs do Fundamentus, o Tesouro Direto e qualquer outro código." />
       <EstadoMercado />
-      <View style={{ gap: t.espaco.e3, marginBottom: t.espaco.e4 }}>
+      <View style={{ gap: t.espaco.e3, marginBottom: t.espaco.e3 }}>
         <Segmentado rotuloA11y="Tipo de ativo" valor={tipoAtual} aoMudar={mudaTipo} opcoes={tipos} />
         {tipoAtual !== "outros" ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Icone nome="ativos" tam={20} cor={t.cores.ink3} />
-            <View style={{ flex: 1 }}>
-              <Entrada valor={busca} aoMudar={setBusca} maiusculas={tipoAtual !== "renda_fixa"} returnKeyType="search"
-                accessibilityLabel="Pesquisar"
-                placeholder={tipoAtual === "acoes" ? "Pesquisar pelo código: PETR4, ITSA4…" : tipoAtual === "fiis" ? "Código ou segmento: HGLG11, Logística…" : "Pesquisar: Selic, IPCA, 2035…"} />
-            </View>
-          </View>
-        ) : null}
-        {bolsa ? (
-          <Segmentado rotuloA11y="Análise" valor={modo} aoMudar={mudaModo}
-            opcoes={[{ v: "indicadores", rotulo: "Indicadores" }, { v: "dividendos", rotulo: "Pagadoras de dividendos" }]} />
+          <Entrada valor={busca} aoMudar={setBusca} maiusculas={tipoAtual !== "renda_fixa"} returnKeyType="search"
+            accessibilityLabel="Pesquisar"
+            placeholder={tipoAtual === "acoes" ? "Código: PETR4, ITSA4…" : tipoAtual === "fiis" ? "Código ou segmento: HGLG11, Logística…" : "Título: Selic, IPCA, 2035…"} />
         ) : null}
       </View>
-      {bolsa && modo === "dividendos" ? <Pagadoras tipo={tipoAtual as "acoes" | "fiis"} />
-        : bolsa ? <ListaMercado tipo={tipoAtual as "acoes" | "fiis"} busca={busca} />
+      {bolsa && modo === "dividendos" ? <Pagadoras tipo={tipoAtual as "acoes" | "fiis"} ver={ver} />
+        : bolsa ? <ListaMercado tipo={tipoAtual as "acoes" | "fiis"} busca={busca} ver={ver} />
           : tipoAtual === "renda_fixa" ? <ListaTesouro busca={busca} />
             : <Outros />}
     </Pagina>

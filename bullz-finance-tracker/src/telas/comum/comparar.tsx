@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTema } from "../../tema";
-import { Anel, B, Botao, Num, Pilula, Roda, T, Tabela } from "../../ui/kit";
+import { Anel, B, Botao, Num, Roda, T, Tabela } from "../../ui/kit";
 import { Entrada } from "../../ui/campos";
 import { ui } from "../../ui/folha";
 import { acharAtivo } from "./dados";
@@ -50,29 +50,81 @@ function CorpoComparar({ iniciais, classe }: { iniciais: string[]; classe: strin
   };
   const prontos = codigos.map((c) => ativos[c]).filter(Boolean);
 
-  // linhas: [rótulo, valor exibido por ativo, número para achar o melhor (maior é melhor)]
-  type L = { rotulo: string; vals: React.ReactNode[]; nums: Array<number | null> };
+  // cada linha: rótulo, o valor de cada ativo, uma legenda opcional e o número que acha o
+  // melhor (maior é melhor; null = linha só informativa). { grupo } separa os blocos.
+  type L = { rotulo: string; dica?: string; vals: React.ReactNode[]; legs?: Array<string | undefined>; nums: Array<number | null> } | { grupo: string };
   const linhas: L[] = [];
   const u = FC.estado.mercado.universo || { acoes: {}, fiis: {} };
   const fund = (a: any) => (a.classe === "fii" ? u.fiis[a.ticker] : u.acoes[a.ticker]) || {};
+  const pct = (v: any, c = 1) => (ok(v) ? `${FC.fmt.num(v, c)}%` : "—");
+  const num = (v: any) => (ok(v) ? FC.fmt.num(v, 2) : "—");
+  const mi = (v: any) => (ok(v) ? `R$ ${FC.fmt.num(v / 1e6, 1)} mi` : "—");
+  // linha a partir de um campo do Fundamentus; sentido: 1 maior é melhor, -1 menor é melhor, 0 só informa
+  const daRegra = new Set<string>(prontos.flatMap((a) => (a.metricas || []).map((m: any) => m.chave)));
+  const linhaFund = (rotulo: string, campo: string, fmt: (v: any) => string, sentido: 1 | -1 | 0, dica?: string) => {
+    if (daRegra.has(campo)) return;
+    const vs = prontos.map((a) => fund(a)[campo]);
+    if (!vs.some(ok)) return;
+    linhas.push({ rotulo, dica, vals: vs.map((v) => fmt(v)), nums: vs.map((v) => (sentido && ok(v) && !(sentido === -1 && v <= 0) ? sentido * v : null)) });
+  };
   if (prontos.length) {
-    linhas.push({ rotulo: "Preço", vals: prontos.map((a) => <Num key={a.ticker} style={{ fontWeight: "600" }}>{FC.fmt.preco(a.preco)}</Num>), nums: prontos.map(() => null) });
-    linhas.push({ rotulo: "Score", vals: prontos.map((a) => <View key={a.ticker} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}><Anel score={a.score} cor={a.cor} /><Pilula cor={a.cor} semPonto>{a.veredito_curto || ""}</Pilula></View>), nums: prontos.map((a) => (ok(a.score) ? a.score : null)) });
+    linhas.push({ grupo: "Preço" });
+    linhas.push({ rotulo: "Preço", vals: prontos.map((a) => FC.fmt.preco(a.preco)),
+      legs: prontos.map((a) => (ok(a.variacao_dia) ? `${FC.fmt.delta(a.variacao_dia, 2)}% hoje` : undefined)), nums: prontos.map(() => null) });
+    linhas.push({ rotulo: "Faixa de 52 semanas", dica: "0% = na mínima do ano, 100% = na máxima",
+      vals: prontos.map((a) => (ok(a.min_52s) && ok(a.max_52s) && a.max_52s > a.min_52s ? `${FC.fmt.num(((a.preco - a.min_52s) / (a.max_52s - a.min_52s)) * 100, 0)}%` : "—")),
+      legs: prontos.map((a) => (ok(a.min_52s) && ok(a.max_52s) ? `${FC.fmt.preco(a.min_52s)} – ${FC.fmt.preco(a.max_52s)}` : undefined)), nums: prontos.map(() => null) });
     if (prontos.some((a) => a.graham && ok(a.graham.valor))) {
-      linhas.push({ rotulo: "Margem de Graham", vals: prontos.map((a) => (a.graham && ok(a.graham.valor) ? `${FC.fmt.delta(a.graham.margem, 0)}%` : "—")), nums: prontos.map((a) => (a.graham && ok(a.graham.valor) ? a.graham.margem : null)) });
+      linhas.push({ rotulo: "Margem de Graham", dica: "quanto a cotação está abaixo do preço justo",
+        vals: prontos.map((a) => (a.graham && ok(a.graham.valor) ? `${FC.fmt.delta(a.graham.margem, 0)}%` : "—")),
+        legs: prontos.map((a) => (a.graham && ok(a.graham.valor) ? `justo ${FC.fmt.preco(a.graham.valor)}` : a.graham ? "não se aplica" : undefined)),
+        nums: prontos.map((a) => (a.graham && ok(a.graham.valor) ? a.graham.margem : null)) });
     }
-    linhas.push({ rotulo: "DY (Fundamentus)", vals: prontos.map((a) => (ok(fund(a).dy) ? `${FC.fmt.num(fund(a).dy)}%` : "—")), nums: prontos.map((a) => (ok(fund(a).dy) ? fund(a).dy : null)) });
-    if (classe === "fii") {
-      linhas.push({ rotulo: "Segmento", vals: prontos.map((a) => fund(a).segmento || a.segmento || "—"), nums: prontos.map(() => null) });
-      linhas.push({ rotulo: "Vacância", vals: prontos.map((a) => (ok(fund(a).vacancia) ? `${FC.fmt.num(fund(a).vacancia)}%` : "—")), nums: prontos.map((a) => (ok(fund(a).vacancia) ? -fund(a).vacancia : null)) });
-    }
+    linhas.push({ grupo: "Suas regras" });
+    linhas.push({ rotulo: "Score", dica: "aderência aos seus critérios, 0 a 100",
+      vals: prontos.map((a) => <View key={a.ticker} style={{ flexDirection: "row", gap: 6, alignItems: "center" }}><Anel score={a.score} cor={a.cor} /></View>),
+      legs: prontos.map((a) => a.veredito_curto || undefined), nums: prontos.map((a) => (ok(a.score) ? a.score : null)) });
     const chaves: Array<[string, string]> = [];
     for (const a of prontos) for (const m of a.metricas || []) if (!chaves.some(([k]) => k === m.chave)) chaves.push([m.chave, m.rotulo]);
     for (const [k, rotulo] of chaves) {
       const ms = prontos.map((a) => (a.metricas || []).find((m: any) => m.chave === k));
-      linhas.push({ rotulo, vals: ms.map((m) => (m && m.valor != null ? FC.fmt.metrica(m.valor, m.unidade) : "—")), nums: ms.map((m) => (m && m.nota != null ? m.nota : null)) });
+      linhas.push({ rotulo, vals: ms.map((m) => (m && m.valor != null ? FC.fmt.metrica(m.valor, m.unidade) : "—")),
+        legs: ms.map((m) => (m && m.nota != null ? `nota ${Math.round(m.nota)}` : undefined)), nums: ms.map((m) => (m && m.nota != null ? m.nota : null)) });
+    }
+    linhas.push({ grupo: "Fundamentus" });
+    if (classe === "fii") {
+      linhaFund("Segmento", "segmento", (v) => v || "—", 0);
+      linhaFund("DY 12 meses", "dy", (v) => pct(v), 1);
+      linhaFund("P/VP", "pvp", num, -1, "abaixo de 1: cota mais barata que o patrimônio");
+      linhaFund("Vacância", "vacancia", (v) => pct(v), -1);
+      linhaFund("Cap rate", "cap_rate", (v) => pct(v), 1);
+      linhaFund("Imóveis", "qtd_imoveis", (v) => (ok(v) ? FC.fmt.int(v) : "—"), 0);
+      linhaFund("Patrimônio", "valor_mercado", mi, 0);
+      linhaFund("Liquidez por dia", "liquidez", mi, 0);
+    } else {
+      linhaFund("DY 12 meses", "dy", (v) => pct(v), 1);
+      linhaFund("P/L", "pl", num, -1);
+      linhaFund("P/VP", "pvp", num, -1);
+      linhaFund("ROE", "roe", (v) => pct(v), 1);
+      linhaFund("Margem líquida", "mrg_liquida", (v) => pct(v), 1);
+      linhaFund("Dívida líquida / patrimônio", "div_liq_pl", num, 0);
+      linhaFund("Crescimento da receita (5 anos)", "cresc_rec_5a", (v) => pct(v), 1);
+      linhaFund("Liquidez por dia", "liquidez", mi, 0);
     }
   }
+  // quem leva mais linhas: o resumo que abre a tabela
+  const vitorias = prontos.map(() => 0);
+  let disputadas = 0;
+  for (const l of linhas) {
+    if ("grupo" in l) continue;
+    const validos = l.nums.filter((n): n is number => n != null);
+    if (validos.length < 2) continue;
+    const m = Math.max(...validos);
+    if (validos.filter((n) => n === m).length > 1) continue;   // empate: ninguém leva
+    disputadas++;
+    l.nums.forEach((n, i) => { if (n === m) vitorias[i]++; });
+  }
+  const lider = vitorias.length ? vitorias.indexOf(Math.max(...vitorias)) : -1;
   return (
     <View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: t.espaco.e3, alignItems: "center" }}>
@@ -106,23 +158,32 @@ function CorpoComparar({ iniciais, classe }: { iniciais: string[]; classe: strin
         <T v="p">Inclua {prontos.length ? "mais um código" : "dois códigos"} do mesmo tipo ({FC.CLASSES[classe] || classe}) para comparar.</T>
       ) : (
         <>
+          {disputadas ? (
+            <T style={{ fontSize: 15, marginBottom: t.espaco.e3 }}>
+              <B>{prontos[lider].ticker}</B> se sai melhor em {vitorias[lider]} de {disputadas} indicadores
+              {prontos.length > 2 || vitorias.filter((v) => v === vitorias[lider]).length > 1 ? ` (${prontos.map((a, i) => `${a.ticker} ${vitorias[i]}`).join(" · ")})` : ` (${prontos[1 - lider].ticker}: ${vitorias[1 - lider]})`}.
+            </T>
+          ) : null}
           <View style={{ borderWidth: 1, borderColor: t.cores.linha, borderRadius: t.raios.r, overflow: "hidden" }}>
-            <Tabela minimo={160 + prontos.length * 150}
-              cabecas={[{ t: "", largura: 160 }, ...prontos.map((a) => ({ t: a.ticker, n: true, largura: 150 }))]}
+            <Tabela minimo={200 + prontos.length * 150}
+              cabecas={[{ t: "Indicador", largura: 200 }, ...prontos.map((a) => ({ t: a.ticker, n: true, largura: 150 }))]}
               linhas={linhas.map((l) => {
+                if ("grupo" in l) return l;
                 const validos = l.nums.filter((n): n is number => n != null);
-                const melhor = validos.length > 1 ? Math.max(...validos) : null;
+                const max = validos.length > 1 ? Math.max(...validos) : null;
+                const melhor = max != null && validos.filter((n) => n === max).length === 1 ? max : null;   // empate não marca
+                const ganha = (i: number) => melhor != null && l.nums[i] === melhor;
                 return [
-                  { v: <T style={{ fontSize: 13.5, color: t.cores.ink2 }}>{l.rotulo}</T> },
-                  ...l.vals.map((v, i) => ({ n: true, v: (
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      {melhor != null && l.nums[i] === melhor ? <Text style={{ color: t.cores.verde, fontSize: 12 }}>●</Text> : null}
-                      {typeof v === "string" ? <Num style={{ fontSize: 14, fontWeight: melhor != null && l.nums[i] === melhor ? "700" : "400" }}>{v}</Num> : v}
+                  { v: <T style={{ fontSize: 13, color: t.cores.ink }}>{l.rotulo}</T>, leg: l.dica },
+                  ...l.vals.map((v, i) => ({ n: true, leg: l.legs && l.legs[i], v: (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }} accessibilityLabel={ganha(i) ? "melhor desta linha" : undefined}>
+                      {ganha(i) ? <Text style={{ color: t.cores.verde, fontSize: 12 }}>●</Text> : null}
+                      {typeof v === "string" ? <Num style={{ fontSize: 14, fontWeight: ganha(i) ? "700" : "400", color: ganha(i) ? t.cores.verde : undefined }}>{v}</Num> : v}
                     </View>) })),
                 ];
               })} />
           </View>
-          <T v="p" style={{ marginTop: t.espaco.e3 }}><B>●</B> marca o melhor de cada linha pela nota do indicador nas suas regras (ou o maior DY e a menor vacância). Não é recomendação de compra ou venda.</T>
+          <T v="p" style={{ marginTop: t.espaco.e3 }}><B>●</B> e verde: o melhor da linha (nas suas regras, pela nota do indicador; no Fundamentus, maior DY, ROE e margem, menor P/L, P/VP e vacância). Sem ● na linha: empate ou só informação. Não é recomendação de compra ou venda.</T>
         </>
       )}
     </View>

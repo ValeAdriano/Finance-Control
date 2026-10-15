@@ -711,8 +711,10 @@ export function Ajuda({ texto }: { texto: string }) {
 // ---------------------------------------------------------------- tabela
 export interface Celula { v: React.ReactNode; leg?: React.ReactNode; n?: boolean; cls?: string | null; dinheiro?: boolean; peso?: TextStyle["fontWeight"] }
 export function Tabela({ cabecas, linhas, minimo = 560, destaque, onLinha }: {
-  cabecas: Array<{ t: string; n?: boolean; largura?: number }>;
-  linhas: Array<Array<Celula | React.ReactNode> | { celulas: Array<Celula | React.ReactNode>; estilo?: "mediana" | "meu" | "apagado" | "tem-cota" }>;
+  // onPress na cabeça: a coluna ordena a tabela; seta mostra a ordem atual
+  cabecas: Array<{ t: string; n?: boolean; largura?: number; onPress?: () => void; seta?: "asc" | "desc" | null }>;
+  // { grupo } é uma linha de título que separa blocos da tabela
+  linhas: Array<Array<Celula | React.ReactNode> | { celulas: Array<Celula | React.ReactNode>; estilo?: "mediana" | "meu" | "apagado" | "tem-cota" } | { grupo: string }>;
   minimo?: number; destaque?: (i: number) => boolean; onLinha?: (i: number) => void;
 }) {
   const t = useTema();
@@ -737,13 +739,27 @@ export function Tabela({ cabecas, linhas, minimo = 560, destaque, onLinha }: {
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: "100%" }}>
       <View style={{ minWidth: Math.max(minimo, total), flexGrow: 1 }}>
         <View style={{ flexDirection: "row", backgroundColor: t.cores.bg3, borderBottomWidth: 1, borderBottomColor: t.cores.linha }}>
-          {cabecas.map((c, k) => (
-            <View key={k} style={{ width: larg(k), flexGrow: k === 0 ? 1 : 0, paddingHorizontal: pad, paddingVertical: 12, alignItems: c.n ? "flex-end" : "flex-start" }}>
-              <T style={{ fontSize: 12.5, fontWeight: "500", color: t.cores.ink2 }} numberOfLines={1}>{c.t}</T>
-            </View>
-          ))}
+          {cabecas.map((c, k) => {
+            const rotulo = (
+              <T style={{ fontSize: 12.5, fontWeight: c.seta ? "700" : "500", color: c.seta ? t.cores.ink : t.cores.ink2 }} numberOfLines={1}>
+                {c.t}{c.seta ? (c.seta === "asc" ? " ↑" : " ↓") : ""}
+              </T>
+            );
+            const estilo = { width: larg(k), flexGrow: k === 0 ? 1 : 0, paddingHorizontal: pad, paddingVertical: 12, alignItems: (c.n ? "flex-end" : "flex-start") as ViewStyle["alignItems"] };
+            return c.onPress ? (
+              <Pressable key={k} onPress={c.onPress} accessibilityRole="button" accessibilityLabel={`Ordenar por ${c.t}`}
+                style={({ hovered }: any) => [estilo, hovered ? { backgroundColor: t.cores.campo } : null]}>{rotulo}</Pressable>
+            ) : <View key={k} style={estilo}>{rotulo}</View>;
+          })}
         </View>
         {linhas.map((l: any, i) => {
+          if (l && !Array.isArray(l) && "grupo" in l) {
+            return (
+              <View key={i} style={{ paddingHorizontal: pad, paddingTop: 14, paddingBottom: 6, borderTopWidth: i ? 1 : 0, borderTopColor: t.cores.linha, backgroundColor: t.cores.bg3 }}>
+                <T style={{ fontSize: 12, fontWeight: "600", color: t.cores.ink2, textTransform: "uppercase", letterSpacing: 0.5 }}>{l.grupo}</T>
+              </View>
+            );
+          }
           const cel = Array.isArray(l) ? l : l.celulas;
           const estilo = Array.isArray(l) ? undefined : l.estilo;
           const fundo = estilo === "mediana" ? t.cores.bg3 : estilo === "tem-cota" ? t.cores.acentoSuave : undefined;

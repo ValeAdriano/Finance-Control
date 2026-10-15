@@ -5,8 +5,10 @@ import { Pressable, Text, View } from "react-native";
 import { useTema } from "../../tema";
 import { rerender } from "../../estado/app";
 import { useMedidas } from "../../ui/medidas";
-import { Anel, B, Botao, Cartao, Item, Kpi, Kpis, Lista, Mensagem, Num, Pilula, Roda, T, Tabela, Trilha, Valores } from "../../ui/kit";
-import { Campo, Entrada, Seletor } from "../../ui/campos";
+import { Anel, B, Botao, Cartao, corEstado, Item, Kpi, Kpis, Lista, Mensagem, Num, Pilula, Roda, T, Tabela, Trilha, Valores } from "../../ui/kit";
+import type { Tema } from "../../tema";
+import { Entrada, Seletor } from "../../ui/campos";
+import { BarraFiltros, ContagemResultados, Filtro } from "./investimentos";
 import { Grafico } from "../../ui/grafico";
 import { ui } from "../../ui/folha";
 import { abreAtivo, analisaAvulso } from "./ativo";
@@ -15,6 +17,7 @@ import { acharAtivo } from "./dados";
 import FC from "../../nucleo";
 
 const ok = (v: any) => FC.ok(v);
+const corTexto = (t: Tema, cor?: string) => corEstado(t, cor)[0];
 
 // ---------------------------------------------------------------- peças
 export function Calendario({ meses, alto = 14, largo = 7, gap = 2, rotulos }: { meses: number[]; alto?: number; largo?: number; gap?: number; rotulos?: boolean }) {
@@ -70,6 +73,9 @@ export function ProventosPorMes({ porMes, preco }: { porMes: any; preco?: number
     </Pressable>
   );
   const total = (l: any) => <Num style={{ fontSize: 13, fontWeight: "600" }}>{l.total ? FC.fmt.num(l.total, 2) : "—"}</Num>;
+  const nPag = (l: any) => l.meses.reduce((n: number, m: any) => n + m.eventos.length, 0);
+  // quanto o ano pagou sobre o preço de hoje: o "DY" daquele ano no preço atual
+  const legTotal = (l: any) => (l.total ? `${nPag(l)} pag.${preco ? ` · ${FC.fmt.num((l.total / preco) * 100, 1)}%` : ""}` : undefined);
   const anos: any[] = porMes.anos;
   // no celular, meses nas linhas e anos nas colunas: cabe sem rolar de lado
   const tabela = estreito ? (
@@ -77,19 +83,27 @@ export function ProventosPorMes({ porMes, preco }: { porMes: any; preco?: number
       cabecas={[{ t: "Mês", largura: 48 }, ...anos.map((l) => ({ t: String(l.ano), n: true, largura: 58 }))]}
       linhas={[
         ...NOMES.map((n, i) => [{ v: <T style={{ fontSize: 13, color: t.cores.ink2 }}>{n}</T> }, ...anos.map((l) => ({ n: true, v: celula(l.meses[i], l.ano, i) }))]),
-        { estilo: "mediana" as const, celulas: [{ v: <B>Total</B> }, ...anos.map((l) => ({ n: true, v: total(l) }))] },
+        { estilo: "mediana" as const, celulas: [{ v: <B>Total</B> }, ...anos.map((l) => ({ n: true, v: total(l), leg: legTotal(l) }))] },
       ]} />
   ) : (
-    <Tabela minimo={56 + 58 * 12 + 90}
-      cabecas={[{ t: "Ano", largura: 56 }, ...NOMES.map((n) => ({ t: n, n: true, largura: 58 })), { t: "Total", n: true, largura: 90 }]}
-      linhas={anos.map((l) => [{ v: <B>{String(l.ano)}</B> }, ...l.meses.map((m: any, i: number) => ({ v: celula(m, l.ano, i) })), { v: total(l), n: true }])} />
+    <Tabela minimo={56 + 58 * 12 + 120}
+      cabecas={[{ t: "Ano", largura: 56 }, ...NOMES.map((n) => ({ t: n, n: true, largura: 58 })), { t: "Total", n: true, largura: 120 }]}
+      linhas={anos.map((l) => [{ v: <B>{String(l.ano)}</B> }, ...l.meses.map((m: any, i: number) => ({ v: celula(m, l.ano, i) })), { v: total(l), n: true, leg: legTotal(l) }])} />
   );
   const escolhido = sel && anos.find((l: any) => l.ano === sel.ano)?.meses[sel.mes];
   return (
     <View>
       <View style={{ borderWidth: 1, borderColor: t.cores.linha, borderRadius: t.raios.r, overflow: "hidden" }}>{tabela}</View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 14, rowGap: 6, marginTop: t.espaco.e2 }}>
+        {[[t.cores.verde, "maiores pagamentos"], [t.cores.verdeSuave, "médios"], [t.cores.bg3, "menores"], [t.cores.amareloSuave, "anunciado, a pagar"]].map(([c, r]) => (
+          <View key={r} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: c, borderWidth: 1, borderColor: t.cores.linha }} />
+            <T style={{ fontSize: 12, color: t.cores.ink2 }}>{r}</T>
+          </View>
+        ))}
+      </View>
       <T v="p" style={{ marginTop: t.espaco.e2 }}>
-        R$ por ação ou cota pagos em cada mês (pela data de pagamento). Verde mais forte: meses de maior pagamento; amarelo: anunciado, ainda não pago. Toque num mês para ver as datas.
+        R$ por ação ou cota, pela data de pagamento. No total: quantos pagamentos e quanto o ano somou sobre o preço de hoje. Toque num mês para ver as datas.
       </T>
       {escolhido && escolhido.eventos.length ? (
         <Cartao style={{ marginTop: t.espaco.e3, paddingVertical: 12 }}>
@@ -191,7 +205,17 @@ export function BlocoProventos({ a }: { a: any }) {
 }
 
 // ---------------------------------------------------------------- ranking
-export const ranking: any = { tipo: "acoes", freq: "qualquer", dyMin: 4, liqMin: 1, ordem: "nota", resultado: null, chave: null, carregando: false, progresso: 0 };
+export const ranking: any = { tipo: "acoes", freq: "qualquer", dyMin: 4, liqMin: 1, ordem: "nota", inverte: false, resultado: null, chave: null, carregando: false, progresso: 0 };
+// cada ordenação: a conta e se o "melhor" vem primeiro em ordem decrescente (padrão) ou crescente
+const ORDENS: Record<string, { rotulo: string; f: (a: any, b: any) => number }> = {
+  nota: { rotulo: "Nota de dividendos", f: (a, b) => b.nota - a.nota },
+  dy: { rotulo: "DY 12 meses", f: (a, b) => (b.dy12 || 0) - (a.dy12 || 0) },
+  pago: { rotulo: "Pago em 12 meses", f: (a, b) => b.soma12 - a.soma12 },
+  regularidade: { rotulo: "Regularidade", f: (a, b) => b.anos_com_pagamento - a.anos_com_pagamento || (b.estabilidade || 0) - (a.estabilidade || 0) || b.nota - a.nota },
+  crescimento: { rotulo: "Crescimento", f: (a, b) => (b.crescimento ?? -1e9) - (a.crescimento ?? -1e9) },
+  payout: { rotulo: "Menor payout", f: (a, b) => (a.payout ?? 1e9) - (b.payout ?? 1e9) },
+  proximo: { rotulo: "Próximo pagamento", f: (a, b) => ((a.proximo && (a.proximo.pagamento || a.proximo.data_com)) || "9999").localeCompare((b.proximo && (b.proximo.pagamento || b.proximo.data_com)) || "9999") },
+};
 const chaveRanking = () => [ranking.tipo, ranking.liqMin].join("|");
 function candidatos() {
   const u = FC.estado.mercado.universo;
@@ -225,13 +249,13 @@ function filtrados() {
   if (ranking.freq === "mensal") l = l.filter((r: any) => r.frequencia === "mensal");
   if (ranking.freq === "trimestral") l = l.filter((r: any) => (ordemFreq[r.frequencia] || 9) <= 3);
   if (ranking.freq === "regular") l = l.filter((r: any) => r.anos_com_pagamento === 5);
-  const ord: Record<string, (a: any, b: any) => number> = { nota: (a, b) => b.nota - a.nota, dy: (a, b) => b.dy12 - a.dy12,
-    regularidade: (a, b) => b.anos_com_pagamento - a.anos_com_pagamento || (b.estabilidade || 0) - (a.estabilidade || 0) || b.nota - a.nota };
-  return l.sort(ord[ranking.ordem]);
+  const o = (ORDENS[ranking.ordem] || ORDENS.nota).f;
+  l = l.sort(o);
+  return ranking.inverte ? l.reverse() : l;
 }
 
-/** ranking de pagadoras de dividendos do tipo escolhido fora (ações ou FIIs) */
-export function Pagadoras({ tipo }: { tipo: "acoes" | "fiis" }) {
+/** ranking de pagadoras de dividendos do tipo escolhido fora (ações ou FIIs); `ver` é o seletor de modo da tela */
+export function Pagadoras({ tipo, ver }: { tipo: "acoes" | "fiis"; ver?: React.ReactNode }) {
   const t = useTema();
   const [, setTick] = useState(0);
   if (ranking.tipo !== tipo) { ranking.tipo = tipo; ranking.dyMin = tipo === "fiis" ? 8 : 4; }
@@ -250,23 +274,28 @@ export function Pagadoras({ tipo }: { tipo: "acoes" | "fiis" }) {
     }, 600);
     return () => clearTimeout(id);
   }, [dy, liq]);
-  if (!FC.estado.mercado.universo) return <View style={{ minHeight: 160, alignItems: "center", justifyContent: "center" }}><Roda /></View>;
+  const muda = (k: string, v: any) => { ranking[k] = v; if (k === "ordem") ranking.inverte = false; setTick((x) => x + 1); };
+  // tocar na cabeça ordena por ela; tocar de novo inverte
+  const porColuna = (k: string) => () => { if (ranking.ordem === k) ranking.inverte = !ranking.inverte; else { ranking.ordem = k; ranking.inverte = false; } setTick((x) => x + 1); };
+  const seta = (k: string) => (ranking.ordem === k ? (ranking.inverte ? "asc" : "desc") : null) as "asc" | "desc" | null;
+  const filtros = (
+    <BarraFiltros>
+      {ver}
+      <Filtro rotulo="Frequência"><Seletor valor={ranking.freq} aoMudar={(v) => muda("freq", v)} rotuloA11y="Frequência"
+        opcoes={[{ v: "qualquer", rotulo: "Qualquer" }, { v: "mensal", rotulo: "Mensal" }, { v: "trimestral", rotulo: "Trimestral ou mais" }, { v: "regular", rotulo: "Pagou nos 5 anos" }]} /></Filtro>
+      <Filtro rotulo="Ordenar"><Seletor valor={ranking.ordem} aoMudar={(v) => muda("ordem", v)} rotuloA11y="Ordenar por"
+        opcoes={Object.entries(ORDENS).map(([v, o]) => ({ v, rotulo: o.rotulo }))} /></Filtro>
+      <Filtro rotulo="DY mínimo (%)" estreito><Entrada valor={dy} aoMudar={setDy} decimal accessibilityLabel="DY mínimo" /></Filtro>
+      <Filtro rotulo="Liquidez (R$ mi/dia)" estreito><Entrada valor={liq} aoMudar={setLiq} decimal accessibilityLabel="Liquidez mínima" /></Filtro>
+    </BarraFiltros>
+  );
+  if (!FC.estado.mercado.universo) return <View>{filtros}<View style={{ minHeight: 160, alignItems: "center", justifyContent: "center" }}><Roda /></View></View>;
   const l = pronto ? filtrados() : [];
   const meus = new Set(FC.estado.base.ativos.map((a: any) => a.ticker));
-  const muda = (k: string, v: any) => { ranking[k] = v; setTick((x) => x + 1); };
+  const nome = tipo === "fiis" ? "FIIs" : "ações";
   return (
     <View>
-      <Cartao style={{ marginBottom: t.espaco.e4 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-          <View style={{ minWidth: 170 }}><Campo rotulo="Frequência"><Seletor valor={ranking.freq} aoMudar={(v) => muda("freq", v)} rotuloA11y="Frequência"
-            opcoes={[{ v: "qualquer", rotulo: "Qualquer" }, { v: "mensal", rotulo: "Mensal" }, { v: "trimestral", rotulo: "Trimestral ou mais" }, { v: "regular", rotulo: "Pagou nos 5 últimos anos" }]} /></Campo></View>
-          <View style={{ width: 120 }}><Campo rotulo="DY mínimo (%)"><Entrada valor={dy} aoMudar={setDy} decimal accessibilityLabel="DY mínimo" /></Campo></View>
-          <View style={{ width: 150 }}><Campo rotulo="Liquidez (R$ mi/dia)"><Entrada valor={liq} aoMudar={setLiq} decimal accessibilityLabel="Liquidez mínima" /></Campo></View>
-          <View style={{ minWidth: 150 }}><Campo rotulo="Ordenar por"><Seletor valor={ranking.ordem} aoMudar={(v) => muda("ordem", v)} rotuloA11y="Ordenar por"
-            opcoes={[{ v: "nota", rotulo: "Nota de dividendos" }, { v: "dy", rotulo: "DY 12 meses" }, { v: "regularidade", rotulo: "Regularidade" }]} /></Campo></View>
-        </View>
-        <T v="p" style={{ marginTop: t.espaco.e3 }}>Pré-seleciona as {tipo === "fiis" ? "FIIs" : "ações"} líquidas de maior DY no Fundamentus e analisa os proventos reais de cada uma: frequência, meses de pagamento, 5 anos de histórico, crescimento e payout. Não é recomendação.</T>
-      </Cartao>
+      {filtros}
       {!pronto ? (
         <Cartao>
           <T style={{ marginBottom: t.espaco.e3 }}>Analisando os proventos de cada {tipo === "fiis" ? "fundo" : "empresa"}… a primeira vez leva alguns segundos.</T>
@@ -274,26 +303,40 @@ export function Pagadoras({ tipo }: { tipo: "acoes" | "fiis" }) {
         </Cartao>
       ) : (
         <>
+          <ContagemResultados>{l.length} {nome} pagadoras · toque numa coluna para ordenar</ContagemResultados>
           <Cartao semPad>
             {l.length ? (
-              <Tabela minimo={1000} onLinha={(i) => abrePagadora(l[i])}
-                cabecas={[{ t: "#", largura: 44 }, { t: "Ativo", largura: 140 }, { t: "Nota", largura: 190 }, { t: "DY 12m", n: true }, { t: "Frequência", largura: 120 },
-                  { t: "Meses em que paga", largura: 130 }, { t: "Anos pagando", n: true }, { t: "Crescimento", n: true }, { t: "Payout", n: true, largura: 80 }, { t: "Próximo", largura: 100 }]}
-                linhas={l.map((r: any, i: number) => ({ estilo: meus.has(r.ticker) ? "meu" : undefined, celulas: [
-                  { v: String(i + 1), cls: "fraco" },
-                  { v: <B>{r.ticker}</B>, leg: r.segmento || (r.classe === "fii" ? "FII" : "Ação") },
-                  { v: <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}><Anel score={r.nota} cor={r.cor} /><Pilula cor={r.cor} semPonto>{r.classificacao}</Pilula></View> },
-                  { v: <Num style={{ fontWeight: "600", fontSize: 14 }}>{FC.fmt.num(r.dy12)}%</Num>, leg: `média 5a ${ok(r.dy_medio5) ? FC.fmt.num(r.dy_medio5) + "%" : "—"}`, n: true },
+              <Tabela minimo={1060} onLinha={(i) => abrePagadora(l[i])}
+                cabecas={[{ t: "Ativo", largura: 170 }, { t: "Nota", largura: 170, onPress: porColuna("nota"), seta: seta("nota") },
+                  { t: "DY 12m", n: true, largura: 110, onPress: porColuna("dy"), seta: seta("dy") },
+                  { t: "Pago 12m", n: true, largura: 110, onPress: porColuna("pago"), seta: seta("pago") },
+                  { t: "Frequência", largura: 130 }, { t: "Meses jan–dez", largura: 130 },
+                  { t: "Anos pagando", n: true, largura: 120, onPress: porColuna("regularidade"), seta: seta("regularidade") },
+                  { t: "Crescimento", n: true, largura: 120, onPress: porColuna("crescimento"), seta: seta("crescimento") },
+                  { t: "Payout", n: true, largura: 90, onPress: porColuna("payout"), seta: seta("payout") },
+                  { t: "Próximo", n: true, largura: 110, onPress: porColuna("proximo"), seta: seta("proximo") }]}
+                linhas={l.map((r: any) => ({ estilo: meus.has(r.ticker) ? "meu" : undefined, celulas: [
+                  { v: (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <B>{r.ticker}</B>{meus.has(r.ticker) ? <Pilula cor="azul" semPonto>na lista</Pilula> : null}
+                    </View>), leg: r.segmento || (r.classe === "fii" ? "FII" : "Ação") },
+                  { v: (
+                    <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                      <Anel score={r.nota} cor={r.cor} />
+                      <T style={{ fontSize: 13, fontWeight: "600", color: corTexto(t, r.cor) }} numberOfLines={2}>{r.classificacao}</T>
+                    </View>) },
+                  { v: <Num style={{ fontWeight: "600", fontSize: 14 }}>{FC.fmt.num(r.dy12)}%</Num>, leg: `5 anos: ${ok(r.dy_medio5) ? FC.fmt.num(r.dy_medio5) + "%" : "—"}`, n: true },
+                  { v: <Num style={{ fontSize: 14 }}>{FC.fmt.preco(r.soma12)}</Num>, leg: `${r.eventos12} pagamento${r.eventos12 === 1 ? "" : "s"}`, n: true },
                   { v: r.frequencia, leg: r.intervalo_meses ? "a cada " + FC.fmt.num(r.intervalo_meses, r.intervalo_meses % 1 ? 1 : 0) + (r.intervalo_meses === 1 ? " mês" : " meses") : "" },
-                  { v: <Calendario meses={r.meses} /> },
-                  `${r.anos_com_pagamento}/5`,
-                  { v: ok(r.crescimento) ? FC.fmt.delta(r.crescimento) + "% a.a." : "—", cls: ok(r.crescimento) ? (r.crescimento >= 0 ? "pos" : "neg") : null },
-                  { v: ok(r.payout) ? FC.fmt.num(r.payout, 0) + "%" : "—", cls: ok(r.payout) && r.payout > 100 ? "neg" : null },
-                  r.proximo ? { v: <B>{FC.datas.br(r.proximo.pagamento || r.proximo.data_com).slice(0, 5)}</B>, leg: `${FC.fmt.preco(r.proximo.valor)}/cota` } : { v: "—", cls: "muito-fraco" },
+                  { v: <Calendario meses={r.meses} />, leg: r.meses_que_paga.length && r.meses_que_paga.length < 12 ? r.meses_que_paga.join(", ") : r.meses_que_paga.length ? "todo mês" : "irregular" },
+                  { v: `${r.anos_com_pagamento} de 5`, n: true, cls: r.anos_com_pagamento === 5 ? "pos" : r.anos_com_pagamento <= 2 ? "neg" : null },
+                  { v: ok(r.crescimento) ? FC.fmt.delta(r.crescimento) + "%" : "—", leg: ok(r.crescimento) ? "ao ano, em 3 anos" : "sem histórico", n: true, cls: ok(r.crescimento) ? (r.crescimento >= 0 ? "pos" : "neg") : null },
+                  { v: ok(r.payout) ? FC.fmt.num(r.payout, 0) + "%" : "—", leg: ok(r.payout) ? (r.payout > 100 ? "acima do lucro" : "do lucro") : undefined, n: true, cls: ok(r.payout) && r.payout > 100 ? "neg" : null },
+                  r.proximo ? { v: <B>{FC.datas.br(r.proximo.pagamento || r.proximo.data_com).slice(0, 5)}</B>, leg: `${FC.fmt.preco(r.proximo.valor)}/cota`, n: true } : { v: "—", cls: "muito-fraco", n: true },
                 ] }))} />
             ) : <T style={{ padding: 28, color: t.cores.ink2 }}>Nenhum ativo com esses filtros. Baixe o DY mínimo ou mude a frequência.</T>}
           </Cartao>
-          <T v="p" style={{ marginTop: t.espaco.e3 }}><B>Nota de dividendos</B> (0–100): DY 30%, anos pagando 20%, frequência 15%, estabilidade 15%, crescimento 10%, payout 10%. Meses em verde forte: pagou nesse mês em 2 dos últimos 3 anos.</T>
+          <T v="p" style={{ marginTop: t.espaco.e3 }}><B>Nota</B> (0–100): DY 30%, anos pagando 20%, frequência 15%, estabilidade 15%, crescimento 10%, payout 10%. <B>Meses</B>: verde forte = pagou nesse mês em 2 dos últimos 3 anos. Pré-seleção: as {nome} líquidas de maior DY no Fundamentus. Não é recomendação.</T>
         </>
       )}
     </View>

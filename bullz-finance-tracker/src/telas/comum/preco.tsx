@@ -19,7 +19,7 @@ export function Variacao({ v, sufixo, pequeno }: { v: number | null | undefined;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 3, paddingVertical: pequeno ? 1 : 2, paddingHorizontal: pequeno ? 6 : 8,
       borderRadius: 980, backgroundColor: sobe ? t.cores.verdeSuave : t.cores.vermelhoSuave }}>
-      <T style={{ fontSize: pequeno ? 11.5 : 12.5, fontWeight: "600", color: cor }}>
+      <T style={{ fontSize: pequeno ? 12 : 13, fontWeight: "600", color: cor }}>
         {sobe ? "▲" : "▼"} {FC.fmt.num(Math.abs(v as number), 2)}%{sufixo ? " " + sufixo : ""}
       </T>
     </View>

@@ -15,7 +15,7 @@ import { Icone } from "../ui/icone";
 import { EstadoMercado } from "./comum/alertas";
 import { abreAtivo } from "./comum/ativo";
 import { formAtivo, formRendaFixa } from "./comum/formularios";
-import { CabecalhoInvestimentos } from "./comum/investimentos";
+import { CabecalhoGrupo, CabecalhoInvestimentos } from "./comum/investimentos";
 import { MiniGrafico, Variacao } from "./comum/preco";
 import { ResumoInvestido } from "./comum/rentab";
 import FC from "../nucleo";
@@ -85,7 +85,7 @@ function RendaFixa({ d, total }: { d: any; total: number }) {
   const algumIsento = Object.values(impostos).some((x: any) => x && x.isento);
   const soma = FC.soma(d.rendaFixa, (r: any) => r.valor_aplicado || 0);
   return (
-    <Secao titulo="Renda fixa" sub={<>{d.rendaFixa.length ? <><Rs>{FC.fmt.brlTexto(soma)}</Rs>{total ? ` · ${FC.fmt.num((soma / total) * 100, 1)}% da carteira` : ""} · </> : null}{ok(d.macro && d.macro.cdi) ? `CDI de hoje ${FC.fmt.num(d.macro.cdi)}%` : "CDBs, Tesouro e caixa"}</>}
+    <CabecalhoGrupo titulo="Renda fixa" resumo={<>{d.rendaFixa.length ? <><Rs style={{ fontSize: 13 }}>{FC.fmt.brlTexto(soma)}</Rs>{total ? ` · ${FC.fmt.num((soma / total) * 100, 1)}% da carteira` : ""} · </> : null}{ok(d.macro && d.macro.cdi) ? `CDI de hoje ${FC.fmt.num(d.macro.cdi)}%` : "CDBs, Tesouro e caixa"}</>}
       direita={<Botao variante="sec" pequeno icone="aportes" onPress={() => formRendaFixa()}>Título</Botao>}>
       {d.rendaFixa.length ? (
         <>
@@ -119,7 +119,7 @@ function RendaFixa({ d, total }: { d: any; total: number }) {
             acao={<Botao onPress={() => formRendaFixa()}>Adicionar título</Botao>} />
         </Lista>
       )}
-    </Secao>
+    </CabecalhoGrupo>
   );
 }
 
@@ -185,7 +185,7 @@ export default function MinhaLista() {
               </Kpis>
             </Cartao>
           ) : null}
-          <View style={{ marginTop: t.espaco.e4 }}><T v="h2">Meus ativos</T></View>
+          <View style={{ marginTop: t.espaco.e5 }}><T v="h2" accessibilityRole="header">Meus ativos</T></View>
           {SECOES.filter((s) => s.ligada()).map((s) => {
             if (s.chave === "renda_fixa") return <RendaFixa key={s.chave} d={d} total={total} />;
             const itens = carteira.filter((a: any) => s.classes.includes(a.classe)).sort((a: any, b: any) => valor(b) - valor(a));
@@ -193,10 +193,10 @@ export default function MinhaLista() {
             const soma = FC.soma(itens, valor);
             const renda12 = FC.soma(itens, (a: any) => (rendaDe(a.ticker) || {}).recebido_12m || 0);
             return (
-              <Secao key={s.chave} titulo={s.titulo}
-                sub={<><Rs>{FC.fmt.brlTexto(soma)}</Rs>{total ? ` · ${FC.fmt.num((soma / total) * 100, 1)}% da carteira` : ""} · {itens.length} ativo{itens.length > 1 ? "s" : ""}{renda12 > 0 ? <> · rendeu <Rs>{FC.fmt.brlTexto(renda12)}</Rs> em 12 meses</> : null}</>}>
+              <CabecalhoGrupo key={s.chave} titulo={s.titulo}
+                resumo={<><Rs style={{ fontSize: 13 }}>{FC.fmt.brlTexto(soma)}</Rs>{total ? ` · ${FC.fmt.num((soma / total) * 100, 1)}% da carteira` : ""} · {itens.length} ativo{itens.length > 1 ? "s" : ""}{renda12 > 0 ? <> · rendeu <Rs style={{ fontSize: 13 }}>{FC.fmt.brlTexto(renda12)}</Rs> em 12 meses</> : null}</>}>
                 <Lista>{itens.map((a: any) => <LinhaMeu key={a.ticker} a={a} renda={rendaDe(a.ticker)} total={total} />)}</Lista>
-              </Secao>
+              </CabecalhoGrupo>
             );
           })}
           {!carteira.length ? <T v="p" style={{ marginTop: t.espaco.e3 }}>Nenhum ativo de bolsa na carteira. Use “+ Ativo” para cadastrar o que você tem.</T> : null}
