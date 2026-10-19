@@ -1,5 +1,5 @@
-/* O topo comum de Investimentos: título, o seletor "Ativos | Minha lista"
- * (cada um é uma rota: /ativos e /ativos/lista) e o botão de cadastrar. */
+/* O topo comum de Investimentos: título, o seletor "Minha lista | Ativos"
+ * (cada um é uma rota: /ativos e /ativos/mercado) e o botão de cadastrar. */
 import React from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -17,8 +17,8 @@ export function CabecalhoInvestimentos({ aba, sub }: { aba: AbaInvest; sub: stri
       <Cabecalho titulo="Investimentos" sub={sub} direita={<Botao icone="aportes" onPress={() => formAtivo()}>Ativo</Botao>} />
       <View style={{ marginBottom: t.espaco.e4 }}>
         <Segmentado rotuloA11y="Seção de investimentos" valor={aba}
-          aoMudar={(v) => { if (v !== aba) router.replace((v === "lista" ? "/ativos/lista" : "/ativos") as any); }}
-          opcoes={[{ v: "ativos", rotulo: "Ativos" }, { v: "lista", rotulo: "Minha lista" }]} />
+          aoMudar={(v) => { if (v !== aba) router.replace((v === "ativos" ? "/ativos/mercado" : "/ativos") as any); }}
+          opcoes={[{ v: "lista", rotulo: "Minha lista" }, { v: "ativos", rotulo: "Ativos" }]} />
       </View>
     </>
   );
