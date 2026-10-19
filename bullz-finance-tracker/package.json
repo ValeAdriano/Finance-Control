@@ -12,6 +12,7 @@
     "test": "node --test testes/*.test.js",
     "teste:seguranca": "node testes/seguranca.js",
     "gera:icones": "node scripts/gera-icones.js",
+    "gera:icone-app": "node scripts/gera-icones-app.js",
     "gera:palco": "node scripts/gera-palco.js",
     "apk": "sh scripts/gera-apk.sh"
   },

@@ -22,7 +22,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/img/icone-192.png",
+      "favicon": "./public/favicon.ico",
       "name": "Bullz",
       "shortName": "Bullz",
       "backgroundColor": "#000000"
