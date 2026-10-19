@@ -71,6 +71,7 @@
         ["ativos", "Por mês", "Proventos recebidos mês a mês e os já anunciados."],
         ["info", "Próximos pagamentos", "Data com, data de pagamento e o valor que cabe a você pela quantidade que tinha na data com."],
         ["carteira", "Por ativo", "Quanto cada ativo paga por ano, o yield sobre o preço atual e a frequência."],
+        ["aportes", "Para onde vão os proventos", "Direto para você ou guardados num caixa (porquinho, cofrinho, saldo da corretora…) até reinvestir. O caixa pode render % do CDI, tem meta com aviso e, na compra, a parte que sai dele não conta como dinheiro novo: o valor extra do bolso sim."],
       ],
       dicas: ["Os valores vêm do Fundamentus e são atualizados a cada 12 horas.", "Para comparar pagadoras que você ainda não tem, use Investimentos → Pagadoras de dividendos."],
     },

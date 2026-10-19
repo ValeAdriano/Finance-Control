@@ -15,6 +15,7 @@ import { Icone } from "../ui/icone";
 import { ui, type ApiFolha } from "../ui/folha";
 import { abreAtivo } from "./comum/ativo";
 import { acharAtivo, adivinhaClasse, aportadoRf, depoisDeMudar } from "./comum/dados";
+import { UsoDoCaixa, useUsoDoCaixa } from "./comum/caixa-proventos";
 import FC from "../nucleo";
 
 const ok = (v: any) => FC.ok(v);
@@ -208,12 +209,32 @@ function Previa({ a }: { a: any }) {
   );
 }
 
-// ---------------------------------------------------------------- compra / venda
-function FormCompraVenda({ tipo, pre }: { tipo: "compra" | "venda"; pre: string }) {
+// ao reinvestir sem ativo escolhido: os ativos do plano do Salário
+function DestinosDoPlano({ aoEscolher }: { aoEscolher: (v: string) => void }) {
   const t = useTema();
+  const plano = FC.estado.prefs.plano || {};
+  const alvos: string[] = [...new Set<string>((plano.destinos || []).filter((d: any) => d.tipo === "ativo" && d.alvo).map((d: any) => d.alvo))];
+  if (!alvos.length) return null;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+      <T style={{ fontSize: 13, color: t.cores.ink2 }}>do seu plano:</T>
+      {alvos.slice(0, 6).map((s) => (
+        <Pressable key={s} onPress={() => aoEscolher(s)} accessibilityRole="button" style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 980, backgroundColor: t.cores.campo }}>
+          <Text style={{ fontSize: 13, color: t.cores.ink }}>{s}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------- compra / venda
+function FormCompraVenda({ tipo, pre, reinvestir }: { tipo: "compra" | "venda"; pre: string; reinvestir?: boolean }) {
+  const t = useTema();
+  // reinvestir: a compra já vem usando o caixa de proventos, com o saldo dele no valor
+  const uso = useUsoDoCaixa(!!reinvestir && tipo === "compra");
   const [ticker, setTicker] = useState(pre || "");
   const [qtd, setQtd] = useState("");
-  const [valor, setValor] = useState("");
+  const [valor, setValor] = useState(reinvestir && uso.temSaldo ? numTxt(Math.floor(uso.cx.saldo * 100) / 100) : "");
   const [classe, setClasse] = useState<string | null>(null);
   const [pilar, setPilar] = useState<string | null>(null);
   const [data, setData] = useState(FC.datas.hoje());
@@ -241,9 +262,11 @@ function FormCompraVenda({ tipo, pre }: { tipo: "compra" | "venda"; pre: string 
     try {
       if (!existe) await FC.db.inserir("ativos", { ticker: crip ? tt : tt.replace(/-/g, ""), classe: classeEf, pilar: pilarEf, lista: "carteira", quantidade: 0 });
     } catch (err) { ui.erro(err); return; }
+    const doCaixa = venda ? 0 : Number(uso.usado(vv).toFixed(2));
     const okGrava = await grava({ tipo: "ativo", ticker: existe ? existe.ticker : crip ? tt : tt.replace(/-/g, ""), quantidade: venda ? -qq : qq, preco: vv / qq,
-      valor: venda ? -vv : vv, data: data || FC.datas.hoje(), observacao: obs || "", venda }, venda ? "Venda registrada" : "Aporte registrado");
-    if (okGrava) { setQtd(""); setValor(""); setObs(""); }
+      valor: venda ? -vv : vv, data: data || FC.datas.hoje(), observacao: obs || "", venda, ...(doCaixa > 0 ? { do_provento: doCaixa } : {}) },
+      venda ? "Venda registrada" : doCaixa > 0 ? "Reinvestimento registrado" : "Aporte registrado");
+    if (okGrava) { setQtd(""); setValor(""); setObs(""); uso.limpa(); }
   };
 
   return (
@@ -252,6 +275,7 @@ function FormCompraVenda({ tipo, pre }: { tipo: "compra" | "venda"; pre: string 
         <Campo rotulo="Ativo">
           <Entrada valor={ticker} aoMudar={setTicker} maiusculas placeholder="BTC, PETR4, HGLG11…" accessibilityLabel="Ativo" />
           <Sugestoes valor={ticker} opcoes={sug} aoEscolher={setTicker} />
+          {reinvestir && !tk ? <DestinosDoPlano aoEscolher={setTicker} /> : null}
         </Campo>
         <Campo rotulo={cripto ? `Quantidade (${tk.split("-")[0].replace(/\d+$/, "") || "moedas"})` : "Quantidade"}>
           <Entrada valor={qtd} aoMudar={setQtd} decimal placeholder={cripto ? "0,00045" : "0"} accessibilityLabel="Quantidade" />
@@ -275,6 +299,7 @@ function FormCompraVenda({ tipo, pre }: { tipo: "compra" | "venda"; pre: string 
         <Campo rotulo="Data"><CampoData valor={data} aoMudar={setData} rotuloA11y="Data" /></Campo>
         <Campo rotulo="Observação"><Entrada valor={obs} aoMudar={setObs} maxLength={120} placeholder="corretora, motivo…" autoCapitalize="sentences" accessibilityLabel="Observação" /></Campo>
       </LinhaCampos>
+      {tipo === "compra" ? <UsoDoCaixa uso={uso} total={vv} /> : null}
       <Previa a={a} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: t.espaco.e3 }}>
         <T style={{ color: t.cores.ink2 }}>{qq > 0 && vv > 0 ? <>Preço por unidade <B>{FC.fmt.preco(vv / qq)}</B>{a && ok(a.preco) ? ` · agora ${FC.fmt.preco(a.preco)}` : ""}</> : ""}</T>
@@ -290,6 +315,7 @@ const INDEXADORES = [{ v: "cdi", rotulo: "% do CDI" }, { v: "selic", rotulo: "% 
 
 function FormCaixa() {
   const t = useTema();
+  const uso = useUsoDoCaixa(false);
   const titulos = FC.estado.base.rendaFixa.map((r: any) => r.nome);
   const [nome, setNome] = useState(titulos.length === 1 ? titulos[0] : "");
   const [op, setOp] = useState<"aporte" | "resgate">("aporte");
@@ -317,9 +343,11 @@ function FormCaixa() {
     // taxa própria do aporte (só quando informada; vazio = a do título)
     const propria = tt && op === "aporte" && (indAporte || FC.lerNum(taxaAporte) != null)
       ? { indexador: indAporte || tt.tipo, taxa: FC.lerNum(taxaAporte) ?? tt.taxa } : {};
-    const okG = await grava({ tipo: "caixa", titulo: tt ? tt.nome : n, valor: op === "resgate" ? -vv : vv, data: data || FC.datas.hoje(), observacao: obs || "", ...propria },
-      op === "resgate" ? "Resgate registrado" : "Aporte registrado");
-    if (okG) { setValor(""); setObs(""); }
+    const doCaixa = op === "resgate" ? 0 : Number(uso.usado(vv).toFixed(2));
+    const okG = await grava({ tipo: "caixa", titulo: tt ? tt.nome : n, valor: op === "resgate" ? -vv : vv, data: data || FC.datas.hoje(), observacao: obs || "", ...propria,
+      ...(doCaixa > 0 ? { do_provento: doCaixa } : {}) },
+      op === "resgate" ? "Resgate registrado" : doCaixa > 0 ? "Reinvestimento registrado" : "Aporte registrado");
+    if (okG) { setValor(""); setObs(""); uso.limpa(); }
   };
 
   return (
@@ -358,6 +386,7 @@ function FormCaixa() {
           </LinhaCampos>
         </Detalhes>
       ) : null}
+      {op === "aporte" ? <UsoDoCaixa uso={uso} total={FC.lerNum(valor) || 0} /> : null}
       {tt ? <T v="p">Saldo de hoje em <B>{tt.nome}</B>: <Rs style={{ fontSize: 13 }}>{FC.fmt.brlTexto(tv ? tv.valor_aplicado : 0)}</Rs>{tv && tv.rent ? ` (${tv.base})` : ""}. Este lançamento soma a ele.</T> : null}
       <View style={{ flexDirection: "row", justifyContent: "flex-end" }}><Botao onPress={registra}>Registrar</Botao></View>
     </Form>
@@ -415,7 +444,9 @@ function Historico() {
     if (mes !== mesAnt) linhas.push(<GrupoTitulo key={"m" + mes}>{MESES_LONGOS[Number(mes.slice(5)) - 1]} de {mes.slice(0, 4)}</GrupoTitulo>);
     mesAnt = mes;
     const cor = a.tipo === "provento" ? "verde" : a.tipo === "caixa" ? "azul" : a.venda || a.quantidade < 0 ? "amarelo" : "azul";
-    const rot = a.tipo === "provento" ? "Provento" : a.tipo === "caixa" ? (a.valor < 0 ? "Resgate" : "Renda fixa") : a.venda || a.quantidade < 0 ? "Venda" : "Compra";
+    const doCaixa = FC.caixaProventos.usado(FC.estado.base, a);
+    const rot = doCaixa > 0 ? "Reinvestimento" : a.tipo === "provento" ? "Provento" : a.tipo === "caixa" ? (a.valor < 0 ? "Resgate" : "Renda fixa") : a.venda || a.quantidade < 0 ? "Venda" : "Compra";
+    const partes = doCaixa > 0 ? `${FC.fmt.brlTexto(doCaixa)} dos proventos + ${FC.fmt.brlTexto(Math.max(0, a.valor - doCaixa))} novo` : "";
     linhas.push(
       <Item key={a.id}
         esquerda={<View style={{ width: 44, alignItems: "center" }}>
@@ -424,7 +455,7 @@ function Historico() {
         </View>}
         titulo={<View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <T style={{ fontWeight: "600", fontSize: 15 }} numberOfLines={1}>{a.tipo === "caixa" ? a.titulo : a.ticker}</T><Pilula cor={cor}>{rot}</Pilula></View>}
-        detalhe={`${a.tipo === "ativo" ? `${FC.fmt.qtd(Math.abs(a.quantidade))} × ${FC.fmt.preco(a.preco)}` : ""}${a.observacao ? (a.tipo === "ativo" ? " · " : "") + a.observacao : ""}${a.historico ? " · só na curva" : ""}`}
+        detalhe={`${a.tipo === "ativo" ? `${FC.fmt.qtd(Math.abs(a.quantidade))} × ${FC.fmt.preco(a.preco)}` : ""}${a.observacao ? (a.tipo === "ativo" ? " · " : "") + a.observacao : ""}${a.historico ? " · só na curva" : ""}${partes ? " · " + partes : ""}`}
         valores={<Rs cls={a.tipo === "provento" ? "pos" : null} style={{ fontWeight: "600", fontSize: 15 }}>{FC.fmt.brlTexto(a.valor)}</Rs>}
         direita={<BotaoIcone nome="lixo" tam={17} rotulo="Excluir lançamento" onPress={async () => {
           if (!(await ui.confirma("Excluir este lançamento? A posição e o preço médio são recalculados.", { botao: "Excluir", perigo: true }))) return;
@@ -554,10 +585,11 @@ function importar() {
 export default function Aportes() {
   const t = useTema();
   const e = useEstado();
-  const { ticker } = useLocalSearchParams<{ ticker?: string }>();
+  const { ticker, reinvestir: reinv } = useLocalSearchParams<{ ticker?: string; reinvestir?: string }>();
   const pre = String(ticker || "").toUpperCase();
-  const [tipo, setTipo] = useState<string>(pre ? "compra" : mem.tipo);
-  useEffect(() => { if (pre) setTipo("compra"); }, [pre]);
+  const reinvestir = reinv === "1";
+  const [tipo, setTipo] = useState<string>(pre || reinvestir ? "compra" : mem.tipo);
+  useEffect(() => { if (pre || reinvestir) setTipo("compra"); }, [pre, reinvestir]);
   if (!e.base || !e.dados) return <Pagina>{null}</Pagina>;
   const rec = recorrentes();
   return (
@@ -575,14 +607,15 @@ export default function Aportes() {
         </View>
       ) : null}
       <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: t.espaco.e3, marginTop: t.espaco.e4, marginBottom: t.espaco.e3 }}>
-        <T v="h2">Novo aporte</T><T v="sub">em algo que você já tem ou em algo novo</T>
+        {reinvestir && tipo === "compra" ? <><T v="h2">Reinvestir proventos</T><T v="sub">escolha o ativo; se quiser, aumente o valor com dinheiro do bolso</T></>
+          : <><T v="h2">Novo aporte</T><T v="sub">em algo que você já tem ou em algo novo</T></>}
       </View>
       <Cartao>
         <View style={{ marginBottom: t.espaco.e4 }}>
           <Segmentado rotuloA11y="Tipo de lançamento" valor={tipo} aoMudar={(v) => { mem.tipo = v; setTipo(v); }}
             opcoes={[{ v: "compra", rotulo: "Compra" }, { v: "venda", rotulo: "Venda" }, { v: "caixa", rotulo: "Renda fixa" }, { v: "provento", rotulo: "Provento" }]} />
         </View>
-        {tipo === "compra" || tipo === "venda" ? <FormCompraVenda key={tipo + pre} tipo={tipo as any} pre={pre} />
+        {tipo === "compra" || tipo === "venda" ? <FormCompraVenda key={tipo + pre + (reinvestir ? ":r" : "")} tipo={tipo as any} pre={pre} reinvestir={reinvestir && tipo === "compra"} />
           : tipo === "caixa" ? <FormCaixa /> : <FormProvento />}
       </Cartao>
       <Historico />

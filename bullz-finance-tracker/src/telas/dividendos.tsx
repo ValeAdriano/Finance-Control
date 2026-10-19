@@ -14,6 +14,7 @@ import { ui } from "../ui/folha";
 import { EstadoMercado } from "./comum/alertas";
 import { abreAtivo } from "./comum/ativo";
 import { depoisDeMudar } from "./comum/dados";
+import { CartaoCaixaProventos, ConfigCaixaProventos } from "./comum/caixa-proventos";
 import FC from "../nucleo";
 
 const ok = (v: any) => FC.ok(v);
@@ -57,6 +58,7 @@ export default function Dividendos() {
   const e = useEstado();
   const { estreito } = useMedidas();
   const [recebidosAbertos, setRecebidosAbertos] = useState(false);
+  const [configCaixa, setConfigCaixa] = useState(false);
   const pronto = !!(e.proventos && e.mercado.universo);
   useEffect(() => { if (!e.proventos && e.mercado.universo) FC.carregaProventos().then(() => rerender()); }, [e.proventos, e.mercado.universo]);
   const cab = (direita?: React.ReactNode) => <Cabecalho titulo="Dividendos" sub="Quanto suas ações e FIIs pagam, e quando." direita={direita} />;
@@ -114,6 +116,10 @@ export default function Dividendos() {
         </View>
       </Cartao>
       <T v="p" style={{ marginTop: t.espaco.e3 }}>Estimativa = o que cada ação pagou por cota nos últimos 12 meses × a quantidade que você tem hoje ÷ 12. JCP entra líquido do IR de 15%. Fonte: Fundamentus (data com e data de pagamento de cada provento).</T>
+
+      <Secao titulo="Para onde vão os proventos" sub="direto para você ou guardados até reinvestir">
+        {configCaixa ? <ConfigCaixaProventos aoFechar={() => setConfigCaixa(false)} /> : <CartaoCaixaProventos aoConfigurar={() => setConfigCaixa(true)} />}
+      </Secao>
 
       <Secao titulo="Por mês" sub="pela data de pagamento · meses futuros com o que já foi anunciado">
         <Cartao>

@@ -16,6 +16,7 @@ import { CampoData, Segmentado } from "../ui/campos";
 import { Grafico } from "../ui/grafico";
 import { Icone } from "../ui/icone";
 import { EstadoMercado } from "./comum/alertas";
+import { caixaAtual } from "./comum/caixa-proventos";
 import { abreAtivo } from "./comum/ativo";
 import { formAtivo, formRendaFixa } from "./comum/formularios";
 import { CartaoPerfil, CartaoPlanoRealidade, ChecklistAtivacao } from "./comum/perfil";
@@ -593,6 +594,7 @@ function RendaPassiva({ div }: { div: any }) {
   const alvo = FC.objetivos(FC.estado.prefs).renda_desejada_mensal;
   if (!(mensal > 0) && !alvo) return null;
   const pct = alvo ? Math.min(100, (mensal / alvo) * 100) : null;
+  const cx = caixaAtual();
   return (
     <Secao titulo="Renda passiva" sub="o que a carteira deposita sem você vender nada"
       direita={<Botao variante="texto" pequeno onPress={() => vai("/dividendos")}>Dividendos ›</Botao>}>
@@ -601,6 +603,8 @@ function RendaPassiva({ div }: { div: any }) {
           <Kpi rotulo="Você recebe por mês" ajuda="Média mensal dos proventos dos últimos 12 meses, já sem o IR do JCP. Sem pagamentos no período, a estimativa pelos proventos de cada ativo."
             valor={FC.fmt.brlTexto(mensal)} dinheiro cls="pos" peq={media > 0 ? "média dos últimos 12 meses, líquida" : "estimado pelos proventos de 12 meses"} />
           {alvo ? <Kpi rotulo="Sua meta" valor={FC.fmt.brlTexto(alvo)} dinheiro peq="por mês, para viver de renda" /> : null}
+          {cx ? <Kpi rotulo={`No ${cx.nome}`} valor={FC.fmt.brlTexto(cx.saldo)} dinheiro
+            peq={cx.pronto ? "passou da meta: hora de reinvestir" : cx.meta > 0 ? `faltam ${FC.fmt.brlTexto(cx.falta)} para reinvestir` : "esperando o reinvestimento"} /> : null}
         </Kpis>
         {alvo ? (
           <>
