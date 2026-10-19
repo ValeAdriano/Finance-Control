@@ -7,7 +7,7 @@ const vm = require("vm");
 const { aplicaShim, localStorageMemoria } = require("../src/nucleo/shim.js");
 const ORDEM = require("../src/nucleo/ordem.js");
 
-const RAIZ_JS = path.resolve(__dirname, "..", "..", "investimentos-compartilhar", "assets", "js");
+const RAIZ_JS = path.resolve(__dirname, "..", "nucleo");
 
 /** Carrega o núcleo e devolve { FC, contexto }. `extras` injeta supabase/zip. */
 function carregaNucleo(extras = {}) {

@@ -21,8 +21,7 @@ const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 
-const SITE = path.resolve(__dirname, "..", "..", "investimentos-compartilhar");
-const cfg = fs.readFileSync(path.join(SITE, "assets/js/config.js"), "utf8");
+const cfg = fs.readFileSync(path.resolve(__dirname, "..", "nucleo", "config.js"), "utf8");
 const URL_SB = /supabaseUrl:\s*"([^"]+)"/.exec(cfg)[1];
 const CHAVE = /supabaseChave:\s*"([^"]+)"/.exec(cfg)[1];
 

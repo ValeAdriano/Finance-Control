@@ -1,4 +1,8 @@
 .env*
+!supabase/.env.example
+
+# arquivos temporários da CLI do Supabase
+supabase/.temp/
 node_modules/
 
 # Expo

@@ -11,14 +11,14 @@ import { Icone, type NomeIcone } from "../ui/icone";
 import { ui } from "../ui/folha";
 import FC from "../nucleo";
 
-const ICONE_APPLE = require("../../assets/img/apple-touch-icon.png");
-const ICONE_192 = require("../../assets/img/icone-192.png");
+// o ícone que vai para a tela inicial (scripts/gera-icones-app.js), não a logo solta
+const ICONE_APP = require("../../assets/img/app/icone-app-1024.png");
 
-function Topo({ sub, ios }: { sub: string; ios?: boolean }) {
+function Topo({ sub }: { sub: string }) {
   const t = useTema();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingTop: 8, paddingHorizontal: 4, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: t.cores.linha }}>
-      <Image source={ios ? ICONE_APPLE : ICONE_192} accessibilityLabel="Bullz" style={{ width: 56, height: 56, borderRadius: 14, boxShadow: t.cores.sombra } as any} />
+      <Image source={ICONE_APP} accessibilityLabel="Bullz" style={{ width: 56, height: 56, borderRadius: 14, boxShadow: t.cores.sombra } as any} />
       <View>
         <T style={{ fontSize: 18, fontWeight: "700", letterSpacing: -0.36 }}>Bullz</T>
         <T style={{ fontSize: 13, color: t.cores.ink2, marginTop: 2 }}>{sub}</T>
@@ -80,7 +80,7 @@ export function abreGuiaInstalacao() {
     titulo: "Adicionar à Tela de Início",
     corpo: (api) => disp.ehIOS ? (
       <View>
-        <Topo ios sub="Adicionar à Tela de Início no iOS" />
+        <Topo sub="Adicionar à Tela de Início no iOS" />
         <Passos itens={[
           <>Toque no botão de <B>Compartilhar</B> <Pill icone="compartilhar">Compartilhar</Pill> na barra do Safari (na parte inferior do iPhone ou no topo do iPad).</>,
           <>Role a lista de ações para baixo e selecione <Pill icone="adicionarTela">Adicionar à Tela de Início</Pill>.</>,
@@ -154,7 +154,7 @@ export function BannerInstalar() {
         flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: t.cores.linha,
         backgroundColor: t.cores.vidroForte, boxShadow: t.cores.sombraAlta, backdropFilter: "blur(24px) saturate(180%)",
         opacity: a, transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] } as any}>
-      <Image source={FC.dispositivo.ehIOS ? ICONE_APPLE : ICONE_192} style={{ width: 42, height: 42, borderRadius: 11 }} accessibilityLabel="App" />
+      <Image source={ICONE_APP} style={{ width: 42, height: 42, borderRadius: 11 }} accessibilityLabel="App" />
       <View style={{ flex: 1, minWidth: 0 }}>
         <T style={{ fontSize: 14, fontWeight: "600", lineHeight: 17.5 }}>Adicionar à Tela de Início</T>
         <T style={{ fontSize: 12, color: t.cores.ink2, lineHeight: 16, marginTop: 2 }}>{FC.dispositivo.ehIOS ? "Abra em tela cheia como app no seu iPhone" : "Instale no celular para acesso rápido"}</T>

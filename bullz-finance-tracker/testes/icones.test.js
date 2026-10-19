@@ -1,5 +1,5 @@
 /* F1 — paridade de ícones (T4): src/ui/icones.gen.ts tem que ser idêntico ao
- * dicionário `P` de ../investimentos-compartilhar/assets/js/util.js.
+ * dicionário `P` de nucleo/util.js.
  *
  *   node --test testes/icones.test.js */
 const test = require("node:test");
@@ -10,7 +10,7 @@ const vm = require("vm");
 
 function dicionarioDoSite() {
   const util = fs.readFileSync(
-    path.resolve(__dirname, "..", "..", "investimentos-compartilhar", "assets", "js", "util.js"), "utf8");
+    path.resolve(__dirname, "..", "nucleo", "util.js"), "utf8");
   const ini = util.indexOf("const P = {");
   let i = util.indexOf("{", ini), nivel = 0, fim = -1;
   for (let j = i; j < util.length; j++) {

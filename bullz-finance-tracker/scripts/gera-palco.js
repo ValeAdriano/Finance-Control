@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 const RAIZ = path.resolve(__dirname, "..");
-const SITE = path.resolve(RAIZ, "..", "investimentos-compartilhar", "assets");
+const NUCLEO = path.resolve(RAIZ, "nucleo");
 const le = (...p) => fs.readFileSync(path.join(...p), "utf8");
 
 // ícones que o player usa, do mesmo dicionário do app (src/ui/icones.gen.ts)
@@ -35,8 +35,8 @@ for (const n of NOMES) {
   icones[n] = JSON.parse(m[1]);
 }
 
-const logo = "data:image/png;base64," + fs.readFileSync(path.join(SITE, "img", "icone-512.png")).toString("base64");
-let promo = le(SITE, "js", "promo", "promo.js");
+const logo = "data:image/png;base64," + fs.readFileSync(path.join(RAIZ, "assets", "img", "icone-512.png")).toString("base64");
+let promo = le(NUCLEO, "promo", "promo.js");
 if (!promo.includes('"assets/img/icone-512.png"')) throw new Error("promo.js não carrega mais assets/img/icone-512.png: revise o gerador");
 promo = promo.replace('"assets/img/icone-512.png"', "LOGO_PALCO");
 
@@ -46,9 +46,9 @@ const base = le(RAIZ, "src", "recap", "motor-base.js")
 if (/= __(ICONES|LOGO)__/.test(base)) throw new Error("motor-base.js mudou: não achei onde pôr os ícones e o logo");
 const partes = [
   ["motor-base.js", base],
-  ["modelo/retrospectiva.js", le(SITE, "js", "modelo", "retrospectiva.js")],
-  ["recap/render.js", le(SITE, "js", "recap", "render.js")],
-  ["recap/audio.js", le(SITE, "js", "recap", "audio.js")],
+  ["modelo/retrospectiva.js", le(NUCLEO, "modelo", "retrospectiva.js")],
+  ["recap/render.js", le(NUCLEO, "recap", "render.js")],
+  ["recap/audio.js", le(NUCLEO, "recap", "audio.js")],
   ["promo/promo.js", promo],
   ["motor.js", le(RAIZ, "src", "recap", "motor.js")],
 ];
@@ -59,7 +59,7 @@ const CSS = le(RAIZ, "src", "recap", "palco.css");
 
 const cab = "GERADO por scripts/gera-palco.js — não edite à mão.";
 fs.writeFileSync(path.join(RAIZ, "src", "recap", "palco.gen.ts"),
-  `/* ${cab}\n * Fontes: ../investimentos-compartilhar/assets (modelo/retrospectiva.js, recap/*, promo/promo.js,\n * img/icone-512.png) + src/recap/motor-base.js, motor.js e palco.css. */\n/* eslint-disable */\n` +
+  `/* ${cab}\n * Fontes: nucleo/ (modelo/retrospectiva.js, recap/*, promo/promo.js),\n * assets/img/icone-512.png + src/recap/motor-base.js, motor.js e palco.css. */\n/* eslint-disable */\n` +
   `export const MOTOR = ${JSON.stringify(MOTOR)};\nexport const CSS = ${JSON.stringify(CSS)};\n`);
 
 const PUB = path.join(RAIZ, "public");

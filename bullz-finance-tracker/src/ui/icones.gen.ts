@@ -1,6 +1,6 @@
 /* GERADO por scripts/gera-icones.js — não edite à mão.
- * Fonte: ../investimentos-compartilhar/assets/js/util.js (dicionário P).
- * 46 ícones. Rode o gerador de novo quando o site mudar os ícones. */
+ * Fonte: nucleo/util.js (dicionário P).
+ * 46 ícones. Rode o gerador de novo quando nucleo/util.js mudar os ícones. */
 
 export const ICONES = {
   "inicio": "<path d=\"M3.5 10.8 12 4l8.5 6.8\"/><path d=\"M5.8 9.2V18.5a1.5 1.5 0 0 0 1.5 1.5h9.4a1.5 1.5 0 0 0 1.5-1.5V9.2\"/><path d=\"M10 20v-4.5a2 2 0 0 1 4 0V20\"/>",

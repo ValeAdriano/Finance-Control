@@ -1,4 +1,4 @@
-/* GERADO de ../investimentos-compartilhar/assets/js/telas/ajuda.js (objeto GUIAS) — mesmo texto do site. */
+/* Textos dos guias de cada tela (vieram do objeto GUIAS do site original; agora a fonte é aqui). */
 /* eslint-disable */
 export const GUIAS: Record<string, { resumo: string; partes: [string, string, string][]; dicas?: string[] }> = {
     perfil: {

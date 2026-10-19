@@ -6,7 +6,7 @@ const expo = require("eslint-config-expo/flat");
 
 module.exports = [
   ...expo,
-  { ignores: ["ferramentas/**", "src/ui/icones.gen.ts", "node_modules/**", "dist/**", ".expo/**", "testes/**", "scripts/**",
+  { ignores: ["ferramentas/**", "nucleo/**", "supabase/**", "src/ui/icones.gen.ts", "node_modules/**", "dist/**", ".expo/**", "testes/**", "scripts/**",
     // o motor do palco roda dentro da WebView/iframe, em JS de navegador (ES5, var), e os gerados
     "public/**", "src/recap/motor*.js", "src/recap/palco.gen.ts", "src/telas/guias.gen.ts"] },
   {
