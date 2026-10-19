@@ -17,7 +17,8 @@ t("sem layout salvo vale o padrão", () => {
   igual(l.nav.ordem, ["inicio", "ativos", "agro", "aportes", "dividendos", "salario"]);
   igual(l.nav.celular, ["inicio", "ativos", "agro", "aportes"]);
   igual(l.inicio.ordem, FC.LAYOUT_INICIO.map((b) => b.id));
-  igual(l.inicio.ocultos, []);
+  igual(l.inicio.ocultos, FC.LAYOUT_INICIO.filter((b) => b.padraoOculto).map((b) => b.id));
+  assert.ok(l.inicio.ocultos.includes("detalhes") && !l.inicio.ocultos.includes("curva"));
 });
 t("módulo desligado sai do menu e o celular preenche", () => {
   igual(FC.layout.resolve(null, semAgro).nav.celular, ["inicio", "ativos", "aportes", "dividendos"]);
@@ -49,6 +50,25 @@ t("paraSalvar: padrão vira null e só guarda o que difere", () => {
   igual(Object.keys(s).sort(), ["inicio", "nav"]);
   igual(s.inicio, { ocultos: ["agro"] });
   igual(FC.layout.resolve(s, tudo), mexido);
+});
+t("layout já salvo é respeitado: brutos que estavam visíveis continuam; os novos entram no fim, visíveis", () => {
+  const antigo = { inicio: { ordem: ["topo", "detalhes", "alocacao"], ocultos: ["agro"] } };
+  const l = FC.layout.resolve(antigo, tudo);
+  igual(l.inicio.ocultos, ["agro"]);
+  igual(l.inicio.ordem.slice(0, 3), ["topo", "detalhes", "alocacao"]);
+  assert.ok(l.inicio.ordem.includes("curva") && !l.inicio.ocultos.includes("curva"));
+  // salvo só com a ordem (formato antigo, sem ocultos): nenhum oculto
+  igual(FC.layout.resolve({ inicio: { ordem: ["melhores"] } }, tudo).inicio.ocultos, []);
+});
+t("paraSalvar: mostrar um bruto e mexer na ordem sobrevive à volta", () => {
+  const padrao = FC.layout.resolve(null, tudo);
+  const tudoVisivel = { ...padrao, inicio: { ordem: padrao.inicio.ordem, ocultos: [] } };
+  const s = FC.layout.paraSalvar(tudoVisivel, padrao);
+  igual(s.inicio, { ocultos: [] });
+  igual(FC.layout.resolve(s, tudo).inicio.ocultos, []);
+  const reordenado = { ...padrao, inicio: { ordem: FC.layout.move(padrao.inicio.ordem, 4, 2), ocultos: padrao.inicio.ocultos } };
+  const s2 = FC.layout.paraSalvar(reordenado, padrao);
+  igual(FC.layout.resolve(s2, tudo).inicio, reordenado.inicio);
 });
 t("move reordena sem mutar", () => {
   const a = ["a", "b", "c", "d"];

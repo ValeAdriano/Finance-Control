@@ -23,6 +23,7 @@ module.exports = [
   "modelo/importador.js",
   "modelo/dividendos.js",
   "modelo/caixa-proventos.js",
+  "modelo/desempenho.js",
   "modelo/impostos.js",
   "modelo/alertas.js",
   "modelo/salario.js",

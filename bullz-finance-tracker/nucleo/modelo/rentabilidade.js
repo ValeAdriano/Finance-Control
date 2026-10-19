@@ -446,7 +446,9 @@
   // (FC.dividendos.analisa(...).pagamentos) saem do fluxo na data de
   // pagamento — o dinheiro voltou ao bolso e conta como rendimento (com
   // caixa de proventos, ficam no saldo dele em vez de sair);
-  // "proventos" acumula só eles.
+  // "proventos" acumula só eles. "partes" separa valor e fluxo em renda
+  // variável (rv: ações, FIIs, ETFs e cripto), renda fixa (rf: títulos e o
+  // caixa de proventos) e agro, para medir cada uma contra a sua referência.
   function serieDiaria(base, mercado, ix, prefs, valorHoje, pagamentos = []) {
     const hoje = D().hoje(), hist = (mercado && mercado.historicos) || {}, spot = (mercado && mercado.spot) || {};
     const eventos = [];       // {data, ticker, q, custo}
@@ -482,9 +484,9 @@
     // aconteceu dentro do gráfico)
     for (const e of eventos) {
       const p = e.id === "inicial" ? precoDia(e.ticker, e.data) ?? e.preco : e.preco ?? precoDia(e.ticker, e.data);
-      if (p != null) fluxos.push([e.data, e.q * p]);
+      if (p != null) fluxos.push([e.data, e.q * p, 0, "rv"]);
     }
-    for (const ls of titulos) for (const l of ls) fluxos.push([l.data, l.valor]);
+    for (const ls of titulos) for (const l of ls) fluxos.push([l.data, l.valor, 0, "rf"]);
     // caixa de proventos ligado: o provento que vai para ele não sai do
     // fluxo (o dinheiro continua na carteira, no saldo do caixa) e a parte da
     // compra paga com o caixa não é dinheiro novo
@@ -494,36 +496,47 @@
     const noCaixa = new Set(cxProv ? cxProv.entradas.filter((e) => e.fluxo).map((e) => e.origem) : []);
     for (const p of pagamentos || []) {
       if (!(p.status === "pago" && p.valor && (p.pagamento || p.data_com)) || noCaixa.has(p.origem)) continue;
-      fluxos.push([p.pagamento || p.data_com, -p.valor, -p.valor]);
+      fluxos.push([p.pagamento || p.data_com, -p.valor, -p.valor, "rv"]);
     }
     if (cxProv) {
-      for (const e of cxProv.entradas) fluxos.push([e.data, 0, -e.valor]);
-      for (const s of cxProv.saidas) if (s.usado > 0) fluxos.push([s.data, -s.usado]);
+      // o provento sai da renda variável (rendimento dela) e entra no caixa
+      for (const e of cxProv.entradas) { fluxos.push([e.data, -e.valor, -e.valor, "rv"]); fluxos.push([e.data, e.valor, 0, "rf"]); }
+      for (const s of cxProv.saidas) if (s.usado > 0) fluxos.push([s.data, -s.usado, 0, "rf"]);
     }
-    for (const f of cxAgro.fluxos) if (f.aporte || f.saque) fluxos.push([f.data, f.aporte - f.saque]);
+    for (const f of cxAgro.fluxos) if (f.aporte || f.saque) fluxos.push([f.data, f.aporte - f.saque, 0, "agro"]);
     fluxos.sort((a, b) => a[0].localeCompare(b[0]));
 
     const pontos = [];
     const pos = {};
     let ie = 0, ifl = 0, acum = 0, prov = 0;
+    const flParte = { rv: 0, rf: 0, agro: 0 };
     const evs = eventos.slice().sort((a, b) => a.data.localeCompare(b.data));
     for (let d = inicio; d <= hoje; d = D().soma(d, 1)) {
       while (ie < evs.length && evs[ie].data <= d) { pos[evs[ie].ticker] = (pos[evs[ie].ticker] || 0) + evs[ie].q; ie++; }
-      while (ifl < fluxos.length && fluxos[ifl][0] <= d) { acum += fluxos[ifl][1]; if (fluxos[ifl][2]) prov -= fluxos[ifl][2]; ifl++; }
-      let v = 0, faltou = false;
+      while (ifl < fluxos.length && fluxos[ifl][0] <= d) {
+        const f = fluxos[ifl];
+        acum += f[1]; if (f[2]) prov -= f[2]; if (f[3]) flParte[f[3]] += f[1]; ifl++;
+      }
+      let rv = 0, rf = 0, faltou = false;
       for (const [t, q] of Object.entries(pos)) {
         if (q <= 1e-12) continue;
         const p = precoDia(t, d);
         if (p == null) { faltou = true; continue; }
-        v += q * p;
+        rv += q * p;
       }
-      for (const ls of titulos) v += valorTituloEm(ls, ix, d);
-      v += valorAgro(d);
-      if (cxProv) v += cxProv.saldoEm(d);
-      pontos.push({ data: d, valor: v, fluxo: acum, proventos: prov, incompleto: faltou });
+      for (const ls of titulos) rf += valorTituloEm(ls, ix, d);
+      if (cxProv) rf += cxProv.saldoEm(d);
+      const ag = valorAgro(d);
+      pontos.push({ data: d, valor: rv + rf + ag, fluxo: acum, proventos: prov, incompleto: faltou,
+        partes: { rv: { valor: rv, fluxo: flParte.rv }, rf: { valor: rf, fluxo: flParte.rf }, agro: { valor: ag, fluxo: flParte.agro } } });
     }
     // o ponto de hoje usa os preços de agora, igual ao patrimônio do topo
-    if (valorHoje != null && pontos.length) pontos.at(-1).valor = valorHoje;
+    // (a diferença é de cotação: vai para a renda variável)
+    if (valorHoje != null && pontos.length) {
+      const u = pontos.at(-1);
+      u.partes.rv.valor = Math.max(0, u.partes.rv.valor + valorHoje - u.valor);
+      u.valor = valorHoje;
+    }
     return { pontos, inicio };
   }
 
