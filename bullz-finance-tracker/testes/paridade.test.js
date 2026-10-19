@@ -38,12 +38,13 @@ test("N1 · namespaces de cálculo presentes e do tipo certo", () => {
 });
 
 // ---------------------------------------------------------------- N1 ordem de carga
-test("N1 · ordem.js é o subconjunto não-tela do index.html, na mesma ordem", () => {
-  const html = fs.readFileSync(path.join(RAIZ_JS, "..", "..", "index.html"), "utf8");
-  const scripts = [...html.matchAll(/src="assets\/js\/([^"]+)"/g)].map((m) => m[1]);
-  // o que a gente carrega tem que aparecer no index.html, na mesma ordem relativa
-  const noHtml = scripts.filter((s) => ORDEM.includes(s));
-  igual(noHtml, ORDEM, "ordem de carga divergiu do index.html");
+test("N1 · ordem.js é a mesma ordem dos requires do app (src/nucleo/index.ts)", () => {
+  const ts = fs.readFileSync(path.join(__dirname, "..", "src", "nucleo", "index.ts"), "utf8");
+  const req = [...ts.matchAll(/require\("\.\.\/\.\.\/nucleo\/([^"]+)"\)/g)].map((m) => m[1]);
+  // o que a gente carrega nos testes tem que ser o que o app carrega, na mesma ordem
+  const noApp = req.filter((s) => ORDEM.includes(s));
+  igual(noApp, ORDEM, "ordem de carga divergiu de src/nucleo/index.ts");
+  for (const f of ORDEM) assert.ok(fs.existsSync(path.join(RAIZ_JS, f)), `${f} não existe em nucleo/`);
 });
 
 // ---------------------------------------------------------------- N12 perfil

@@ -1,8 +1,0 @@
-# só o site estático vai para a Vercel
-legado-python
-supabase
-.env
-.env.example
-*.md
-tests
-scripts

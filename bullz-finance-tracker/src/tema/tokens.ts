@@ -1,4 +1,4 @@
-/* Tokens visuais — espelho de ../investimentos-compartilhar/assets/css/app.css.
+/* Tokens visuais — vieram de assets/css/app.css do site original; agora a fonte é aqui.
  *
  * CLARO e ESCURO guardam os valores EXATAMENTE como no CSS (strings, com os
  * mesmos espaços), para o teste de paridade T1/T2 (testes/tema.test.js) poder

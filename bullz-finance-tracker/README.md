@@ -1,10 +1,8 @@
 # Bullz Finance Tracker (React Native)
 
-Migração do **Bullz** (`../investimentos-compartilhar/`) para React Native, rodando em
-**iOS, Android e web** (React Native Web). O objetivo é ficar **igual** ao sistema atual: mesmas
-telas, mesmos números, mesmo banco.
-
-O site atual é a referência viva. Nada aqui é considerado pronto sem comparação lado a lado.
+O **Bullz** em React Native, rodando em **iOS, Android e web** (React Native Web). Nasceu como
+migração do site original em HTML/CSS/JS puros, que foi desativado e removido do repositório em
+2026-10-19: o núcleo de cálculo dele (`nucleo/`) e o banco (`supabase/`) agora moram aqui.
 
 ## Documentos
 
@@ -13,14 +11,18 @@ O site atual é a referência viva. Nada aqui é considerado pronto sem compara�
 | [`PLANO.md`](PLANO.md) | fases, tarefas, critérios de aceite e como cada etapa é comparada |
 | [`PARIDADE.md`](PARIDADE.md) | matriz tela × estado × elemento, com o status de cada item |
 | [`ROTEIROS.md`](ROTEIROS.md) | fluxos de teste escritos uma vez e rodados no site e no app |
+| [`nucleo/README.md`](nucleo/README.md) | o núcleo de cálculo: arquitetura, banco, perfil, segurança, preços, manutenção do Supabase |
+
+`PLANO.md`, `PARIDADE.md` e `ROTEIROS.md` são o registro da migração e citam o site original como
+referência; ele não existe mais.
 
 ## Ideia central
 
-- **Os cálculos não são reescritos.** O app carrega os mesmos arquivos de
-  `../investimentos-compartilhar/assets/js/` (`padroes.js`, `layout.js`, `util.js`, `supa.js` e
-  `modelo/*`) por um adaptador. Uma única fonte da verdade.
-- **O banco não muda.** Mesmo projeto Supabase, mesmas tabelas, RLS, RPCs e Edge Function.
-- **O visual vem dos mesmos tokens** de `assets/css/app.css` (claro/escuro, raios, espaços, curvas).
+- **Os cálculos vieram do site sem reescrever.** O app carrega os arquivos de `nucleo/`
+  (`padroes.js`, `layout.js`, `util.js`, `supa.js` e `modelo/*`, JS de navegador) por um
+  adaptador (`src/nucleo/`). Mudou uma regra de cálculo? É ali.
+- **O banco é o mesmo.** Projeto Supabase, tabelas, RLS, RPCs e Edge Functions em `supabase/`.
+- **O visual** vem dos tokens de `src/tema/tokens.ts` (claro/escuro, raios, espaços, curvas).
 
 ## Estado
 
@@ -48,7 +50,9 @@ sintético) ou `?fixture=vazia` (conta nova). No nativo: `EXPO_PUBLIC_FIXTURE=1 
 | pasta | o quê |
 |---|---|
 | `app/` | rotas do expo-router, com os mesmos nomes das rotas do site |
-| `src/nucleo/` | adaptador que carrega os arquivos de cálculo do site (shim de navegador + ordem do `index.html`) |
+| `nucleo/` | o núcleo de cálculo (JS de navegador vindo do site original) |
+| `supabase/` | `schema.sql` e as Edge Functions `mercado` e `acesso` |
+| `src/nucleo/` | adaptador que carrega `nucleo/` (shim de navegador + ordem de `ordem.js`) |
 | `src/estado/` | `FC.estado` + zustand (rerender), login, cotações, telemetria |
 | `src/casca/` | topo, barra de abas, "Mais", página |
 | `src/telas/` | as telas (uma por arquivo, port de `telas/*.js`) |
@@ -70,7 +74,7 @@ Rode de novo quando o site mudar a fonte correspondente:
 ## Verificações
 
 ```
-npm test             # paridade com as fontes do site (node --test)
+npm test             # núcleo, caixa de proventos, perfil, layout, palco e ícones (node --test)
 npm run lint
 npx tsc --noEmit
 ```
@@ -161,9 +165,8 @@ O APK fica em `android/app/build/outputs/apk/release/app-release.apk`.
 
 ## Deploy web (Vercel)
 
-**O app React Native é o site principal.** O site antigo em `../investimentos-compartilhar/`
-(HTML, CSS e JS puros) fica como backup: continua no repositório e continua sendo a fonte dos
-cálculos que o app carrega.
+**O app React Native é o site.** O site antigo (HTML, CSS e JS puros) foi removido do
+repositório; o projeto da Vercel tem de apontar para este diretório.
 
 O `vercel.json` deste diretório faz tudo: `npm ci` → `npx expo export -p web` → `dist/`, como
 SPA, com os mesmos headers de segurança do site (CSP sem script inline; o player da
@@ -173,10 +176,9 @@ retrospectiva roda em `/palco.html`, servido de `'self'`).
 
 No painel da Vercel, no projeto que hoje serve o site:
 
-1. **Settings → General → Root Directory**: troque `investimentos-compartilhar` por
-   `bullz-finance-tracker`.
-2. Na mesma tela, deixe **ligado** *Include source files outside of the Root Directory in the Build Step*:
-   o app lê os cálculos de `../investimentos-compartilhar/assets/js` durante o build.
+1. **Settings → General → Root Directory**: `bullz-finance-tracker`.
+2. *Include source files outside of the Root Directory in the Build Step* pode ficar desligado:
+   o núcleo (`nucleo/`) e o banco (`supabase/`) estão dentro deste diretório.
 3. **Framework Preset**: *Other* (o `vercel.json` já define build, saída e headers).
    **Node.js Version**: 22.x (ou 20.x).
 4. **Environment Variables**: nenhuma é necessária. Não defina `EXPO_PUBLIC_FIXTURE` (ela liga
@@ -192,12 +194,9 @@ não precisa mudar.
 
 ### Voltar para o site antigo (rollback)
 
-- **Imediato:** em *Deployments*, escolha o último deploy do site antigo → *Promote to Production*.
-- **Definitivo:** volte o Root Directory para `investimentos-compartilhar` e faça redeploy.
-
-Para manter o site antigo no ar como backup em outro endereço, crie um **segundo projeto** na
-Vercel apontando para o mesmo repositório com Root Directory `investimentos-compartilhar` (o
-`vercel.json` de lá já está pronto) e um domínio como `backup.seudominio.com`.
+O site antigo não está mais no repositório. Para vê-lo de novo, use um deploy antigo dele em
+*Deployments → Promote to Production*, ou recupere a pasta `investimentos-compartilhar/` do
+histórico do git (último commit que a tem: o anterior à remoção).
 
 ### Testar o build de produção localmente
 

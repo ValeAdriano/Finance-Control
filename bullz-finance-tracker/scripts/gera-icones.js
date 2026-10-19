@@ -1,5 +1,5 @@
 /* Gera src/ui/icones.gen.ts a partir do dicionário `P` de
- * ../investimentos-compartilhar/assets/js/util.js — fonte única dos ícones.
+ * nucleo/util.js — fonte única dos ícones.
  *
  *   node scripts/gera-icones.js
  *
@@ -11,7 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const UTIL = path.resolve(__dirname, "..", "..", "investimentos-compartilhar", "assets", "js", "util.js");
+const UTIL = path.resolve(__dirname, "..", "nucleo", "util.js");
 const SAIDA = path.resolve(__dirname, "..", "src", "ui", "icones.gen.ts");
 
 const fonte = fs.readFileSync(UTIL, "utf8");
@@ -36,8 +36,8 @@ if (!nomes.length) throw new Error("dicionário de ícones vazio");
 
 const linhas = nomes.map((n) => `  ${JSON.stringify(n)}: ${JSON.stringify(P[n])},`).join("\n");
 const ts = `/* GERADO por scripts/gera-icones.js — não edite à mão.
- * Fonte: ../investimentos-compartilhar/assets/js/util.js (dicionário P).
- * ${nomes.length} ícones. Rode o gerador de novo quando o site mudar os ícones. */
+ * Fonte: nucleo/util.js (dicionário P).
+ * ${nomes.length} ícones. Rode o gerador de novo quando nucleo/util.js mudar os ícones. */
 
 export const ICONES = {
 ${linhas}

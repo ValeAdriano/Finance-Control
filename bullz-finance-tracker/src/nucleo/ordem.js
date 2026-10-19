@@ -1,11 +1,10 @@
-/* Ordem de carga do núcleo — a MESMA do index.html do site, só o que não é
- * tela (cálculo, dados e utilidades). Fonte única: se o index.html mudar, esta
- * lista muda junto (há um teste de paridade que compara as duas).
+/* Ordem de carga do núcleo (nucleo/): cálculo, dados e utilidades, na ordem
+ * em que um arquivo depende do outro. É a mesma dos requires literais de
+ * src/nucleo/index.ts (há um teste de paridade que compara as duas).
  *
- * NÃO entram aqui: telas (telas/*), recap/*, promo/*, uso.js e app.js — essas
- * tocam o DOM e são reescritas no app. Exceções, carregadas à parte em
- * src/nucleo/index.ts só pela lógica pura: promo/promo.js (FC.promo) e
- * telas/admin.js (FC.admin). recap/* roda no palco (src/recap). */
+ * Exceções, carregadas à parte em src/nucleo/index.ts só pela lógica pura:
+ * promo/promo.js (FC.promo) e telas/admin.js (FC.admin). recap/* roda no
+ * palco (src/recap). */
 module.exports = [
   "config.js",
   "util.js",

@@ -1,6 +1,6 @@
 /* Shim do ambiente de navegador para o núcleo compartilhado.
  *
- * Os arquivos de `../investimentos-compartilhar/assets/js/` foram escritos para
+ * Os arquivos de `nucleo/` (vindos do site original) foram escritos para
  * o navegador: eles fazem `window.FC = window.FC || {}` e depois usam `FC` como
  * global. No navegador isso funciona porque `window === globalThis`. Aqui a
  * gente recria essa condição e dá os poucos globais que o núcleo toca ao
