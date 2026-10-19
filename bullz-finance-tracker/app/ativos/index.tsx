@@ -1,2 +1,2 @@
-import Ativos from "../../src/telas/ativos";
-export default Ativos;
+import MinhaLista from "../../src/telas/minha-lista";
+export default MinhaLista;
