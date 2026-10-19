@@ -26,7 +26,7 @@ export interface FC {
   PILARES: Qualquer; PILAR_NOME: Qualquer; MODULOS: Qualquer; TIPOS_MOV: Qualquer;
   VEREDITO_CURTO: Qualquer; LAYOUT_INICIO: Qualquer;
   PADRAO_ALOCACAO: Qualquer; PADRAO_OBJETIVOS: Qualquer; PADRAO_PLANO: Qualquer;
-  PADRAO_PREMISSAS: Qualquer; PADRAO_REGRAS: Qualquer; PADRAO_RENDA: Qualquer; PADRAO_AGRO: Qualquer;
+  PADRAO_PREMISSAS: Qualquer; PADRAO_REGRAS: Qualquer; PADRAO_RENDA: Qualquer; PADRAO_AGRO: Qualquer; PADRAO_PROVENTOS: Qualquer;
   CATEGORIAS_CUSTO: Qualquer; CATEGORIAS_GADO: Qualquer; CATEGORIAS_GANHO: Qualquer;
   PESO_TIPICO: Qualquer; RECAP_MOCK: Qualquer; RECAP_ANO_MOCK: Qualquer;
   objetivos: Fn; modulo: Fn; resolveModulos: Fn; classesLigadas: Fn;
@@ -37,7 +37,7 @@ export interface FC {
 
   // modelos de cálculo (modelo/*)
   avaliador: Ns; agro: Ns; rentab: Ns; carteira: Ns; perfil: Ns; recomendacao: Ns;
-  renda: Ns; projecao: Ns; importador: Ns; dividendos: Ns; impostos: Ns;
+  renda: Ns; projecao: Ns; importador: Ns; dividendos: Ns; caixaProventos: Ns; impostos: Ns;
   alertas: Ns; salario: Ns; recap: Ns; graham: Fn;
 
   // supabase/config (config.js, supa.js) — superfície livre

@@ -125,6 +125,14 @@
         texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes/criterios" });
     }
 
+    // ---- caixa de proventos chegou à meta: hora de reinvestir
+    const cx = dados.caixa_proventos;
+    if (cx && cx.ativo && cx.pronto) {
+      saida.push({ nivel: "info", titulo: `${cx.nome} tem ${FC.fmt.brlTexto(cx.saldo)} de proventos`,
+        texto: `Passou da meta de ${FC.fmt.brlTexto(cx.meta)}. Hora de reinvestir: escolha o ativo e, se quiser, complete com um valor do bolso.`,
+        link: "#/dividendos" });
+    }
+
     // ---- exposição ao dólar (só informativo)
     if (investido > 0) {
       const dolar = FC.soma(ativos.filter((a) => a.classe === "acao_us" || a.classe === "etf_us" || a.classe === "cripto" || ETF_DOLAR.has(a.ticker)), (a) => a.posicao.atual);

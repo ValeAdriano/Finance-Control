@@ -87,8 +87,10 @@
   }
 
   // tudo o que entrou em investimentos no mês, com ou sem plano
+  // (a parte de uma compra paga com o caixa de proventos não é dinheiro novo)
   function investidoNoMes(base, mes) {
-    return FC.soma(base.aportes.filter((a) => a.data && mesDe(a.data) === mes && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor)
+    const doCaixa = (a) => (FC.caixaProventos ? FC.caixaProventos.usado(base, a) : 0);
+    return FC.soma(base.aportes.filter((a) => a.data && mesDe(a.data) === mes && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor - doCaixa(a))
       + aporteAgroNoMes(base, mes);
   }
 
@@ -163,7 +165,11 @@
 
   // proventos pagos no mês (os que o plano reinveste): pelos proventos
   // carregados ou, sem eles, pelos lançados à mão
+  // Com caixa de proventos ligado, o que o plano reinveste no mês é o que
+  // saiu do caixa para compras naquele mês (o resto continua guardado).
   function dividendosDoMes({ dados, base, proventos }, mes) {
+    const cx = dados && dados.caixa_proventos;
+    if (cx && cx.ativo) return cx.usadoNoMes(mes);
     if (proventos && dados) {
       const r = FC.dividendos.analisa(dados, base, proventos);
       return FC.soma(r.pagamentos.filter((p) => p.status === "pago" && p.quando.slice(0, 7) === mes), (p) => p.valor);

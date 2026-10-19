@@ -64,7 +64,7 @@
   }
 
   // ---------------------------------------------------------------- alocação
-  function alocacao(ativos, rendaFixa, agro, alvos) {
+  function alocacao(ativos, rendaFixa, agro, alvos, cxProv) {
     const valor = {}, dentro = {};
     FC.PILARES.forEach((p) => { valor[p.chave] = 0; dentro[p.chave] = []; });
     for (const a of ativos) {
@@ -90,6 +90,11 @@
     if (caixaAgro > 0.5) {
       valor.agro += caixaAgro;
       dentro.agro.push({ nome: "Caixa do agro", ticker: null, tipo: "reinvestido, à espera da compra", valor: caixaAgro, score: null, cor: "terra", veredito: null });
+    }
+    // proventos guardados à espera do reinvestimento (FC.caixaProventos)
+    if (cxProv && cxProv.ativo && cxProv.saldo > 0.5) {
+      valor.caixa += cxProv.saldo;
+      dentro.caixa.push({ nome: cxProv.nome, ticker: null, tipo: "proventos à espera do reinvestimento", valor: cxProv.saldo, score: null, cor: "verde", veredito: null });
     }
     const total = Object.values(valor).reduce((a, b) => a + b, 0);
     if (!total) return { linhas: [], total: 0 };
@@ -203,7 +208,13 @@
     });
 
     const agro = FC.agro.analisa(base.agro, prefs.agro);
-    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo);
+    // proventos já pagos: entram na rentabilidade como dinheiro que voltou e,
+    // com caixa de proventos ligado, alimentam o saldo dele
+    let pagos = [];
+    try { if (FC.estado && FC.estado.proventos) pagos = FC.dividendos.analisa({ ativos }, base, FC.estado.proventos).pagamentos; } catch (e) { console.error(e); }
+    let cxProv = null;
+    try { if (FC.caixaProventos) cxProv = FC.caixaProventos.analisa(base, pagos, prefs.proventos, ix); } catch (e) { console.error(e); }
+    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo, cxProv);
 
     const comPos = ativos.filter((a) => a.posicao);
     const comCusto = comPos.filter((a) => a.posicao.custo);
@@ -235,20 +246,22 @@
       return v - v / (1 + a.variacao_dia / 100);
     });
     const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado);
+    const cxSaldo = cxProv && cxProv.ativo ? cxProv.saldo : 0;
 
     const proventos = aportes.filter((a) => a.tipo === "provento").sort((a, b) => b.data.localeCompare(a.data));
     const hist = { proventos, renda_mensal: proventosPorMes(proventos) };
 
     const dados = {
       ativos, rendaFixa, agro, macro, regras,
-      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo,
+      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo, caixa_proventos: cxProv,
       historico: hist,
       registros: base.historico || [],
       resumo: {
         investido, atual, resultado: atualComCusto - investido,
         // só as posições com preço médio conhecido entram na conta
         variacao: investido ? (atualComCusto / investido - 1) * 100 : null,
-        renda_fixa: rf, agro: agro.valorRebanho + (agro.financeiro.caixa_agro || 0), patrimonio: total || atual + rf + agro.valorRebanho + (agro.financeiro.caixa_agro || 0),
+        renda_fixa: rf, agro: agro.valorRebanho + (agro.financeiro.caixa_agro || 0), caixa_proventos: cxSaldo,
+        patrimonio: total || atual + rf + cxSaldo + agro.valorRebanho + (agro.financeiro.caixa_agro || 0),
         cripto, bolsa: atual - cripto, variacao_hoje: hojeAbs, por_classe: porClasse,
         tem_preco_medio: investido > 0,
       },
@@ -256,8 +269,6 @@
     };
     // rentabilidade aporte a aporte, consolidada (TIR e retorno no período);
     // proventos já pagos entram como dinheiro que voltou
-    let pagos = [];
-    try { if (FC.estado && FC.estado.proventos) pagos = FC.dividendos.analisa(dados, base, FC.estado.proventos).pagamentos; } catch (e) { console.error(e); }
     try { dados.rentab = FC.rentab.carteira(dados, base, ix, pagos); } catch (e) { console.error(e); dados.rentab = null; }
     return dados;
   }

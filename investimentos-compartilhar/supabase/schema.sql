@@ -361,6 +361,14 @@ alter table public.ativos add column if not exists data_base date;
 alter table public.renda_fixa add column if not exists valor_atual numeric check (valor_atual is null or valor_atual >= 0);
 alter table public.renda_fixa add column if not exists valor_atual_em date;
 
+-- caixa de proventos (porquinho, saldo da corretora…): a parte de uma compra
+-- ou de um aporte em renda fixa paga com os proventos guardados. O resto do
+-- valor é dinheiro novo. Vazio = tudo do bolso
+alter table public.aportes add column if not exists do_provento numeric check (do_provento is null or do_provento >= 0);
+-- para onde vão os proventos (FC.PADRAO_PROVENTOS): direto ou um caixa, com
+-- nome, rendimento, meta de reinvestimento e saldo conferido
+alter table public.preferencias add column if not exists proventos jsonb;
+
 -- ============================================================
 --  PAINEL DO ADMINISTRADOR
 --  Quem é admin fica numa tabela que a API não expõe (nem para ler):

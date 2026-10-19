@@ -117,6 +117,7 @@ FC.montaPrefs = function (brutas: any) {
     renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
     agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),
     plano: FC.mescla(FC.PADRAO_PLANO, brutas.plano),
+    proventos: FC.mescla(FC.PADRAO_PROVENTOS, brutas.proventos),
     layout: brutas.layout || null,
   };
 };

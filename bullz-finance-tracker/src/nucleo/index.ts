@@ -64,6 +64,7 @@ export function carregaNucleo(): FCTipo {
   require("../../../investimentos-compartilhar/assets/js/modelo/projecao.js");
   require("../../../investimentos-compartilhar/assets/js/modelo/importador.js");
   require("../../../investimentos-compartilhar/assets/js/modelo/dividendos.js");
+  require("../../../investimentos-compartilhar/assets/js/modelo/caixa-proventos.js");
   require("../../../investimentos-compartilhar/assets/js/modelo/impostos.js");
   require("../../../investimentos-compartilhar/assets/js/modelo/alertas.js");
   require("../../../investimentos-compartilhar/assets/js/modelo/salario.js");

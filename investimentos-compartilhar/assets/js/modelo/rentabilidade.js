@@ -329,13 +329,28 @@
       renda_fixa: grupo(titulos, () => true),
       agro,
     };
+    // caixa de proventos: o provento que fica guardado não volta ao bolso e a
+    // parte da compra paga com ele não sai do bolso — ver FC.caixaProventos
+    const cx = dados.caixa_proventos && dados.caixa_proventos.ativo ? dados.caixa_proventos : null;
+    const fCx = [];
+    if (cx) {
+      const medidos = new Set(ativos.filter((a) => a.aplicado != null).map((a) => a.ticker));
+      for (const e of cx.entradas) if (e.fluxo && medidos.has(e.ticker)) fCx.push({ data: e.data, valor: -e.valor });
+      for (const s of cx.saidas) if (s.usado > 0) fCx.push({ data: s.data, valor: s.usado });
+    }
     const fl = [
       ...ativos.filter((a) => a.aplicado != null).flatMap((a) => a.fluxos),
       ...titulos.flatMap((t) => t.lotes.map((l) => ({ data: l.data, valor: -l.valor }))),
       ...fAgro,
-    ];
+    ].map((f) => ({ ...f }));
+    // o ajuste abate o fluxo do mesmo dia (a compra, o provento) em vez de
+    // virar um resgate ou aporte à parte; sem par, entra sozinho
+    for (const a of fCx) {
+      const par = fl.find((f) => f.data === a.data && Math.sign(f.valor) === -Math.sign(a.valor) && Math.abs(f.valor) >= Math.abs(a.valor) - 1e-9);
+      if (par) par.valor += a.valor; else fl.push(a);
+    }
     const final = ativos.filter((a) => a.aplicado != null).reduce((s, a) => s + a.valor_atual, 0)
-      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0);
+      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0) + (cx ? cx.saldo : 0);
     return { ativos, titulos, classes, total: fl.length ? resumoFluxos(fl, final, hoje) : null,
       sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker),
       sem_preco: ativos.filter((a) => a.sem_preco && !a.sem_custo).map((a) => a.ticker) };
@@ -429,7 +444,8 @@
   // renda fixa rendendo + o rebanho no valor do app. "fluxo" acumula o
   // dinheiro que entrou, para separar aporte de rendimento. Proventos pagos
   // (FC.dividendos.analisa(...).pagamentos) saem do fluxo na data de
-  // pagamento — o dinheiro voltou ao bolso e conta como rendimento;
+  // pagamento — o dinheiro voltou ao bolso e conta como rendimento (com
+  // caixa de proventos, ficam no saldo dele em vez de sair);
   // "proventos" acumula só eles.
   function serieDiaria(base, mercado, ix, prefs, valorHoje, pagamentos = []) {
     const hoje = D().hoje(), hist = (mercado && mercado.historicos) || {}, spot = (mercado && mercado.spot) || {};
@@ -469,7 +485,21 @@
       if (p != null) fluxos.push([e.data, e.q * p]);
     }
     for (const ls of titulos) for (const l of ls) fluxos.push([l.data, l.valor]);
-    for (const p of pagamentos || []) if (p.status === "pago" && p.valor && (p.pagamento || p.data_com)) fluxos.push([p.pagamento || p.data_com, -p.valor, true]);
+    // caixa de proventos ligado: o provento que vai para ele não sai do
+    // fluxo (o dinheiro continua na carteira, no saldo do caixa) e a parte da
+    // compra paga com o caixa não é dinheiro novo
+    let cxProv = null;
+    try { if (FC.caixaProventos) cxProv = FC.caixaProventos.analisa(base, pagamentos, prefs && prefs.proventos, ix, hoje); } catch (e) { console.error(e); }
+    if (cxProv && !cxProv.ativo) cxProv = null;
+    const noCaixa = new Set(cxProv ? cxProv.entradas.filter((e) => e.fluxo).map((e) => e.origem) : []);
+    for (const p of pagamentos || []) {
+      if (!(p.status === "pago" && p.valor && (p.pagamento || p.data_com)) || noCaixa.has(p.origem)) continue;
+      fluxos.push([p.pagamento || p.data_com, -p.valor, -p.valor]);
+    }
+    if (cxProv) {
+      for (const e of cxProv.entradas) fluxos.push([e.data, 0, -e.valor]);
+      for (const s of cxProv.saidas) if (s.usado > 0) fluxos.push([s.data, -s.usado]);
+    }
     for (const f of cxAgro.fluxos) if (f.aporte || f.saque) fluxos.push([f.data, f.aporte - f.saque]);
     fluxos.sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -479,7 +509,7 @@
     const evs = eventos.slice().sort((a, b) => a.data.localeCompare(b.data));
     for (let d = inicio; d <= hoje; d = D().soma(d, 1)) {
       while (ie < evs.length && evs[ie].data <= d) { pos[evs[ie].ticker] = (pos[evs[ie].ticker] || 0) + evs[ie].q; ie++; }
-      while (ifl < fluxos.length && fluxos[ifl][0] <= d) { acum += fluxos[ifl][1]; if (fluxos[ifl][2]) prov -= fluxos[ifl][1]; ifl++; }
+      while (ifl < fluxos.length && fluxos[ifl][0] <= d) { acum += fluxos[ifl][1]; if (fluxos[ifl][2]) prov -= fluxos[ifl][2]; ifl++; }
       let v = 0, faltou = false;
       for (const [t, q] of Object.entries(pos)) {
         if (q <= 1e-12) continue;
@@ -489,6 +519,7 @@
       }
       for (const ls of titulos) v += valorTituloEm(ls, ix, d);
       v += valorAgro(d);
+      if (cxProv) v += cxProv.saldoEm(d);
       pontos.push({ data: d, valor: v, fluxo: acum, proventos: prov, incompleto: faltou });
     }
     // o ponto de hoje usa os preços de agora, igual ao patrimônio do topo
