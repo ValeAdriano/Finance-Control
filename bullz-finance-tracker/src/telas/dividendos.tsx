@@ -15,6 +15,7 @@ import { EstadoMercado } from "./comum/alertas";
 import { abreAtivo } from "./comum/ativo";
 import { depoisDeMudar } from "./comum/dados";
 import { CartaoCaixaProventos, ConfigCaixaProventos } from "./comum/caixa-proventos";
+import { Proximos30, RendaPassiva } from "./comum/blocos";
 import FC from "../nucleo";
 
 const ok = (v: any) => FC.ok(v);
@@ -120,6 +121,9 @@ export default function Dividendos() {
       <Secao titulo="Para onde vão os proventos" sub="direto para você ou guardados até reinvestir">
         {configCaixa ? <ConfigCaixaProventos aoFechar={() => setConfigCaixa(false)} /> : <CartaoCaixaProventos aoConfigurar={() => setConfigCaixa(true)} />}
       </Secao>
+
+      <RendaPassiva div={r} semLink />
+      <Proximos30 d={e.dados} div={r} />
 
       <Secao titulo="Por mês" sub="pela data de pagamento · meses futuros com o que já foi anunciado">
         <Cartao>

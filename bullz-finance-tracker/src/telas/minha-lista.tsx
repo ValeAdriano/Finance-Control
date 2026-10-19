@@ -16,6 +16,7 @@ import { EstadoMercado } from "./comum/alertas";
 import { abreAtivo } from "./comum/ativo";
 import { formAtivo, formRendaFixa } from "./comum/formularios";
 import { CabecalhoGrupo, CabecalhoInvestimentos } from "./comum/investimentos";
+import { Alocacao } from "./comum/blocos";
 import { MiniGrafico, Variacao } from "./comum/preco";
 import { ResumoInvestido } from "./comum/rentab";
 import FC from "../nucleo";
@@ -176,6 +177,7 @@ export default function MinhaLista() {
       ) : (
         <>
           <ResumoInvestido d={d} />
+          <Alocacao d={d} />
           {div && div.resumo.n_pagadores ? (
             <Cartao style={{ marginTop: t.espaco.e4 }}>
               <Kpis>
