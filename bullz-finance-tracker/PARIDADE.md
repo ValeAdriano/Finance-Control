@@ -118,6 +118,7 @@ Na coluna **Status**, quando as plataformas divergirem, anote por plataforma (ex
 | ID | Item | Fonte | Estados extras | Status |
 |---|---|---|---|---|
 | D1 | Dividendos: próximos, por mês, por ativo, folha por ativo | `telas/dividendos.js` | sem proventos | Web ~ · iOS · · Android · |
+| D2 | Caixa de proventos: destino, cartão do saldo, reinvestir em Aportes | — (só no app) | direto, caixa sem saldo, caixa na meta | ≈ só no app, decisão de produto (2026-10-19); o cálculo é do núcleo (`modelo/caixa-proventos.js`), então o site já soma o saldo no patrimônio |
 | S1 | Salário: ganhos, plano, guia do mês, sequência, últimos 6 meses | `telas/salario.js` | sem ganhos | Web ~ · iOS · · Android · |
 | S2 | Folhas "Novo ganho"/"Editar ganho" | `telas/salario.js` | regras de dia | Web ~ · iOS · · Android · |
 | G1 | Agro: rebanho, dinheiro na atividade, resultado, custos, ganho de peso, evolução, por fazenda | `telas/agro.js` | sem dados | Web ~ · iOS · · Android · |

@@ -76,9 +76,9 @@ export function CartaoCaixaProventos({ aoConfigurar }: { aoConfigurar: () => voi
         <Kpi rotulo="Saldo" valor={FC.fmt.brlTexto(cx.saldo)} dinheiro />
         {cx.meta > 0 ? <Kpi pequeno rotulo="Meta para reinvestir" valor={FC.fmt.brlTexto(cx.meta)} dinheiro /> : null}
         {cx.meta > 0 && !cx.pronto ? <Kpi pequeno rotulo="Falta" valor={FC.fmt.brlTexto(cx.falta)} dinheiro /> : null}
-        {Math.abs(cx.rendimento) >= 0.01 ? <Kpi pequeno rotulo="Rendeu" valor={FC.fmt.brlTexto(cx.rendimento)} dinheiro /> : null}
+        {Math.abs(cx.rendimento) >= 0.01 ? <Kpi pequeno rotulo="Rendeu" valor={FC.fmt.brlTexto(cx.rendimento)} dinheiro peq="desde o primeiro provento guardado" /> : null}
       </Kpis>
-      {cx.meta > 0 ? <View style={{ marginTop: t.espaco.e3 }}><Trilha pct={pct} cor={cx.pronto ? "verde" : undefined} /></View> : null}
+      {cx.meta > 0 ? <View style={{ marginTop: t.espaco.e3 }}><Trilha pct={pct} cor={cx.pronto ? t.cores.verde : t.cores.acento} /></View> : null}
       {movs.length ? (
         <Detalhes rotulo="Últimos movimentos" style={{ marginTop: t.espaco.e3 }}>
           <Lista>
@@ -134,7 +134,6 @@ export function ConfigCaixaProventos({ aoFechar }: { aoFechar: () => void }) {
   return (
     <Cartao>
       <Form>
-        <T style={{ fontWeight: "600", fontSize: 16 }}>Para onde vão os proventos</T>
         <Segmentado rotuloA11y="Destino dos proventos" valor={destino} aoMudar={setDestino}
           opcoes={[{ v: "direto", rotulo: "Direto para mim" }, { v: "caixa", rotulo: "Guardar até reinvestir" }]} />
         {destino === "direto" ? (
