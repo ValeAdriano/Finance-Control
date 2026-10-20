@@ -11,7 +11,7 @@ import { useTema } from "../tema";
 import { useEstado } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
 import { Pagina } from "../casca/casca";
-import { Ajuda, B, Botao, Cartao, Chip, Conta, Grade, Kpi, KpiValor, Kpis, Lista, Item, Num, Pilula, Ponto, Rs, Secao, T, degrade } from "../ui/kit";
+import { Ajuda, B, Botao, Cartao, Chip, Conta, Grade, Kpi, KpiValor, Kpis, Legenda, Lista, Item, Num, Pilula, Ponto, Rs, Secao, T, Tabela, degrade } from "../ui/kit";
 import { Grafico } from "../ui/grafico";
 import { Icone } from "../ui/icone";
 import { ui } from "../ui/folha";
@@ -68,24 +68,109 @@ function ChipsPeriodo({ valor, aoMudar }: { valor: Periodo; aoMudar: (p: Periodo
 
 // ---------------------------------------------------------------- anéis
 // três leituras que toda carteira tem, sem depender de meta configurada
-type Anel = { pct: number | null; centro?: string; sub: string; cor: string };
+type Anel = { pct: number | null; centro?: string; sub: string; cor: string; abre?: () => void };
 const faixa3 = (t: ReturnType<typeof useTema>, v: number, amarelo: number, verde: number) =>
   v >= verde ? t.cores.verde : v >= amarelo ? t.cores.s3 : t.cores.vermelho;
 
-// quanto a carteira rendeu (TWR) em 12 meses, como % do CDI do mesmo trecho
-function cdiNoAno(t: ReturnType<typeof useTema>, d: any): Anel {
+// a carteira contra o CDI em 12 meses (ou desde o início, se a história for
+// menor), como nota de 0 a 100 na mesma régua do velocímetro: 50 = igual ao
+// CDI, acima sobe, abaixo cai (perder dinheiro tende a 0)
+function comparaCdi(d: any) {
   const ser = serieDoPainel(d), ix = FC.estado.mercado && FC.estado.mercado.indices;
-  const vazio = { pct: null, centro: "—", sub: "sem dados", cor: t.cores.ink3 };
-  if (ser.pontos.length < 2 || !ix || typeof ix.fator !== "function") return vazio;
+  if (ser.pontos.length < 2 || !ix || typeof ix.fator !== "function") return null;
   const de = FC.datas.soma(FC.datas.hoje(), -365);
   const trecho = ser.pontos.filter((p: any) => p.data >= de);
-  if (trecho.length < 2) return vazio;
-  const cdi = (ix.fator("cdi", 100, trecho[0].data, trecho.at(-1).data).f - 1) * 100;
-  if (!(cdi > 0)) return vazio;
-  const r = FC.rentab.twr(trecho), pct = (r / cdi) * 100;
-  const sub = trecho[0].data > de ? `desde ${FC.datas.br(trecho[0].data).slice(0, 5)}` : "12 meses";
-  if (r < 0) return { pct: 0, centro: "<0%", sub, cor: t.cores.vermelho };
-  return { pct: Math.min(100, pct), centro: `${FC.fmt.num(pct, 0)}%`, sub, cor: faixa3(t, pct, 70, 100) };
+  if (trecho.length < 2) return null;
+  const ini = trecho[0].data, fim = trecho.at(-1).data;
+  const cdiAte = (dia: string) => (ix.fator("cdi", 100, ini, dia).f - 1) * 100;
+  const cdi = cdiAte(fim);
+  if (!(cdi > 0)) return null;
+  // retorno acumulado dia a dia (TWR: aportes e resgates não contam)
+  let f = 1;
+  const curva: Array<[string, number]> = [[ini, 0]];
+  for (let k = 1; k < trecho.length; k++) {
+    const ant = trecho[k - 1].valor, fl = trecho[k].fluxo - trecho[k - 1].fluxo;
+    if (ant > 1e-9) f *= (trecho[k].valor - fl) / ant;
+    curva.push([trecho[k].data, (f - 1) * 100]);
+  }
+  const r = (f - 1) * 100, dias = Math.max(1, FC.datas.dias(ini, fim));
+  const nota = Math.max(0, Math.min(100, 50 + 50 * Math.tanh((r - cdi) / FC.desempenho.escala(dias))));
+  return { r, cdi, nota, ini, fim, curva, cdiAte, desde: ini > de ? ini : null };
+}
+
+function FolhaCdi({ c }: { c: any }) {
+  const t = useTema();
+  const { estreito } = useMedidas();
+  const cor = faixa3(t, c.nota, 34, 67);
+  const grao = granularidade(c.ini, c.fim);
+  const cdiCurva: Array<[string, number]> = c.curva.map(([dia]: [string, number]) => [dia, c.cdiAte(dia)]);
+  // mês a mês: o retorno da carteira e o do CDI dentro de cada mês
+  const fimDoMes: Record<string, number> = {};
+  c.curva.forEach(([dia]: [string, number], k: number) => { fimDoMes[dia.slice(0, 7)] = k; });
+  const meses = Object.keys(fimDoMes).sort();
+  const linhas: any[] = [];
+  let kAnt = 0;
+  for (const m of meses) {
+    const k = fimDoMes[m];
+    if (k === kAnt) continue;
+    const rc = ((1 + c.curva[k][1] / 100) / (1 + c.curva[kAnt][1] / 100) - 1) * 100;
+    const rd = ((1 + cdiCurva[k][1] / 100) / (1 + cdiCurva[kAnt][1] / 100) - 1) * 100;
+    linhas.unshift({ mes: FC.datas.mesAno(m + "-01"), rc, rd });
+    kAnt = k;
+  }
+  const pctDoCdi = (c.r / c.cdi) * 100;
+  return (
+    <View style={{ gap: t.espaco.e4 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+        <Num style={{ fontSize: 44, fontWeight: "700", color: cor }}>{Math.round(c.nota)}</Num>
+        <View style={{ flex: 1 }}>
+          <T style={{ fontSize: 17, fontWeight: "600", color: cor }}>{c.nota >= 67 ? "Acima do CDI" : c.nota >= 34 ? "Perto do CDI" : "Abaixo do CDI"}</T>
+          <T style={{ fontSize: 13, color: t.cores.ink2 }}>{FC.datas.br(c.ini)} a {FC.datas.br(c.fim)} · 50 = rendeu igual ao CDI</T>
+        </View>
+      </View>
+      <Kpis>
+        <Kpi pequeno rotulo="A carteira rendeu" valor={<KpiValor pequeno cls={c.r >= 0 ? "pos" : "neg"}>{pctTxt(c.r, 2)}</KpiValor>} peq="sem contar aportes e resgates" />
+        <Kpi pequeno rotulo="O CDI rendeu" valor={pctTxt(c.cdi, 2)} peq="no mesmo período" />
+        <Kpi pequeno rotulo="Em % do CDI" valor={<KpiValor pequeno cls={pctDoCdi >= 100 ? "pos" : "neg"}>{FC.fmt.num(pctDoCdi, 0)}%</KpiValor>}
+          peq={`${FC.fmt.num(Math.abs(c.r - c.cdi), 2)} p.p. ${c.r >= c.cdi ? "acima" : "abaixo"} do CDI`} />
+      </Kpis>
+      <View>
+        <Grafico marcador={FC.graficos.linhas({ y: "pct", zero: true, altura: 200, series: [
+          { nome: "CDI", pontos: espaca(cdiCurva, grao), classe: "lref" },
+          { nome: "Carteira", pontos: espaca(c.curva, grao), classe: "l1" },
+        ] })} />
+        <Legenda itens={[{ cor: t.cores.s1, rotulo: "sua carteira, acumulado" }, { cor: t.cores.sref, rotulo: "CDI, acumulado", tipo: "tracejado" }]} />
+      </View>
+      {linhas.length && !estreito ? (
+        <Cartao semPad>
+          <Tabela minimo={360} cabecas={[{ t: "Mês" }, { t: "Carteira", n: true }, { t: "CDI", n: true }, { t: "Diferença", n: true }]}
+            linhas={linhas.map((l) => [{ v: l.mes }, { v: pctTxt(l.rc, 2), cls: l.rc >= l.rd ? "pos" : "neg" }, pctTxt(l.rd, 2),
+              { v: `${FC.fmt.delta(l.rc - l.rd, 2)} p.p.`, cls: l.rc >= l.rd ? "pos" : "neg" }])} />
+        </Cartao>
+      ) : null}
+      {linhas.length && estreito ? (
+        // no celular, uma lista: mês à esquerda; carteira e CDI à direita
+        <Lista>
+          {linhas.map((l) => (
+            <Item key={l.mes} titulo={l.mes} detalhe={`${FC.fmt.num(Math.abs(l.rc - l.rd), 2)} p.p. ${l.rc >= l.rd ? "acima" : "abaixo"} do CDI`}
+              valores={<View style={{ alignItems: "flex-end" }}>
+                <Num cls={l.rc >= l.rd ? "pos" : "neg"} style={{ fontSize: 15, fontWeight: "600" }}>{pctTxt(l.rc, 2)}</Num>
+                <T style={{ fontSize: 12.5, color: t.cores.ink2 }}>CDI {pctTxt(l.rd, 2)}</T>
+              </View>} />
+          ))}
+        </Lista>
+      ) : null}
+      <T v="p">Retorno ponderado pelo tempo de toda a carteira (bolsa, cripto, renda fixa e agro), com proventos. A nota usa a mesma régua do velocímetro: 50 é render igual ao CDI; cerca de 10 pontos percentuais acima no ano levam perto de 90, e perder dinheiro leva perto de 0.</T>
+    </View>
+  );
+}
+
+function cdiNoAno(t: ReturnType<typeof useTema>, d: any): Anel {
+  const c = comparaCdi(d);
+  if (!c) return { pct: null, centro: "—", sub: "sem dados", cor: t.cores.ink3 };
+  return { pct: c.nota, centro: String(Math.round(c.nota)), cor: faixa3(t, c.nota, 34, 67),
+    sub: c.desde ? `desde ${FC.datas.br(c.desde).slice(0, 5)}` : "12 meses",
+    abre: () => ui.folha({ titulo: c.desde ? `Carteira x CDI desde ${FC.datas.br(c.desde)}` : "Carteira x CDI em 12 meses", corpo: <FolhaCdi c={c} /> }) };
 }
 
 // a nota média dos ativos da carteira (as 4 lentes), pesando pelo valor
@@ -183,7 +268,7 @@ function Topo({ d, imp, seq, des, periodo, setPeriodo }: { d: any; imp: any; seq
   const tamValor = estreito ? 32 : 40;
   const cor = corFaixa(t, des.suficiente ? des.faixa.cor : null);
   const aneis: Array<[string, Anel, string]> = [
-    ["% do CDI", cdiNoAno(t, d), "/ativos/rentabilidade"],
+    ["vs CDI", cdiNoAno(t, d), "/ativos/rentabilidade"],
     ["Qualidade", qualidade(t, d), "/ativos"],
     ["Diversificação", diversificacao(t, d), "/ativos"],
   ];
@@ -219,7 +304,7 @@ function Topo({ d, imp, seq, des, periodo, setPeriodo }: { d: any; imp: any; seq
 
       <View style={{ flexDirection: "row", marginTop: t.espaco.e3, paddingTop: t.espaco.e3, borderTopWidth: 1, borderTopColor: t.cores.linha, gap: estreito ? 4 : 16 }}>
         {aneis.map(([rotulo, a, rota]) => (
-          <AnelMeta key={rotulo} tam={anel} rotulo={rotulo} pct={a.pct} centro={a.centro} sub={a.sub} cor={a.cor} onPress={() => vai(rota)} />
+          <AnelMeta key={rotulo} tam={anel} rotulo={rotulo} pct={a.pct} centro={a.centro} sub={a.sub} cor={a.cor} onPress={a.abre || (() => vai(rota))} />
         ))}
       </View>
     </Cartao>
