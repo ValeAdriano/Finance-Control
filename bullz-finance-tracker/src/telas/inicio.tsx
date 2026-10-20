@@ -73,8 +73,10 @@ const faixa3 = (t: ReturnType<typeof useTema>, v: number, amarelo: number, verde
   v >= verde ? t.cores.verde : v >= amarelo ? t.cores.s3 : t.cores.vermelho;
 
 // a carteira contra o CDI em 12 meses (ou desde o início, se a história for
-// menor), como nota de 0 a 100 na mesma régua do velocímetro: 50 = igual ao
-// CDI, acima sobe, abaixo cai (perder dinheiro tende a 0)
+// menor), pela riqueza relativa: quanto R$ 1 virou na carteira ÷ quanto virou
+// no CDI. Nota = 50 × (1 + r) ÷ (1 + CDI): 50 = igual ao CDI, acima de 50
+// ganhou, abaixo perdeu; só chega a 0 se a carteira perder tudo
+const FAIXA_CDI: [number, number] = [45, 50]; // amarelo a partir de 45, verde a partir de 50
 function comparaCdi(d: any) {
   const ser = serieDoPainel(d), ix = FC.estado.mercado && FC.estado.mercado.indices;
   if (ser.pontos.length < 2 || !ix || typeof ix.fator !== "function") return null;
@@ -93,15 +95,16 @@ function comparaCdi(d: any) {
     if (ant > 1e-9) f *= (trecho[k].valor - fl) / ant;
     curva.push([trecho[k].data, (f - 1) * 100]);
   }
-  const r = (f - 1) * 100, dias = Math.max(1, FC.datas.dias(ini, fim));
-  const nota = Math.max(0, Math.min(100, 50 + 50 * Math.tanh((r - cdi) / FC.desempenho.escala(dias))));
-  return { r, cdi, nota, ini, fim, curva, cdiAte, desde: ini > de ? ini : null };
+  const r = (f - 1) * 100;
+  const razao = (1 + r / 100) / (1 + cdi / 100);
+  const nota = Math.max(0, Math.min(100, 50 * razao));
+  return { r, cdi, razao, nota, ini, fim, curva, cdiAte, desde: ini > de ? ini : null };
 }
 
 function FolhaCdi({ c }: { c: any }) {
   const t = useTema();
   const { estreito } = useMedidas();
-  const cor = faixa3(t, c.nota, 34, 67);
+  const cor = faixa3(t, c.nota, ...FAIXA_CDI);
   const grao = granularidade(c.ini, c.fim);
   const cdiCurva: Array<[string, number]> = c.curva.map(([dia]: [string, number]) => [dia, c.cdiAte(dia)]);
   // mês a mês: o retorno da carteira e o do CDI dentro de cada mês
@@ -124,7 +127,7 @@ function FolhaCdi({ c }: { c: any }) {
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <Num style={{ fontSize: 44, fontWeight: "700", color: cor }}>{Math.round(c.nota)}</Num>
         <View style={{ flex: 1 }}>
-          <T style={{ fontSize: 17, fontWeight: "600", color: cor }}>{c.nota >= 67 ? "Acima do CDI" : c.nota >= 34 ? "Perto do CDI" : "Abaixo do CDI"}</T>
+          <T style={{ fontSize: 17, fontWeight: "600", color: cor }}>{c.nota >= FAIXA_CDI[1] ? "Acima do CDI" : c.nota >= FAIXA_CDI[0] ? "Perto do CDI" : "Abaixo do CDI"}</T>
           <T style={{ fontSize: 13, color: t.cores.ink2 }}>{FC.datas.br(c.ini)} a {FC.datas.br(c.fim)} · 50 = rendeu igual ao CDI</T>
         </View>
       </View>
@@ -133,6 +136,8 @@ function FolhaCdi({ c }: { c: any }) {
         <Kpi pequeno rotulo="O CDI rendeu" valor={pctTxt(c.cdi, 2)} peq="no mesmo período" />
         <Kpi pequeno rotulo="Em % do CDI" valor={<KpiValor pequeno cls={pctDoCdi >= 100 ? "pos" : "neg"}>{FC.fmt.num(pctDoCdi, 0)}%</KpiValor>}
           peq={`${FC.fmt.num(Math.abs(c.r - c.cdi), 2)} p.p. ${c.r >= c.cdi ? "acima" : "abaixo"} do CDI`} />
+        <Kpi pequeno rotulo="Cada R$ 1 virou" valor={<KpiValor pequeno cls={c.razao >= 1 ? "pos" : "neg"}>{FC.fmt.brlTexto(1 + c.r / 100)}</KpiValor>}
+          peq={`no CDI, ${FC.fmt.brlTexto(1 + c.cdi / 100)}`} />
       </Kpis>
       <View>
         <Grafico marcador={FC.graficos.linhas({ y: "pct", zero: true, altura: 200, series: [
@@ -160,7 +165,7 @@ function FolhaCdi({ c }: { c: any }) {
           ))}
         </Lista>
       ) : null}
-      <T v="p">Retorno ponderado pelo tempo de toda a carteira (bolsa, cripto, renda fixa e agro), com proventos. A nota usa a mesma régua do velocímetro: 50 é render igual ao CDI; cerca de 10 pontos percentuais acima no ano levam perto de 90, e perder dinheiro leva perto de 0.</T>
+      <T v="p">Retorno ponderado pelo tempo de toda a carteira (bolsa, cripto, renda fixa e agro), com proventos. A nota compara quanto o dinheiro cresceu: 50 × (1 + rendimento da carteira) ÷ (1 + rendimento do CDI). 50 é render igual ao CDI; acima de 50 a carteira ganhou, abaixo ficou para trás (de 45 a 50, perto). Ela só chega a zero se a carteira perder tudo.</T>
     </View>
   );
 }
@@ -168,7 +173,7 @@ function FolhaCdi({ c }: { c: any }) {
 function cdiNoAno(t: ReturnType<typeof useTema>, d: any): Anel {
   const c = comparaCdi(d);
   if (!c) return { pct: null, centro: "—", sub: "sem dados", cor: t.cores.ink3 };
-  return { pct: c.nota, centro: String(Math.round(c.nota)), cor: faixa3(t, c.nota, 34, 67),
+  return { pct: c.nota, centro: String(Math.round(c.nota)), cor: faixa3(t, c.nota, ...FAIXA_CDI),
     sub: c.desde ? `desde ${FC.datas.br(c.desde).slice(0, 5)}` : "12 meses",
     abre: () => ui.folha({ titulo: c.desde ? `Carteira x CDI desde ${FC.datas.br(c.desde)}` : "Carteira x CDI em 12 meses", corpo: <FolhaCdi c={c} /> }) };
 }
