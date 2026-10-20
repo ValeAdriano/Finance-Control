@@ -224,8 +224,8 @@ function ComposicaoDesempenho({ des, d, imp }: { des: any; d: any; imp: any }) {
       {des.suficiente ? (
         <Lista>
           {des.partes.map((p: any) => (
-            <Item key={p.chave} titulo={p.nome}
-              detalhe={`rendeu ${pctTxt(p.retorno, 2)} · ${p.nome_ref} ${pctTxt(p.retorno_ref, 2)} · ${FC.fmt.num(p.peso * 100, 0)}% do peso`}
+            <Item key={p.chave} titulo={p.nome} detalheLinhas={2}
+              detalhe={`${p.vendas ? `${p.vendas} venda${p.vendas > 1 ? "s" : ""} no período · ciclo rendeu` : "rendeu"} ${pctTxt(p.retorno, 2)} · ${p.nome_ref} ${pctTxt(p.retorno_ref, 2)} · ${FC.fmt.num(p.peso * 100, 0)}% do peso`}
               valores={<Pilula cor={FC.desempenho.faixaDe(p.nota).cor}>{Math.round(p.nota)}</Pilula>} />
           ))}
         </Lista>
@@ -244,7 +244,7 @@ function ComposicaoDesempenho({ des, d, imp }: { des: any; d: any; imp: any }) {
             peq={ok(ganhoPct) ? `${FC.fmt.delta(ganhoPct, 1)}% sobre o que você colocou${imp && ok(imp.ganho_liquido) ? ", já sem IR" : ""}` : undefined} />
         </Kpis>
       ) : null}
-      <T v="p">Cada parte da carteira é comparada com a sua referência no período: renda variável (ações, FIIs, ETFs e cripto) com o Ibovespa, renda fixa e agro com o CDI. Igual à referência vale 50; acima, a nota sobe; abaixo, cai. A nota final pondera pelo valor de cada parte. Aportes e resgates não contam como rendimento.</T>
+      <T v="p">Cada parte da carteira é comparada com a sua referência no período: renda variável (ações, FIIs, ETFs e cripto) com o Ibovespa, renda fixa com o CDI. O agro só rende na venda: entra apenas quando há venda no período, com o resultado de cada lote vendido (venda líquida contra o custo de entrada e os custos da atividade) contra o CDI do mesmo prazo, pesando pelo valor vendido. Igual à referência vale 50; acima, a nota sobe; abaixo, cai. A nota final pondera pelo valor de cada parte. Aportes e resgates não contam como rendimento.</T>
       <Pressable onPress={() => vai("/ativos/rentabilidade")}><T style={{ fontSize: 14, color: t.cores.acento }}>Ver a rentabilidade completa ›</T></Pressable>
     </View>
   );

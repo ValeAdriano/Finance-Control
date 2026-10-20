@@ -21,9 +21,9 @@ function PorPeriodo({ d }: { d: any }) {
   const linhas: any[] = [];
   for (const [p, nome] of PERIODOS) {
     const des = desempenhoDoPainel(d, p);
-    if (!des.suficiente) { linhas.push([{ v: nome }, { v: "sem dados", cls: "muito-fraco" }, "—", "—", "—", "—"]); continue; }
+    if (!des.suficiente) { linhas.push([{ v: nome }, { v: "sem dados", cls: "muito-fraco" }, "—", "—", "—", "—", "—"]); continue; }
     const parte = (k: string) => des.partes.find((x: any) => x.chave === k);
-    const rv = parte("rv"), rf = parte("rf");
+    const rv = parte("rv"), rf = parte("rf"), ag = parte("agro");
     linhas.push([
       { v: nome, leg: `${FC.datas.br(des.de)} a ${FC.datas.br(des.ate)}` },
       { v: <Pilula cor={des.faixa.cor}>{`${Math.round(des.score)} · ${des.faixa.nome}`}</Pilula> },
@@ -31,16 +31,17 @@ function PorPeriodo({ d }: { d: any }) {
       rv ? pct(rv.retorno_ref) : "—",
       rf ? { v: pct(rf.retorno), cls: rf.retorno >= 0 ? "pos" : "neg", leg: `peso ${FC.fmt.num(rf.peso * 100, 0)}%` } : "—",
       rf ? pct(rf.retorno_ref) : "—",
+      ag ? { v: pct(ag.retorno), cls: ag.retorno >= ag.retorno_ref ? "pos" : "neg", leg: `${ag.vendas} venda${ag.vendas > 1 ? "s" : ""} · CDI ${pct(ag.retorno_ref)}` } : { v: "sem venda", cls: "muito-fraco" },
     ]);
   }
   return (
     <Secao titulo="Desempenho contra as referências" sub="a nota do Início, aberta por período e por parte">
       <Cartao semPad>
-        <Tabela minimo={720}
-          cabecas={[{ t: "Período", largura: 170 }, { t: "Nota", largura: 150 }, { t: "Renda variável", n: true }, { t: "Ibovespa", n: true }, { t: "Renda fixa", n: true }, { t: "CDI", n: true }]}
+        <Tabela minimo={860}
+          cabecas={[{ t: "Período", largura: 170 }, { t: "Nota", largura: 150 }, { t: "Renda variável", n: true }, { t: "Ibovespa", n: true }, { t: "Renda fixa", n: true }, { t: "CDI", n: true }, { t: "Agro (vendas)", n: true, largura: 150 }]}
           linhas={linhas} />
       </Cartao>
-      <T v="p" style={{ marginTop: t.espaco.e3 }}>Retorno ponderado pelo tempo (aportes e resgates não contam como rendimento). Renda variável inclui ações, FIIs, ETFs e cripto, com os proventos; renda fixa inclui o caixa de proventos. Agro entra na nota contra o CDI.</T>
+      <T v="p" style={{ marginTop: t.espaco.e3 }}>Retorno ponderado pelo tempo (aportes e resgates não contam como rendimento). Renda variável inclui ações, FIIs, ETFs e cripto, com os proventos; renda fixa inclui o caixa de proventos. O agro só entra quando há venda no período: o ciclo de cada lote vendido (venda contra custo de entrada e custos da atividade) contra o CDI do mesmo prazo.</T>
     </Secao>
   );
 }

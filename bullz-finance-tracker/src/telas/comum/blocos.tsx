@@ -224,7 +224,7 @@ export function desempenhoDoPainel(d: any, periodo: string) {
   const temRv = ser.pontos.length && ser.pontos.at(-1).partes && ser.pontos.at(-1).partes.rv.valor > 0.5;
   if (temRv && !e.bench && ser.inicio) garanteIbov(Math.ceil(FC.datas.dias(ser.inicio, FC.datas.hoje()) / 365) + 1);
   try {
-    return FC.desempenho.calcula({ pontos: ser.pontos, ix: e.mercado.indices, ibov: e.bench && e.bench.ibov, periodo });
+    return FC.desempenho.calcula({ pontos: ser.pontos, ciclos: ser.ciclos || [], ix: e.mercado.indices, ibov: e.bench && e.bench.ibov, periodo });
   } catch (err) {
     console.error(err);
     return { suficiente: false, score: 50, faixa: FC.desempenho.faixaDe(50), partes: [], tendencia: [] };

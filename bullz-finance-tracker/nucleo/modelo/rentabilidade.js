@@ -365,7 +365,7 @@
   // cabeça na entrada e na saída, com uma reta entre os dois.
   // "ag" é o resultado de FC.agro.analisa (valor de hoje por categoria).
   // Avaliado pelo custo (ag.pelo_custo), a cabeça vale o que custou até sair.
-  function curvaDoRebanho(movs, ag, hoje) {
+  function segmentosDoRebanho(movs, ag, hoje) {
     const peloCusto = !!(ag && ag.pelo_custo);
     const ordem = { compra: 0, nascimento: 0, entrada: 0, reclassificacao: 1, venda: 2, morte: 2, saida: 2 };
     const ms = (movs || []).filter((m) => m.tipo in ordem && m.cabecas > 0)
@@ -403,7 +403,7 @@
       const v1 = m.tipo === "venda" ? Math.max(0, m.valor_total - m.despesas) / m.cabecas
         : m.tipo === "saida" && m.valor_total ? m.valor_total / m.cabecas : null;
       // pelo custo, a cabeça vale o que custou até o dia da venda
-      const fecha = (l, q) => segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1: peloCusto && l.v0 != null ? l.v0 : v1 });
+      const fecha = (l, q) => segs.push({ de: l.de, ate: m.data, n: q, v0: l.v0, v1: peloCusto && l.v0 != null ? l.v0 : v1, venda: m.tipo === "venda" ? v1 : null });
       const antes = (ORIGEM[m.categoria] || []).slice().reverse();
       const cats = [m.categoria, ...antes, ...Object.keys(abertos).filter((c) => c !== m.categoria && !antes.includes(c))];
       let falta = m.cabecas;
@@ -428,6 +428,11 @@
       else if (g.v1 == null) g.v1 = g.v0;
       g.dias = Math.max(1, D().dias(g.de, g.ate));
     }
+    return segs;
+  }
+
+  function curvaDoRebanho(movs, ag, hoje) {
+    const segs = segmentosDoRebanho(movs, ag, hoje);
     return (d) => {
       let v = 0;
       for (const g of segs) {
@@ -437,6 +442,31 @@
       }
       return v;
     };
+  }
+
+  // ---------------------------------------------------------------- ciclos do rebanho
+  // O gado não rende enquanto está no pasto: o resultado aparece na venda.
+  // Cada venda fecha os lotes que saíram (os mais antigos primeiro), com o
+  // custo de entrada deles e a parte dos custos da atividade (nutrição,
+  // sanidade, mão de obra…) que coube a essas cabeças: cada custo é rateado
+  // pelas cabeças que estavam no pasto na data dele.
+  function ciclosDoRebanho(movs, custos, ag, hoje) {
+    const segs = segmentosDoRebanho(movs, ag, hoje).filter((g) => g.n > 0);
+    const extra = segs.map(() => 0);
+    for (const c of custos || []) {
+      if (!(c.valor > 0) || !c.data) continue;
+      const vivos = segs.map((g, i) => (g.de <= c.data && (g.aberto || c.data < g.ate) ? i : -1)).filter((i) => i >= 0);
+      const cab = vivos.reduce((s, i) => s + segs[i].n, 0);
+      if (cab > 0) for (const i of vivos) extra[i] += (c.valor * segs[i].n) / cab;
+    }
+    const out = [];
+    segs.forEach((g, i) => {
+      if (g.aberto || g.venda == null) return;
+      const custo = g.n * (g.v0 || 0) + extra[i];
+      if (!(custo > 0)) return;
+      out.push({ de: g.de, ate: g.ate, cabecas: g.n, custo, venda: g.n * g.venda, dias: g.dias });
+    });
+    return out.sort((a, b) => a.ate.localeCompare(b.ate));
   }
 
   // ---------------------------------------------------------------- série diária
@@ -456,7 +486,7 @@
     const titulos = base.rendaFixa.map((t) => lotesDoTitulo(t, base.aportes));
     const movsAgro = base.agro.movs || [];
     const datas = [...eventos.map((e) => e.data), ...titulos.flat().map((l) => l.data), ...movsAgro.map((m) => m.data), ...(base.agro.custos || []).map((c) => c.data)].filter(Boolean);
-    if (!datas.length) return { pontos: [], inicio: null };
+    if (!datas.length) return { pontos: [], inicio: null, ciclos: [] };
     const inicio = datas.sort()[0];
 
     // preço de um ativo num dia: o fechamento daquele dia (ou o anterior);
@@ -471,7 +501,10 @@
     // reais que se conhecem dela — o que custou ao entrar e o que rendeu ao
     // sair (ou, se ainda está no pasto, o valor de hoje pela arroba).
     // Avaliar o passado pela arroba de hoje inventaria saltos na venda.
-    const valorRebanho = curvaDoRebanho(movsAgro, FC.agro.analisa(base.agro, prefs.agro), hoje);
+    const analiseAgro = FC.agro.analisa(base.agro, prefs.agro);
+    const valorRebanho = curvaDoRebanho(movsAgro, analiseAgro, hoje);
+    let ciclos = [];
+    try { ciclos = ciclosDoRebanho(movsAgro, base.agro.custos || [], analiseAgro, hoje); } catch (e) { console.error(e); }
     // + o dinheiro de vendas reinvestido que ainda não virou gado
     const cxAgro = FC.agro.caixa(movsAgro, base.agro.custos || []);
     const valorAgro = (d) => valorRebanho(d) + cxAgro.saldoEm(d);
@@ -537,7 +570,7 @@
       u.partes.rv.valor = Math.max(0, u.partes.rv.valor + valorHoje - u.valor);
       u.valor = valorHoje;
     }
-    return { pontos, inicio };
+    return { pontos, inicio, ciclos };
   }
 
   // TWR da série: encadeia o retorno de cada dia descontando o fluxo do dia
@@ -575,5 +608,5 @@
   }
 
   FC.rentab = { crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
-    lotesDoTitulo, valorTituloEm, rotuloTaxa, PADRAO_TAXA };
+    lotesDoTitulo, valorTituloEm, rotuloTaxa, PADRAO_TAXA, ciclosDoRebanho };
 })();

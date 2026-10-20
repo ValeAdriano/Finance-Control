@@ -96,3 +96,44 @@ test("série diária · as partes somam valor e fluxo do total", () => {
   }
   perto(pontos.at(-1).partes.rf.valor, 1300, 1e-6);
 });
+
+// ---------------------------------------------------------------- agro só nas vendas
+test("agro no pasto não entra na nota, por mais que o valor dele suba", () => {
+  const p = serie(40, { rv: 0.001, vRf: 0 });
+  // rebanho valendo cada vez mais (curva da arroba), sem venda nenhuma
+  p.forEach((x, k) => { x.partes.agro = { valor: 50000 * (1 + 0.01 * k), fluxo: 50000 }; });
+  const r = FC.desempenho.calcula({ pontos: p, ciclos: [], ...refs(40, 0.0004, 0.001), periodo: "mes" });
+  assert.equal(r.partes.map((x) => x.chave).join(), "rv");
+  perto(r.score, 50, 1);
+});
+
+test("venda no período entra com o ciclo do lote contra o CDI do mesmo prazo, pesando pelo valor vendido", () => {
+  const p = serie(40, { rv: 0.001, vRf: 0, vRv: 10000 });
+  // lote comprado há 200 dias por 30 mil e vendido há 5 dias por 40 mil
+  const ciclos = [{ de: dia(-200), ate: dia(-5), cabecas: 10, custo: 30000, venda: 40000, dias: 195 }];
+  const r = FC.desempenho.calcula({ pontos: p, ciclos, ...refs(40, 0.0004, 0.001), periodo: "mes" });
+  const ag = r.partes.find((x) => x.chave === "agro");
+  assert.ok(ag, "agro deveria entrar");
+  perto(ag.retorno, 33.333, 0.01);
+  assert.ok(ag.nota > 67, String(ag.nota));
+  assert.equal(ag.vendas, 1);
+  perto(ag.peso, 40000 / (40000 + 10000 * 1.0167), 0.02);
+  // venda antes do período fica de fora
+  const fora = FC.desempenho.calcula({ pontos: p, ciclos: [{ ...ciclos[0], ate: dia(-60) }], ...refs(40, 0.0004, 0.001), periodo: "mes" });
+  assert.ok(!fora.partes.some((x) => x.chave === "agro"));
+});
+
+test("ciclos do rebanho · custo de entrada + custos da atividade rateados pelas cabeças no pasto", () => {
+  const mov = (o) => ({ criado_em: o.data, despesas: 0, peso_medio_kg: null, preco_arroba: null, preco_cabeca: null, ...o });
+  const movs = [
+    mov({ id: 1, tipo: "compra", categoria: "bezerro", cabecas: 10, valor_total: 20000, despesas: 1000, data: dia(-200) }),
+    mov({ id: 2, tipo: "venda", categoria: "bezerro", cabecas: 10, valor_total: 32000, despesas: 500, data: dia(-10) }),
+  ];
+  const custos = [{ id: "c1", data: dia(-100), categoria: "nutricao", valor: 3000 }, { id: "c2", data: dia(-5), categoria: "nutricao", valor: 999 }];
+  const ag = FC.agro.analisa({ movs, custos, pesagens: [] }, FC.PADRAO_AGRO);
+  const c = FC.rentab.ciclosDoRebanho(movs, custos, ag, hoje);
+  assert.equal(c.length, 1);
+  perto(c[0].custo, 21000 + 3000, 0.01);   // o custo de depois da venda não entra
+  perto(c[0].venda, 31500, 0.01);
+  assert.equal(c[0].ate, dia(-10));
+});

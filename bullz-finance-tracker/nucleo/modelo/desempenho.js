@@ -2,13 +2,16 @@
  * contra a referência de cada um, no período (dia, mês, ano ou tudo).
  *
  * Renda variável (ações, FIIs, ETFs e cripto) contra o Ibovespa; renda fixa
- * (com o caixa de proventos) e agro contra o CDI. Cada parte ganha
+ * (com o caixa de proventos) contra o CDI. O agro não rende enquanto o gado
+ * está no pasto: entra só pelas vendas do período, cada ciclo vendido (venda
+ * líquida contra o custo de entrada e os custos da atividade) contra o CDI
+ * do mesmo prazo, com peso pelo valor vendido. Cada parte ganha
  * 50 + 50·tanh((retorno − referência) / escala): igual à referência = 50,
  * bem acima tende a 100, bem abaixo tende a 0. A nota geral é a média das
  * partes ponderada pelo valor médio de cada uma no período.
  *
- * FC.desempenho.calcula({ pontos, ix, ibov, periodo, hoje }) — `pontos` é a
- * série de FC.rentab.serieDiaria (com `partes`). */
+ * FC.desempenho.calcula({ pontos, ciclos, ix, ibov, periodo, hoje }) —
+ * `pontos` e `ciclos` vêm de FC.rentab.serieDiaria. */
 (function () {
   const FC = (window.FC = window.FC || {});
   const D = () => FC.datas;
@@ -16,7 +19,7 @@
   const PARTES = [
     { chave: "rv", nome: "Renda variável", ref: "ibov", nome_ref: "Ibovespa" },
     { chave: "rf", nome: "Renda fixa", ref: "cdi", nome_ref: "CDI" },
-    { chave: "agro", nome: "Agro", ref: "cdi", nome_ref: "CDI" },
+    { chave: "agro", nome: "Agro (vendas)", ref: "cdi", nome_ref: "CDI", porVendas: true },
   ];
   const PERIODOS = { dia: "Dia", mes: "Mês", ano: "Ano", tudo: "Tudo" };
   const FAIXAS = [
@@ -62,7 +65,24 @@
     return { suficiente: false, motivo, periodo, de, ate, score: 50, faixa: faixaDe(50), partes: [], tendencia: [] };
   }
 
-  function calcula({ pontos, ix, ibov, periodo = "mes", hoje = D().hoje() }) {
+  // as vendas de gado entre `de` (exclusive) e `ate`, como uma parte da nota
+  function parteAgro(ciclos, de, ate, ix) {
+    const vendidos = (ciclos || []).filter((c) => c.ate > de && c.ate <= ate && c.custo > 0);
+    if (!vendidos.length || !ix || typeof ix.fator !== "function") return null;
+    let custo = 0, venda = 0, refPond = 0, notaPond = 0, cabecas = 0;
+    for (const c of vendidos) {
+      const fr = ix.fator("cdi", 100, c.de, c.ate).f;
+      const r = (c.venda / c.custo - 1) * 100, rr = (fr - 1) * 100;
+      custo += c.custo; venda += c.venda; cabecas += c.cabecas || 0;
+      refPond += c.custo * rr; notaPond += c.venda * nota(r, rr, Math.max(1, c.dias || D().dias(c.de, c.ate)));
+    }
+    if (!(venda > 0)) return null;
+    const p = PARTES.find((x) => x.chave === "agro");
+    return { chave: p.chave, nome: p.nome, ref: p.ref, nome_ref: p.nome_ref, retorno: (venda / custo - 1) * 100, retorno_ref: refPond / custo,
+      nota: notaPond / venda, valor_medio: venda, vendas: vendidos.length, cabecas };
+  }
+
+  function calcula({ pontos, ciclos = [], ix, ibov, periodo = "mes", hoje = D().hoje() }) {
     if (!pontos || pontos.length < 2) return vazio(periodo, null, hoje, "sem histórico");
     const de = inicioDe(periodo, hoje, pontos[0].data);
     const trecho = pontos.filter((p) => p.data >= de && p.data <= hoje && p.partes);
@@ -70,7 +90,7 @@
     const dias = Math.max(1, D().dias(trecho[0].data, trecho.at(-1).data));
 
     // por parte, de uma vez: o retorno encadeado dia a dia (TWR) e o valor médio
-    const acc = PARTES.map((p) => ({ ...p, f: 1, soma: 0, n: 0 }));
+    const acc = PARTES.filter((p) => !p.porVendas).map((p) => ({ ...p, f: 1, soma: 0, n: 0 }));
     const notaGeral = (ate) => {
       let somaPeso = 0, somaNota = 0;
       const partes = [];
@@ -83,6 +103,8 @@
         somaPeso += peso; somaNota += peso * nt;
         partes.push({ chave: a.chave, nome: a.nome, ref: a.ref, nome_ref: a.nome_ref, retorno: r, retorno_ref: rr, nota: nt, valor_medio: peso });
       }
+      const agro = parteAgro(ciclos, trecho[0].data, ate, ix);
+      if (agro) { somaPeso += agro.valor_medio; somaNota += agro.valor_medio * agro.nota; partes.push(agro); }
       if (!somaPeso) return null;
       for (const p of partes) p.peso = p.valor_medio / somaPeso;
       return { score: somaNota / somaPeso, partes };
