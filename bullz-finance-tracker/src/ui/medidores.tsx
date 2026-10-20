@@ -50,7 +50,7 @@ export function Velocimetro({ valor, cor, rotulo, sub, tam = 220, onPress, rotul
   const L = r * Math.PI * 1.5;
   const caminho = arco(c, r, 135, 405);
   const corpo = (
-    <View style={{ width: tam, height: tam * 0.86, alignItems: "center" }}>
+    <View style={{ width: tam, height: tam * 0.88, alignItems: "center" }}>
       <Svg width={tam} height={tam}>
         <Path d={caminho} stroke={t.cores.campo} strokeWidth={w} strokeLinecap="round" fill="none" />
         {v > 0.2 ? <Path d={caminho} stroke={cor} strokeWidth={w} strokeLinecap="round" fill="none"
@@ -69,9 +69,10 @@ export function Velocimetro({ valor, cor, rotulo, sub, tam = 220, onPress, rotul
 }
 
 // ---------------------------------------------------------------- anel de meta
-/** anel de 360° com o % da meta; sem meta, cinza com "definir" */
-export function AnelMeta({ pct, rotulo, sub, cor, tam = 76, onPress }: {
-  pct: number | null; rotulo: string; sub?: string; cor?: string; tam?: number; onPress?: () => void;
+/** anel de 360° preenchido até `pct`; `centro` troca o "x%" do meio (uma nota,
+ * um "118%" que passa do arco); sem valor, cinza com "definir" */
+export function AnelMeta({ pct, rotulo, sub, cor, tam = 76, onPress, centro }: {
+  pct: number | null; rotulo: string; sub?: string; cor?: string; tam?: number; onPress?: () => void; centro?: string;
 }) {
   const t = useTema();
   const tem = pct != null && Number.isFinite(pct);
@@ -81,8 +82,8 @@ export function AnelMeta({ pct, rotulo, sub, cor, tam = 76, onPress }: {
   const corArco = cor || (alvo >= 99.5 ? t.cores.verde : t.cores.acento);
   return (
     <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : "image"}
-      accessibilityLabel={`${rotulo}: ${tem ? Math.round(pct as number) + "%" : "sem meta"}`}
-      style={{ alignItems: "center", flex: 1, minWidth: 0, gap: 6 }}>
+      accessibilityLabel={`${rotulo}: ${centro || (tem ? Math.round(pct as number) + "%" : "sem dados")}${sub ? ", " + sub : ""}`}
+      style={{ alignItems: "center", flex: 1, minWidth: 0, gap: 4 }}>
       <View style={{ width: tam, height: tam }}>
         <Svg width={tam} height={tam} style={{ transform: [{ rotate: "-90deg" }] }}>
           <Circle cx={c} cy={c} r={r} stroke={t.cores.campo} strokeWidth={w} fill="none" />
@@ -90,13 +91,15 @@ export function AnelMeta({ pct, rotulo, sub, cor, tam = 76, onPress }: {
             strokeDasharray={`${((L * v) / 100).toFixed(2)} ${L.toFixed(2)}`} /> : null}
         </Svg>
         <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" }}>
-          {tem
+          {centro
+            ? <Num style={{ fontSize: tam * (centro.length > 4 ? 0.2 : 0.26), fontWeight: "700" }}>{centro}</Num>
+            : tem
             ? <Num style={{ fontSize: tam * 0.24, fontWeight: "700" }}>{Math.round(pct as number)}<Num style={{ fontSize: tam * 0.14, fontWeight: "600" }}>%</Num></Num>
             : <T style={{ fontSize: tam * 0.16, color: t.cores.acento, fontWeight: "600" }}>definir</T>}
         </View>
       </View>
       <T style={{ fontSize: 13, fontWeight: "600", textAlign: "center" }} numberOfLines={1}>{rotulo}</T>
-      {sub ? <T style={{ fontSize: 11.5, color: t.cores.ink2, textAlign: "center", marginTop: -4 }} numberOfLines={2}>{sub}</T> : null}
+      {sub ? <T style={{ fontSize: 11.5, color: t.cores.ink2, textAlign: "center", marginTop: -2 }} numberOfLines={1}>{sub}</T> : null}
     </Pressable>
   );
 }

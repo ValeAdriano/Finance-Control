@@ -66,32 +66,53 @@ function ChipsPeriodo({ valor, aoMudar }: { valor: Periodo; aoMudar: (p: Periodo
   );
 }
 
-// ---------------------------------------------------------------- metas dos anéis
-function metas(d: any, div: any) {
-  const e = FC.estado, hoje = FC.datas.hoje(), mes = hoje.slice(0, 7);
-  // aporte do mês: o investido (só dinheiro novo) contra a meta do plano do Salário
-  let aporte: any = { pct: null, sub: "defina o plano" };
-  try {
-    const meta = FC.salario.metaDoMes(e.prefs.plano, e.base.ganhos || [], mes);
-    const feito = FC.salario.investidoNoMes(e.base, mes);
-    if (meta > 0) aporte = { pct: (feito / meta) * 100, sub: `${FC.fmt.brlTexto(feito, 0)} de ${FC.fmt.brlTexto(meta, 0)}` };
-  } catch (err) { console.error(err); }
-  const obj = FC.objetivos(e.prefs);
-  // renda passiva: média dos 12 meses (ou a estimativa) contra a renda desejada
-  let renda: any = { pct: null, sub: "defina a meta" };
-  if (div && obj.renda_desejada_mensal > 0) {
-    const res = div.resumo, media = res.recebido_12m > 0 ? res.recebido_12m / 12 : res.mensal_estimado || 0;
-    renda = { pct: (media / obj.renda_desejada_mensal) * 100, sub: `${FC.fmt.brlTexto(media, 0)} por mês` };
+// ---------------------------------------------------------------- anéis
+// três leituras que toda carteira tem, sem depender de meta configurada
+type Anel = { pct: number | null; centro?: string; sub: string; cor: string };
+const faixa3 = (t: ReturnType<typeof useTema>, v: number, amarelo: number, verde: number) =>
+  v >= verde ? t.cores.verde : v >= amarelo ? t.cores.s3 : t.cores.vermelho;
+
+// quanto a carteira rendeu (TWR) em 12 meses, como % do CDI do mesmo trecho
+function cdiNoAno(t: ReturnType<typeof useTema>, d: any): Anel {
+  const ser = serieDoPainel(d), ix = FC.estado.mercado && FC.estado.mercado.indices;
+  const vazio = { pct: null, centro: "—", sub: "sem dados", cor: t.cores.ink3 };
+  if (ser.pontos.length < 2 || !ix || typeof ix.fator !== "function") return vazio;
+  const de = FC.datas.soma(FC.datas.hoje(), -365);
+  const trecho = ser.pontos.filter((p: any) => p.data >= de);
+  if (trecho.length < 2) return vazio;
+  const cdi = (ix.fator("cdi", 100, trecho[0].data, trecho.at(-1).data).f - 1) * 100;
+  if (!(cdi > 0)) return vazio;
+  const r = FC.rentab.twr(trecho), pct = (r / cdi) * 100;
+  const sub = trecho[0].data > de ? `desde ${FC.datas.br(trecho[0].data).slice(0, 5)}` : "12 meses";
+  if (r < 0) return { pct: 0, centro: "<0%", sub, cor: t.cores.vermelho };
+  return { pct: Math.min(100, pct), centro: `${FC.fmt.num(pct, 0)}%`, sub, cor: faixa3(t, pct, 70, 100) };
+}
+
+// a nota média dos ativos da carteira (as 4 lentes), pesando pelo valor
+function qualidade(t: ReturnType<typeof useTema>, d: any): Anel {
+  const com = (d.ativos || []).filter((a: any) => a.posicao && a.posicao.atual > 0 && ok(a.score));
+  const peso = FC.soma(com, (a: any) => a.posicao.atual);
+  if (!com.length || !(peso > 0)) return { pct: null, centro: "—", sub: "sem ativos avaliados", cor: t.cores.ink3 };
+  const nota = FC.soma(com, (a: any) => a.score * a.posicao.atual) / peso;
+  return { pct: nota, centro: String(Math.round(nota)), sub: `${com.length} ativo${com.length > 1 ? "s" : ""} avaliado${com.length > 1 ? "s" : ""}`, cor: faixa3(t, nota, 34, 67) };
+}
+
+// concentração pelo HHI (soma dos pesos ao quadrado): ETF de índice vale por
+// 10 partes iguais, o agro conta como um bloco só
+function diversificacao(t: ReturnType<typeof useTema>, d: any): Anel {
+  const partes: number[] = [];
+  for (const a of d.ativos || []) {
+    if (!a.posicao || !(a.posicao.atual > 0)) continue;
+    const n = a.classe === "etf_br" || a.classe === "etf_us" ? 10 : 1;
+    for (let i = 0; i < n; i++) partes.push(a.posicao.atual / n);
   }
-  // reserva: os títulos marcados como reserva contra custo de vida × meses
-  let reserva: any = { pct: null, sub: "informe o custo de vida" };
-  if (obj.custo_vida_mensal > 0) {
-    const titulos = ((e.prefs.premissas || {}).titulos) || {};
-    const tem = FC.soma((d.rendaFixa || []).filter((x: any) => (titulos[x.id] || {}).reserva), (x: any) => x.valor_aplicado);
-    const alvo = obj.custo_vida_mensal * (Number(obj.meses_reserva) || 6);
-    reserva = { pct: (tem / alvo) * 100, sub: `${FC.fmt.brlTexto(tem, 0)} de ${FC.fmt.brlTexto(alvo, 0)}` };
-  }
-  return { aporte, renda, reserva };
+  for (const r of d.rendaFixa || []) if (r.valor_aplicado > 0) partes.push(r.valor_aplicado);
+  if (d.resumo && d.resumo.agro > 0) partes.push(d.resumo.agro);
+  const total = partes.reduce((s, v) => s + v, 0);
+  if (!(total > 0)) return { pct: null, centro: "—", sub: "carteira vazia", cor: t.cores.ink3 };
+  const hhi = partes.reduce((s, v) => s + (v / total) ** 2, 0);
+  const nota = Math.max(0, Math.min(100, 100 * (1 - hhi)));
+  return { pct: nota, centro: String(Math.round(nota)), sub: `peso de ${FC.fmt.num(1 / hhi, 1)} ativos`, cor: faixa3(t, nota, 60, 80) };
 }
 
 // ---------------------------------------------------------------- folha do desempenho
@@ -148,7 +169,7 @@ function abreComposicao(des: any, d: any, imp: any) {
 }
 
 // ---------------------------------------------------------------- topo
-function Topo({ d, imp, seq, des, div, periodo, setPeriodo }: { d: any; imp: any; seq: any; des: any; div: any; periodo: Periodo; setPeriodo: (p: Periodo) => void }) {
+function Topo({ d, imp, seq, des, periodo, setPeriodo }: { d: any; imp: any; seq: any; des: any; periodo: Periodo; setPeriodo: (p: Periodo) => void }) {
   const t = useTema();
   const { estreito } = useMedidas();
   const [larg, setLarg] = useState(0);
@@ -159,45 +180,47 @@ function Topo({ d, imp, seq, des, div, periodo, setPeriodo }: { d: any; imp: any
   const dica = imp
     ? "Estimativa do que ficaria com você se resgatasse tudo hoje: o patrimônio a preço de agora menos o imposto de renda sobre o ganho (e o IOF, nos primeiros 30 dias). Isenções, como LCI, LCA e ações até o limite mensal, já entram na conta."
     : "Soma de tudo a preço de agora: bolsa, cripto, renda fixa com rendimento e rebanho. Ainda sem descontar o imposto de renda.";
-  const tamValor = estreito ? 38 : 52;
+  const tamValor = estreito ? 32 : 40;
   const cor = corFaixa(t, des.suficiente ? des.faixa.cor : null);
-  const m = metas(d, div);
-  const anel = estreito ? 64 : 80;
+  const aneis: Array<[string, Anel, string]> = [
+    ["% do CDI", cdiNoAno(t, d), "/ativos/rentabilidade"],
+    ["Qualidade", qualidade(t, d), "/ativos"],
+    ["Diversificação", diversificacao(t, d), "/ativos"],
+  ];
+  const anel = estreito ? 54 : 60;
   return (
-    <Cartao style={{ paddingTop: estreito ? 24 : 40, paddingHorizontal: estreito ? 20 : 40, paddingBottom: estreito ? 20 : 32, overflow: "hidden" }}>
-      <View pointerEvents="none" style={{ position: "absolute", top: -220, left: "50%", marginLeft: -300, width: 600, height: 600,
+    <Cartao style={{ paddingTop: estreito ? 18 : 24, paddingHorizontal: estreito ? 16 : 32, paddingBottom: estreito ? 16 : 20, overflow: "hidden" }}>
+      <View pointerEvents="none" style={{ position: "absolute", top: -170, left: "50%", marginLeft: -210, width: 420, height: 420,
         ...degrade(`radial-gradient(closest-side, ${des.suficiente ? cor + "26" : t.cores.acentoSuave}, transparent 70%)`) } as any} />
       <View style={{ alignItems: "center" }}>
         <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
-          <T style={{ fontSize: 15, color: t.cores.ink2 }}>Quanto eu tenho</T><Ajuda texto={dica} />
+          <T style={{ fontSize: 14, color: t.cores.ink2 }}>Quanto eu tenho</T><Ajuda texto={dica} />
         </View>
-        <Conta valor={tenho} style={{ fontSize: tamValor, lineHeight: tamValor * 1.08, fontWeight: "600", letterSpacing: -tamValor * 0.035, marginTop: 4, textAlign: "center" }} />
-        {temIR ? <T style={{ fontSize: 12.5, color: t.cores.ink2, marginTop: 2 }}>líquido estimado · bruto <Rs style={{ fontSize: 12.5, color: t.cores.ink2 }}>{FC.fmt.brlTexto(bruto)}</Rs></T> : null}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e2, marginTop: t.espaco.e3, justifyContent: "center" }}>
+        <Conta valor={tenho} style={{ fontSize: tamValor, lineHeight: tamValor * 1.1, fontWeight: "600", letterSpacing: -tamValor * 0.035, marginTop: 2, textAlign: "center" }} />
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e2, marginTop: 8, justifyContent: "center", alignItems: "center" }}>
+          {temIR ? <T style={{ fontSize: 12, color: t.cores.ink2 }}>líquido · bruto <Rs style={{ fontSize: 12, color: t.cores.ink2 }}>{FC.fmt.brlTexto(bruto)}</Rs></T> : null}
           {r.variacao_hoje ? <Chip><Text style={{ fontSize: 13, color: t.cores.ink2 }}>Hoje </Text><Rs cls={r.variacao_hoje >= 0 ? "pos" : "neg"} style={{ fontSize: 13, fontWeight: "600" }}>{`${sinal(r.variacao_hoje)}${FC.fmt.brlTexto(Math.abs(r.variacao_hoje))}`}</Rs></Chip> : null}
           {seq ? <ChipSequencia st={seq} /> : null}
         </View>
       </View>
 
-      <View style={{ marginTop: t.espaco.e5, alignItems: "center", gap: t.espaco.e3 }} onLayout={(ev: LayoutChangeEvent) => setLarg(ev.nativeEvent.layout.width)}>
+      <View style={{ marginTop: t.espaco.e3, alignItems: "center", gap: t.espaco.e2 }} onLayout={(ev: LayoutChangeEvent) => setLarg(ev.nativeEvent.layout.width)}>
         <ChipsPeriodo valor={periodo} aoMudar={setPeriodo} />
-        <Velocimetro valor={des.score} cor={cor} tam={estreito ? 190 : 230}
+        <Velocimetro valor={des.score} cor={cor} tam={estreito ? 150 : 170}
           rotulo={des.suficiente ? des.faixa.nome : "Sem dados"}
-          sub={des.suficiente ? `desempenho ${NOME_PERIODO[periodo]}` : "sem dados suficientes para o período"}
           onPress={() => abreComposicao(des, d, imp)}
-          rotuloA11y={`Desempenho ${NOME_PERIODO[periodo]}: ${Math.round(des.score)}, ${des.suficiente ? des.faixa.nome : "sem dados"}. Toque para ver a composição.`} />
+          rotuloA11y={`Desempenho ${NOME_PERIODO[periodo]}: ${Math.round(des.score)}, ${des.suficiente ? des.faixa.nome : "sem dados suficientes para o período"}. Toque para ver a composição.`} />
         {des.suficiente && des.tendencia.length >= 2 ? (
-          <View style={{ alignItems: "center", marginTop: -t.espaco.e3 }}>
-            <LinhaTendencia pontos={des.tendencia.map((x: any) => x.score)} cor={cor} largura={Math.min(360, Math.max(160, larg - 40))} />
-            <T style={{ fontSize: 11.5, color: t.cores.ink3 }}>a nota dia a dia no período</T>
+          <View style={{ marginTop: -t.espaco.e2 }}>
+            <LinhaTendencia pontos={des.tendencia.map((x: any) => x.score)} cor={cor} altura={26} largura={Math.min(240, Math.max(140, larg - 40))} />
           </View>
-        ) : null}
+        ) : !des.suficiente ? <T style={{ fontSize: 12, color: t.cores.ink2, marginTop: -t.espaco.e2 }}>sem dados suficientes para o período</T> : null}
       </View>
 
-      <View style={{ flexDirection: "row", marginTop: t.espaco.e5, paddingTop: t.espaco.e4, borderTopWidth: 1, borderTopColor: t.cores.linha, gap: estreito ? 4 : 16 }}>
-        <AnelMeta tam={anel} rotulo="Aporte do mês" pct={m.aporte.pct} sub={m.aporte.sub} onPress={() => vai("/salario")} />
-        <AnelMeta tam={anel} rotulo="Renda passiva" pct={m.renda.pct} sub={m.renda.sub} cor={t.cores.verde} onPress={() => vai(m.renda.pct == null ? "/ajustes/criterios" : "/dividendos")} />
-        <AnelMeta tam={anel} rotulo="Reserva" pct={m.reserva.pct} sub={m.reserva.sub} cor={t.cores.s4} onPress={() => vai(m.reserva.pct == null ? "/ajustes/criterios" : "/ativos/lista")} />
+      <View style={{ flexDirection: "row", marginTop: t.espaco.e3, paddingTop: t.espaco.e3, borderTopWidth: 1, borderTopColor: t.cores.linha, gap: estreito ? 4 : 16 }}>
+        {aneis.map(([rotulo, a, rota]) => (
+          <AnelMeta key={rotulo} tam={anel} rotulo={rotulo} pct={a.pct} centro={a.centro} sub={a.sub} cor={a.cor} onPress={() => vai(rota)} />
+        ))}
       </View>
     </Cartao>
   );
@@ -409,7 +432,7 @@ export function useBlocosInicio() {
     const des = desempenhoDoPainel(d, periodo);
     const blocos: Record<string, () => React.ReactNode> = {
       perfil: () => <CartaoPerfil />,
-      topo: () => <Topo d={d} imp={imp} seq={seq} des={des} div={div} periodo={periodo} setPeriodo={setPeriodo} />,
+      topo: () => <Topo d={d} imp={imp} seq={seq} des={des} periodo={periodo} setPeriodo={setPeriodo} />,
       checklist: () => <ChecklistAtivacao />,
       comecar: () => (vazio ? <Comecar /> : null),
       curva: () => <Curva d={d} periodo={periodo} />,
