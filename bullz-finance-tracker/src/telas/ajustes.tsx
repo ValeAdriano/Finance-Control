@@ -1,9 +1,8 @@
 /* Ajustes: conta e segurança, aparência, metas, regras e dados — port de
  * telas/ajustes.js. */
 import React, { useEffect, useState } from "react";
-import { Image, Platform, Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { SvgXml } from "react-native-svg";
 import * as DocumentPicker from "expo-document-picker";
 import { corCss, useTema, usePrefTema } from "../tema";
 import { useApp, useEstado, alternaPrivado, rerender } from "../estado/app";
@@ -15,6 +14,7 @@ import { folhaForm, ui, type ApiFolha } from "../ui/folha";
 import { depoisDeMudar, gravaPremissas } from "./comum/dados";
 import FC from "../nucleo";
 import EditorLayout from "./layout-editor";
+import { ligaMfa } from "./comum/autenticador";
 import { BLOQUEIO_DISPONIVEL, TEMPOS, autentica, gravaBloqueio, recursoDoAparelho, useBloqueio } from "../plataforma/bloqueio";
 
 const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
@@ -62,50 +62,6 @@ const trocaSenha = () => folhaForm({ titulo: "Trocar senha", salvar: "Trocar", c
 
 // ---------------------------------------------------------------- 2 etapas
 const estiloCodigo = { letterSpacing: 12, textAlign: "center" as const, fontSize: 24, fontWeight: "600" as const };
-function QrCode({ qr }: { qr: string }) {
-  if (qr.startsWith("data:")) {
-    if (Platform.OS === "web" || !qr.startsWith("data:image/svg")) return <Image source={{ uri: qr }} style={{ width: 180, height: 180 }} />;
-    const svg = decodeURIComponent(qr.replace(/^data:image\/svg\+xml;?(utf8|charset=utf-8)?,/, ""));
-    return <SvgXml xml={svg} width={180} height={180} />;
-  }
-  return <SvgXml xml={qr} width={180} height={180} />;
-}
-function FormMfa({ dados, jaTem, defineSalvar, api }: any) {
-  const t = useTema();
-  const [cod, setCod] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
-  defineSalvar(async () => {
-    try {
-      await FC.auth.verificarTotp(dados.id, cod);
-      api.fechar();
-      ui.aviso(jaTem ? "Autenticador reserva adicionado" : "Verificação em duas etapas ligada");
-      FC.db.log("seguranca", { acao: jaTem ? "autenticador reserva adicionado" : "2FA ligado" });
-      rerender();
-    } catch (err: any) { setErro(/invalid/i.test(err.message) ? "Código incorreto. Confira o app e tente de novo." : FC.ui.traduzErro(err.message)); }
-  });
-  return (
-    <Form>
-      {jaTem ? <T v="p">Um segundo autenticador (outro celular, ou o gerenciador de senhas) garante o acesso se você perder o primeiro.</T> : null}
-      <T v="p">1. Abra um app autenticador (Apple Senhas, Google Authenticator, 1Password, Authy) e escaneie o código.</T>
-      <View style={{ alignItems: "center" }}><View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10 }}><QrCode qr={dados.totp.qr_code} /></View></View>
-      <T v="p" centro>ou digite a chave: <Text selectable style={{ fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }), color: t.cores.ink }}>{dados.totp.secret}</Text></T>
-      <T v="p">2. Digite o código de 6 dígitos que aparece no app.</T>
-      <Entrada valor={cod} aoMudar={(v) => setCod(v.replace(/\D/g, ""))} maxLength={6} keyboardType="number-pad" textContentType="oneTimeCode" placeholder="000000" style={estiloCodigo} accessibilityLabel="Código" />
-      {erro ? <Mensagem tipo="erro">{erro}</Mensagem> : null}
-    </Form>
-  );
-}
-async function ligaMfa(jaTem = 0) {
-  let dados: any;
-  try { dados = await FC.auth.inscreverTotp(jaTem ? "Reserva" : "Principal"); } catch (e) { ui.erro(e); return; }
-  let ativado = false;
-  folhaForm({
-    titulo: jaTem ? "Adicionar autenticador reserva" : "Ligar verificação em duas etapas", salvar: "Ativar",
-    corpo: (api, d) => <FormMfa dados={dados} jaTem={jaTem} api={{ ...api, fechar: () => { ativado = true; api.fechar(); } }} defineSalvar={d} />,
-    // fechou sem ativar: o fator pendente não pode ficar sobrando
-    aoFechar: () => { if (!ativado) FC.auth.removerTotp(dados.id).catch(() => {}); },
-  });
-}
 function FormRemoveFator({ fatores, id, defineSalvar, api }: any) {
   const ultimo = fatores.length === 1;
   const alvo = fatores.find((f: any) => f.id === id);

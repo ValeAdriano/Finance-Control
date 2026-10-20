@@ -21,6 +21,7 @@ import { Botao, Mensagem, T } from "../ui/kit";
 import { Entrada, Form, Seletor } from "../ui/campos";
 import { ui } from "../ui/folha";
 import { Icone } from "../ui/icone";
+import { AbrirAutenticador, BotaoColar } from "./comum/autenticador";
 import FC from "../nucleo";
 
 type Modo = "entrar" | "criar" | "mfa" | "confirmar" | "esqueci" | "codigo" | "nova";
@@ -282,6 +283,12 @@ export default function Login() {
                       textContentType="oneTimeCode" autoComplete="one-time-code" accessibilityLabel="Código"
                       aoMudar={(v) => { const d = v.replace(/\D/g, ""); setCodigo(d); if (d.length === 6) envia(d); }}
                       style={{ letterSpacing: 12, textAlign: "center", fontSize: 24, fontWeight: "600" }} />
+                    {modo === "mfa" ? (
+                      <View style={{ gap: 10, alignItems: "center" }}>
+                        <AbrirAutenticador />
+                        <BotaoColar aoColar={(c) => { setCodigo(c); envia(c); }} />
+                      </View>
+                    ) : null}
                   </>
                 ) : modo === "esqueci" ? (
                   <Entrada ref={primeiro} valor={email} aoMudar={setEmail} placeholder="E-mail" keyboardType="email-address" autoComplete="email"

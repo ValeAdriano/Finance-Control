@@ -300,14 +300,32 @@ export function instalaFixture() {
   const usuario = { id: "fixture-usuario", email: "demo@bullz.local", user_metadata: { nome: "Demo" }, factors: [] };
   let logado = true;
   const logs: any[] = [];
+  const fatores: any[] = [], pendentes: Record<string, any> = {};
+  let passouCodigo = false;
 
   Object.assign(FC.auth, {
     sessao: async () => (logado ? { user: usuario } : null),
-    entrar: async () => { logado = true; return { user: usuario, session: {} }; },
+    entrar: async () => { logado = true; passouCodigo = false; return { user: usuario, session: {} }; },
     cadastrar: async () => { logado = true; return { user: usuario, session: {} }; },
     sair: async () => { logado = false; },
-    nivel: async () => ({ currentLevel: "aal1", nextLevel: "aal1" }),
-    fatores: async () => ({ all: [], totp: [] }),
+    // com autenticador cadastrado, entrar pede o código (aal2), como no Supabase
+    nivel: async () => ({ currentLevel: passouCodigo ? "aal2" : "aal1", nextLevel: fatores.length ? "aal2" : "aal1" }),
+    fatores: async () => ({ all: fatores, totp: fatores }),
+    // 2FA de mentira: qualquer código de 6 dígitos ativa
+    inscreverTotp: async (nome: string) => {
+      const id = "fixture-totp-" + (fatores.length + 1), secret = "JBSWY3DPEHPK3PXP";
+      pendentes[id] = { id, friendly_name: nome, status: "verified", factor_type: "totp" };
+      const uri = `otpauth://totp/Bullz:demo%40bullz.local?secret=${secret}&issuer=Bullz`;
+      const qr = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21"><rect width="21" height="21" fill="#fff"/><path d="M1 1h7v7H1zM13 1h7v7h-7zM1 13h7v7H1z" fill="none" stroke="#000" stroke-width="2"/><path d="M10 10h2v2h-2zM14 14h3v3h-3z"/></svg>';
+      return { id, type: "totp", totp: { qr_code: qr, secret, uri } };
+    },
+    verificarTotp: async (id: string, codigo: string) => {
+      if (!/^\d{6}$/.test(String(codigo))) throw new Error("Invalid TOTP code entered");
+      if (pendentes[id]) { fatores.push(pendentes[id]); delete pendentes[id]; }
+      passouCodigo = true;
+      return {};
+    },
+    removerTotp: async (id: string) => { delete pendentes[id]; },
     trocarSenha: async () => ({}),
     confereSenha: async () => true,
     sairDosOutros: async () => {},
