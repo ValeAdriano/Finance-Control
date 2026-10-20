@@ -1,7 +1,7 @@
 /* Medidores do Início: o velocímetro de 270° da nota da carteira, os anéis
  * de meta, a linha de tendência e a rosca da alocação. SVG desenhado aqui e
  * animado à mão (como o Anel do kit: o traço animado do svg gera avisos no web). */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Easing, Pressable, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Path, Polyline, Stop } from "react-native-svg";
 import { useTema } from "../tema";
@@ -10,15 +10,19 @@ import FC from "../nucleo";
 
 const CURVA = Easing.bezier(0.32, 0.72, 0, 1);
 
-/** 0 → v em `dur` ms, com a curva do app; recomeça quando v muda */
+/** anima até v em `dur` ms, com a curva do app. Na primeira vez sai do 0;
+ * depois, de onde o valor está agora (trocar o período vai de 80 a 50, não
+ * zera e sobe), inclusive se a troca chegar no meio de uma animação */
 function useAnima(v: number, dur = 1000) {
   const [x, setX] = useState(0);
+  const atual = useRef(0);
   useEffect(() => {
-    const t0 = Date.now(), de = 0;
+    const t0 = Date.now(), de = atual.current;
     let raf = 0;
     const passo = () => {
       const p = Math.min(1, (Date.now() - t0) / dur);
-      setX(de + (v - de) * CURVA(p));
+      atual.current = de + (v - de) * CURVA(p);
+      setX(atual.current);
       if (p < 1) raf = requestAnimationFrame(passo);
     };
     raf = requestAnimationFrame(passo);
