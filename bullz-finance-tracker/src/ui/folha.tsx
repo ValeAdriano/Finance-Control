@@ -21,6 +21,7 @@ import { useMedidas } from "./medidas";
 import { Icone } from "./icone";
 import { Botao, T } from "./kit";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 
 export interface ApiFolha { fechar: () => void; id: number }
 type Conteudo = React.ReactNode | ((api: ApiFolha) => React.ReactNode);
@@ -61,6 +62,7 @@ function remove(id: number) {
 
 function aviso(texto: string, tipo: "ok" | "erro" = "ok") {
   const id = ++seq;
+  if (tipo === "erro") vibra.erro(); else vibra.ok();
   useFolhas.setState((s) => ({ avisos: [...s.avisos, { id, texto, tipo, saindo: false }] }));
   setTimeout(() => {
     useFolhas.setState((s) => ({ avisos: s.avisos.map((a) => (a.id === id ? { ...a, saindo: true } : a)) }));
@@ -107,9 +109,12 @@ function UmaFolha({ f, topo }: { f: FolhaAberta; topo: boolean }) {
   const fundo = useRef(new Animated.Value(0)).current;
   const prog = useRef(new Animated.Value(0)).current;
   const arraste = useRef(new Animated.Value(0)).current;
+  // um toque que chega logo depois de abrir é o mesmo que abriu (clique fantasma do toque)
+  const abriu = useRef(0);
   const nd = Platform.OS !== "web";
 
   useEffect(() => {
+    abriu.current = Date.now();
     Animated.parallel([
       Animated.timing(fundo, { toValue: 1, duration: 250, easing: Easing.bezier(0.25, 0.1, 0.25, 1), useNativeDriver: nd }),
       Animated.timing(prog, { toValue: 1, duration: 450, easing: Easing.bezier(0.32, 0.72, 0, 1), useNativeDriver: nd }),
@@ -132,14 +137,32 @@ function UmaFolha({ f, topo }: { f: FolhaAberta; topo: boolean }) {
     return () => window.removeEventListener("keydown", tecla);
   }, [topo, f.api]);
 
+  // arrastar para baixo fecha: passando de 60 px ou num gesto rápido (como no
+  // iPhone). Uma vibração leve avisa quando soltar já vai fechar
+  const passou = useRef(false);
+  const fechaAoSoltar = (g: { dy: number; vy: number }) => g.dy > 60 || (g.dy > 12 && g.vy > 0.5);
+  const arrasto = {
+    onPanResponderGrant: () => { passou.current = false; },
+    onPanResponderMove: (_e: any, g: any) => {
+      if (g.dy > 0) arraste.setValue(g.dy);
+      const p = g.dy > 60;
+      if (p !== passou.current) { passou.current = p; if (p) vibra.leve(); }
+    },
+    onPanResponderRelease: (_e: any, g: any) => {
+      if (fechaAoSoltar(g)) f.api.fechar();
+      Animated.spring(arraste, { toValue: 0, damping: 26, stiffness: 260, useNativeDriver: nd }).start();
+    },
+    onPanResponderTerminate: () => { Animated.spring(arraste, { toValue: 0, damping: 26, stiffness: 260, useNativeDriver: nd }).start(); },
+  };
   const puxa = useRef(PanResponder.create({
     onMoveShouldSetPanResponder: (_e, g) => g.dy > 4,
     onStartShouldSetPanResponder: () => true,
-    onPanResponderMove: (_e, g) => { if (g.dy > 0) arraste.setValue(g.dy); },
-    onPanResponderRelease: (_e, g) => {
-      if (g.dy > 60) f.api.fechar();
-      Animated.spring(arraste, { toValue: 0, useNativeDriver: nd }).start();
-    },
+    ...arrasto,
+  })).current;
+  // o título também arrasta, mas só quando o dedo anda (o toque no X continua)
+  const puxaTitulo = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+    ...arrasto,
   })).current;
 
   const corpo = typeof f.corpo === "function" ? (f.corpo as any)(f.api) : f.corpo;
@@ -154,7 +177,7 @@ function UmaFolha({ f, topo }: { f: FolhaAberta; topo: boolean }) {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <View style={{ flex: 1, alignItems: "center", justifyContent: estreito ? "flex-end" : "center", padding: estreito ? 0 : t.espaco.e4 }}>
           <Animated.View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.32)", opacity: fundo }}>
-            <Pressable style={{ flex: 1 }} onPress={f.api.fechar} accessibilityLabel="Fechar" />
+            <Pressable style={{ flex: 1 }} onPress={() => { if (Date.now() - abriu.current > 400) f.api.fechar(); }} accessibilityLabel="Fechar" />
           </Animated.View>
           <Animated.View accessibilityViewIsModal accessibilityLabel={f.titulo}
             style={[{
@@ -169,7 +192,7 @@ function UmaFolha({ f, topo }: { f: FolhaAberta; topo: boolean }) {
                 <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: t.cores.linha2 }} />
               </View>
             ) : null}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: t.espaco.e3, paddingTop: 18, paddingHorizontal: t.espaco.e4, paddingBottom: 12 }}>
+            <View {...(estreito ? puxaTitulo.panHandlers : null)} style={{ flexDirection: "row", alignItems: "center", gap: t.espaco.e3, paddingTop: 18, paddingHorizontal: t.espaco.e4, paddingBottom: 12 }}>
               <T style={{ fontSize: 19, fontWeight: "600", flex: 1 }} accessibilityRole="header" numberOfLines={2}>{f.titulo || ""}</T>
               <Pressable onPress={f.api.fechar} accessibilityRole="button" accessibilityLabel="Fechar"
                 style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: t.cores.campo, alignItems: "center", justifyContent: "center" }}>

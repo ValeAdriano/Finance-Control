@@ -13,6 +13,7 @@ import { Icone } from "./icone";
 import { T } from "./kit";
 import { ui } from "./folha";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 
 /** .form: coluna com espaço de 16 */
 export function Form({ children, gap, style }: { children: React.ReactNode; gap?: number; style?: StyleProp<ViewStyle> }) {
@@ -124,7 +125,7 @@ export function Seletor({ valor, opcoes, aoMudar, compacto, rotuloA11y, titulo }
       corpo: (api) => (
         <View style={{ borderRadius: t.raios.r, borderWidth: 1, borderColor: t.cores.linha, overflow: "hidden" }}>
           {opcoes.map((o, i) => (
-            <Pressable key={o.v} onPress={() => { aoMudar(o.v); api.fechar(); }} accessibilityRole="button" accessibilityState={{ selected: o.v === valor }}
+            <Pressable key={o.v} onPress={() => { if (o.v !== valor) vibra.toque(); aoMudar(o.v); api.fechar(); }} accessibilityRole="button" accessibilityState={{ selected: o.v === valor }}
               style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50, paddingHorizontal: 16,
                 borderTopWidth: i ? 1 : 0, borderTopColor: t.cores.linha, backgroundColor: pressed ? t.cores.campo : t.cores.bg2 })}>
               <T style={{ flex: 1, fontWeight: o.v === valor ? "600" : "400" }}>{o.rotulo}</T>
@@ -224,7 +225,7 @@ export function Interruptor({ valor, aoMudar, rotulo, desabilitado }: { valor: b
   const fundo = a.interpolate({ inputRange: [0, 1], outputRange: [t.cores.campo, "#34c759"] });
   const x = a.interpolate({ inputRange: [0, 1], outputRange: [0, 20] });
   return (
-    <Pressable onPress={() => !desabilitado && aoMudar(!valor)} accessibilityRole="switch" accessibilityState={{ checked: valor, disabled: desabilitado }}
+    <Pressable onPress={() => { if (desabilitado) return; vibra.toque(); aoMudar(!valor); }} accessibilityRole="switch" accessibilityState={{ checked: valor, disabled: desabilitado }}
       style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44, opacity: desabilitado ? 0.5 : 1 }}>
       <Animated.View style={{ width: 51, height: 31, borderRadius: 16, backgroundColor: fundo, padding: 2 }}>
         <Animated.View style={{ width: 27, height: 27, borderRadius: 14, backgroundColor: "#fff", transform: [{ translateX: x }],
@@ -275,7 +276,7 @@ export function Segmentado<V extends string>({ opcoes, valor, aoMudar, cheio: ch
           boxShadow: "0 3px 8px rgba(0,0,0,.12), 0 3px 1px rgba(0,0,0,.04)" } as any} />
       ) : null}
       {opcoes.map((o) => (
-        <Pressable key={o.v} onPress={() => aoMudar(o.v)} accessibilityRole="tab" accessibilityState={{ selected: o.v === valor }}
+        <Pressable key={o.v} onPress={() => { if (o.v !== valor) vibra.toque(); aoMudar(o.v); }} accessibilityRole="tab" accessibilityState={{ selected: o.v === valor }}
           onLayout={(e) => { pos[o.v] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; if (o.v === valor) move(false); }}
           style={[{ paddingVertical: 6, paddingHorizontal: dividido ? 10 : 16, borderRadius: 8, minHeight: 32, justifyContent: "center", alignItems: "center" },
             cheio ? { flex: 1, minWidth: 0 } : dividido ? { flexShrink: 1, minWidth: 0 } : null]}>

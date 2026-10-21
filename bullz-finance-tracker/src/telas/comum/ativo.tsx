@@ -4,7 +4,7 @@ import React from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useTema } from "../../tema";
-import { Anel, B, Botao, Detalhes, Kpi, KpiValor, Kpis, Legenda, Mensagem, Num, Pilula, Ponto, Rs, T, degrade } from "../../ui/kit";
+import { Anel, B, Botao, Detalhes, Item, Kpi, KpiValor, Kpis, Legenda, Lista, Mensagem, Num, Pilula, Ponto, Rs, T, degrade } from "../../ui/kit";
 import { Grafico } from "../../ui/grafico";
 import { ui } from "../../ui/folha";
 import { BlocoRentabAtivo } from "./rentab";
@@ -247,6 +247,24 @@ export function abreAtivo(ticker: string) {
         <Botao variante="sec" icone="editar" onPress={() => { api.fechar(); setTimeout(() => formAtivo(a.item), 240); }}>Editar</Botao>
         <Botao onPress={() => { api.fechar(); router.push(`/aportes/${a.ticker}` as any); }}>Registrar aporte</Botao>
       </>
+    ),
+  });
+}
+
+/** tocar e segurar um ativo: os atalhos do rodapé do detalhe, sem abrir o detalhe */
+export function acoesRapidasAtivo(ticker: string) {
+  const a = acharAtivo(ticker);
+  if (!a) return;
+  const vai = (api: { fechar: () => void }, fn: () => void) => { api.fechar(); setTimeout(fn, 240); };
+  ui.folha({
+    titulo: a.ticker,
+    corpo: (api) => (
+      <Lista>
+        <Item chevron titulo="Registrar aporte" onPress={() => { api.fechar(); router.push(`/aportes/${a.ticker}` as any); }} />
+        <Item chevron titulo="Ver detalhes" onPress={() => vai(api, () => abreAtivo(a.ticker))} />
+        <Item chevron titulo="Comparar" onPress={() => vai(api, () => abreComparar([a.ticker], a.classe))} />
+        <Item chevron titulo="Editar" onPress={() => vai(api, () => formAtivo(a.item))} />
+      </Lista>
     ),
   });
 }

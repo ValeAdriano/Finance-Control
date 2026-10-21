@@ -15,6 +15,7 @@ import { Icone, type NomeIcone } from "../ui/icone";
 import { ui } from "../ui/folha";
 import { Isolado, useBlocosInicio } from "./inicio";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 
 const padrao = () => FC.layout.resolve(null, { rotas: ROTAS, ligada: FC.rotaLigada });
 const nomeRota = (id: string) => (ROTAS.find((r) => r.id === id) || ({} as any)).nome || id;
@@ -112,12 +113,19 @@ export default function EditorLayout({ embutido = false }: { embutido?: boolean 
     const k = outros.findIndex((x) => medidas[x] && centro < medidas[x].y + medidas[x].h / 2);
     return k < 0 ? outros.length : k;
   };
+  let ultimo: number | null = null;
   const respAlca = (id: string) => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: () => { setArr(id); ocupado.editandoLayout = true; dy.setValue(0); FC.layoutEditor.arrastando = true; },
-    onPanResponderMove: (_e, g) => { dy.setValue(g.dy); setAlvo(destino(id, g.dy)); },
+    onPanResponderGrant: () => { vibra.leve(); ultimo = null; setArr(id); ocupado.editandoLayout = true; dy.setValue(0); FC.layoutEditor.arrastando = true; },
+    onPanResponderMove: (_e, g) => {
+      dy.setValue(g.dy);
+      const k = destino(id, g.dy);
+      // um toque a cada vez que o lugar de cair muda
+      if (ultimo != null && k !== ultimo) vibra.toque();
+      ultimo = k; setAlvo(k);
+    },
     onPanResponderRelease: (_e, g) => {
       const k = destino(id, g.dy);
       setArr(null); setAlvo(null); ocupado.editandoLayout = false; FC.layoutEditor.arrastando = false;
@@ -216,12 +224,19 @@ function MenuLayout() {
     return null;
   };
   const muda = (nova: string[]) => { const l = FC.layoutAtual(); salva({ ...l, nav: { ...l.nav, ordem: nova } }); };
+  let ultimoNav = "";
   const resp = (id: string) => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderTerminationRequest: () => false,
-    onPanResponderGrant: () => { mede(); setArr(id); pos.setValue({ x: 0, y: 0 }); },
-    onPanResponderMove: (e, g) => { pos.setValue({ x: g.dx, y: g.dy }); setAlvo(onde(id, e.nativeEvent.pageX, e.nativeEvent.pageY)); },
+    onPanResponderGrant: () => { vibra.leve(); ultimoNav = ""; mede(); setArr(id); pos.setValue({ x: 0, y: 0 }); },
+    onPanResponderMove: (e, g) => {
+      pos.setValue({ x: g.dx, y: g.dy });
+      const a = onde(id, e.nativeEvent.pageX, e.nativeEvent.pageY);
+      const chave = JSON.stringify(a);
+      if (a && chave !== ultimoNav) vibra.toque();
+      ultimoNav = chave; setAlvo(a);
+    },
     onPanResponderRelease: (e) => {
       const a = onde(id, e.nativeEvent.pageX, e.nativeEvent.pageY);
       setArr(null); setAlvo(null); pos.setValue({ x: 0, y: 0 });

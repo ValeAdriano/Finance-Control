@@ -12,7 +12,7 @@ import { Botao, Item, Lista, Num, Pilula, Roda, T, Vazio } from "../ui/kit";
 import { Campo, Entrada, Segmentado, Seletor } from "../ui/campos";
 import { ui } from "../ui/folha";
 import { EstadoMercado } from "./comum/alertas";
-import { abreAtivo, analisaAvulso } from "./comum/ativo";
+import { abreAtivo, acoesRapidasAtivo, analisaAvulso } from "./comum/ativo";
 import { acharAtivo, adivinhaClasse } from "./comum/dados";
 import { BarraFiltros, CabecalhoInvestimentos, ContagemResultados, Filtro } from "./comum/investimentos";
 import { Pagadoras } from "./comum/pagadoras";
@@ -68,7 +68,7 @@ function LinhaMercado({ x, tipo }: { x: any; tipo: "acoes" | "fiis" }) {
     ? `P/L ${fmtNum(x.pl)} · P/VP ${fmtNum(x.pvp)} · DY ${fmtPct(x.dy)}${estreito ? "" : ` · ROE ${fmtPct(x.roe)}`}`
     : `${x.segmento || "—"} · P/VP ${fmtNum(x.pvp)} · DY ${fmtPct(x.dy)}${ok(x.vacancia) && x.vacancia > 0 ? ` · vacância ${fmtPct(x.vacancia)}` : ""}`;
   return (
-    <Item onPress={abre} chevron detalheLinhas={2}
+    <Item onPress={abre} onLongPress={meu && !meu.erro ? () => acoesRapidasAtivo(x.ticker) : undefined} chevron detalheLinhas={2}
       titulo={
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <T style={{ fontWeight: "600", fontSize: 15 }}>{x.ticker}</T>
@@ -197,7 +197,7 @@ function Outros() {
           <T v="h3" style={{ marginBottom: t.espaco.e2 }}>Na sua lista</T>
           <Lista>
             {meus.map((a: any) => (
-              <Item key={a.ticker} chevron onPress={() => abreAtivo(a.ticker)} titulo={a.ticker} detalhe={a.tipo_rotulo}
+              <Item key={a.ticker} chevron onPress={() => abreAtivo(a.ticker)} onLongPress={() => acoesRapidasAtivo(a.ticker)} titulo={a.ticker} detalhe={a.tipo_rotulo}
                 valores={<View style={{ alignItems: "flex-end", gap: 3 }}><Num style={{ fontWeight: "600", fontSize: 15 }}>{FC.fmt.preco(a.preco)}</Num><Variacao v={a.variacao_dia} pequeno /></View>} />
             ))}
           </Lista>

@@ -23,6 +23,7 @@ import { ui } from "../ui/folha";
 import { Icone } from "../ui/icone";
 import { AbrirAutenticador, BotaoColar } from "./comum/autenticador";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 
 type Modo = "entrar" | "criar" | "mfa" | "confirmar" | "esqueci" | "codigo" | "nova";
 
@@ -114,6 +115,7 @@ export default function Login() {
 
   const mostraErro = (m: string) => {
     setErro(m);
+    vibra.erro();
     treme.setValue(0);
     Animated.sequence([
       Animated.timing(treme, { toValue: -8, duration: 75, useNativeDriver: Platform.OS !== "web" }),
@@ -156,6 +158,7 @@ export default function Login() {
         if (!escolhido) throw new Error("Nenhum autenticador cadastrado.");
         await FC.auth.verificarTotp(escolhido, cod ?? codigo);
         deuCerto();
+        vibra.ok();
         if (recuperando.current) { troca("nova"); return; }
         useApp.setState({ avisoLogin: null });
         await FC.entrarNoApp();

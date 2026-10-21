@@ -12,6 +12,7 @@ import { Entrada, Form } from "../../ui/campos";
 import { Icone } from "../../ui/icone";
 import { folhaForm, ui } from "../../ui/folha";
 import FC from "../../nucleo";
+import { vibra } from "../../plataforma/vibra";
 import {
   abreAutenticador, adicionaAoAutenticador, appEscolhido, appsDoAparelho, ehCelular, escolheApp, type AppAutenticador,
 } from "../../plataforma/autenticador";
@@ -118,7 +119,7 @@ function FormMfa({ dados, jaTem, defineSalvar, api }: any) {
       ui.aviso(jaTem ? "Autenticador reserva adicionado" : "Verificação em duas etapas ligada");
       FC.db.log("seguranca", { acao: jaTem ? "autenticador reserva adicionado" : "2FA ligado" });
       rerender();
-    } catch (err: any) { setErro(/invalid/i.test(err.message) ? "Código incorreto. Confira o app e tente de novo." : FC.ui.traduzErro(err.message)); }
+    } catch (err: any) { vibra.erro(); setErro(/invalid/i.test(err.message) ? "Código incorreto. Confira o app e tente de novo." : FC.ui.traduzErro(err.message)); }
   });
   const qr = <View style={{ alignItems: "center" }}><View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10 }}><QrCode qr={dados.totp.qr_code} /></View></View>;
   const chave = (

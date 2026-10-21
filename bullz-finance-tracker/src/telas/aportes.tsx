@@ -17,6 +17,7 @@ import { abreAtivo } from "./comum/ativo";
 import { acharAtivo, adivinhaClasse, aportadoRf, depoisDeMudar } from "./comum/dados";
 import { UsoDoCaixa, useUsoDoCaixa } from "./comum/caixa-proventos";
 import FC from "../nucleo";
+import { Desliza } from "../ui/desliza";
 
 const ok = (v: any) => FC.ok(v);
 const casasQtd = (a: any) => (a && a.classe === "cripto" ? 8 : 0);
@@ -425,6 +426,11 @@ function FormProvento() {
 
 // ---------------------------------------------------------------- histórico
 const MESES_LONGOS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+async function exclui(a: any) {
+  if (!(await ui.confirma("Excluir este lançamento? A posição e o preço médio são recalculados.", { botao: "Excluir", perigo: true }))) return;
+  try { await FC.db.apagar("aportes", a.id); await depoisDeMudar("Lançamento excluído"); } catch (e) { ui.erro(e); }
+}
+
 function Historico() {
   const t = useTema();
   const [filtro, setFiltro] = useState(mem.filtroHist);
@@ -448,7 +454,7 @@ function Historico() {
     const rot = doCaixa > 0 ? "Reinvestimento" : a.tipo === "provento" ? "Provento" : a.tipo === "caixa" ? (a.valor < 0 ? "Resgate" : "Renda fixa") : a.venda || a.quantidade < 0 ? "Venda" : "Compra";
     const partes = doCaixa > 0 ? `${FC.fmt.brlTexto(doCaixa)} dos proventos + ${FC.fmt.brlTexto(Math.max(0, a.valor - doCaixa))} novo` : "";
     linhas.push(
-      <Item key={a.id}
+      <Desliza key={a.id} acoes={[{ rotulo: "Excluir", perigo: true, aoTocar: () => exclui(a) }]}><Item
         esquerda={<View style={{ width: 44, alignItems: "center" }}>
           <T style={{ fontSize: 17, lineHeight: 18, fontWeight: "600" }}>{a.data.slice(8, 10)}</T>
           <T style={{ fontSize: 12.5, color: t.cores.ink3 }}>{FC.datas.mesAno(a.data).split("/")[0]}</T>
@@ -457,10 +463,7 @@ function Historico() {
           <T style={{ fontWeight: "600", fontSize: 15 }} numberOfLines={1}>{a.tipo === "caixa" ? a.titulo : a.ticker}</T><Pilula cor={cor}>{rot}</Pilula></View>}
         detalhe={`${a.tipo === "ativo" ? `${FC.fmt.qtd(Math.abs(a.quantidade))} × ${FC.fmt.preco(a.preco)}` : ""}${a.observacao ? (a.tipo === "ativo" ? " · " : "") + a.observacao : ""}${a.historico ? " · só na curva" : ""}${partes ? " · " + partes : ""}`}
         valores={<Rs cls={a.tipo === "provento" ? "pos" : null} style={{ fontWeight: "600", fontSize: 15 }}>{FC.fmt.brlTexto(a.valor)}</Rs>}
-        direita={<BotaoIcone nome="lixo" tam={17} rotulo="Excluir lançamento" onPress={async () => {
-          if (!(await ui.confirma("Excluir este lançamento? A posição e o preço médio são recalculados.", { botao: "Excluir", perigo: true }))) return;
-          try { await FC.db.apagar("aportes", a.id); await depoisDeMudar("Lançamento excluído"); } catch (e) { ui.erro(e); }
-        }} />} />,
+        direita={<BotaoIcone nome="lixo" tam={17} rotulo="Excluir lançamento" onPress={() => exclui(a)} />} /></Desliza>,
     );
   }
   return (

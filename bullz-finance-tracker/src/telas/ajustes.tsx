@@ -13,6 +13,7 @@ import { Icone, type NomeIcone } from "../ui/icone";
 import { folhaForm, ui, type ApiFolha } from "../ui/folha";
 import { depoisDeMudar, gravaPremissas } from "./comum/dados";
 import FC from "../nucleo";
+import { ligaVibracao, podeVibrar, vibra, vibracaoLigada } from "../plataforma/vibra";
 import EditorLayout from "./layout-editor";
 import { ligaMfa } from "./comum/autenticador";
 import { BLOQUEIO_DISPONIVEL, TEMPOS, autentica, gravaBloqueio, recursoDoAparelho, useBloqueio } from "../plataforma/bloqueio";
@@ -514,6 +515,7 @@ export default function Ajustes() {
               <Item titulo="Modo privado" detalhe={Platform.OS === "web" && typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches
                   ? "borra os valores em reais; passe o mouse ou clique para ver" : "borra os valores em reais; toque num valor para vê-lo por 5 segundos"}
                 direita={<Interruptor valor={privado} aoMudar={() => alternaPrivado()} />} />
+              {podeVibrar() ? <ItemVibracao /> : null}
             </Lista>
           </Secao>
 
@@ -615,5 +617,14 @@ export default function Ajustes() {
         </View>
       ) : null}
     </Pagina>
+  );
+}
+
+/** liga ou desliga a vibração neste aparelho (vibra ao ligar, para a pessoa sentir) */
+function ItemVibracao() {
+  const [ligada, setLigada] = useState(vibracaoLigada());
+  return (
+    <Item titulo="Vibração" detalhe="um toque leve ao trocar opções e ao salvar"
+      direita={<Interruptor valor={ligada} aoMudar={(v) => { ligaVibracao(v); setLigada(v); if (v) vibra.toque(); }} />} />
   );
 }

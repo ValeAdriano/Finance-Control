@@ -27,6 +27,7 @@ import { formAtivo, formRendaFixa } from "./comum/formularios";
 import { CartaoPerfil, CartaoPlanoRealidade, ChecklistAtivacao } from "./comum/perfil";
 import { ChipSequencia, sequencia } from "./comum/sequencia";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 
 const ok = (v: any) => FC.ok(v);
 const sinal = (v: number) => (v >= 0 ? "+" : "−");
@@ -56,7 +57,7 @@ function ChipsPeriodo({ valor, aoMudar }: { valor: Periodo; aoMudar: (p: Periodo
       {PERIODOS.map((p) => {
         const sel = p.v === valor;
         return (
-          <Pressable key={p.v} onPress={() => aoMudar(p.v)} accessibilityRole="tab" accessibilityState={{ selected: sel }}
+          <Pressable key={p.v} onPress={() => { if (!sel) vibra.toque(); aoMudar(p.v); }} accessibilityRole="tab" accessibilityState={{ selected: sel }}
             style={{ paddingVertical: 6, paddingHorizontal: 14, borderRadius: 980, minHeight: 32, justifyContent: "center",
               backgroundColor: sel ? t.cores.ink : t.cores.campo }}>
             <Text style={{ fontSize: 13.5, fontWeight: sel ? "600" : "400", color: sel ? t.cores.bg : t.cores.ink2 }}>{p.rotulo}</Text>

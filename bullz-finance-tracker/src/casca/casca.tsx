@@ -3,17 +3,18 @@
  *
  * > 1100 px: menu do topo com as abas ligadas, na ordem do layout.
  * ≤ 1100 px: barra de baixo com as 4 primeiras abas do layout + "Mais". */
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Image, Platform, Pressable, RefreshControl, ScrollView, View, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, usePathname } from "expo-router";
 import { useTema } from "../tema";
-import { useApp, rotasLigadas, noCelular, ROTAS, alternaPrivado, atualizaCotacoes, rotaValida } from "../estado/app";
+import { useApp, rotasLigadas, noCelular, ROTAS, alternaPrivado, atualizaCotacoes, rotaValida, ocupado } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
 import { Icone, type NomeIcone } from "../ui/icone";
-import { Botao, Item, Lista, T, Vazio, BotaoIcone } from "../ui/kit";
+import { Botao, Item, Lista, T, Vazio, BotaoIcone, Gira } from "../ui/kit";
 import { ui } from "../ui/folha";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
 import { ItemAlerta, obterAlertas } from "../telas/comum/alertas";
 import { AvisoUso, rotaMudou } from "../estado/uso";
 import { BannerInstalar } from "../telas/instalar";
@@ -280,14 +281,82 @@ export function Pagina({ children, estreita, rolar = true }: { children: React.R
     </Animated.View>
   );
   if (!rolar) return <View style={[{ flex: 1 }, pad]}>{conteudo}</View>;
+  if (Platform.OS === "web") return <PaginaWeb pad={pad}>{conteudo}</PaginaWeb>;
   return (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={pad} keyboardShouldPersistTaps="handled"
-      refreshControl={Platform.OS === "web" ? undefined : (
-        <RefreshControl refreshing={false} tintColor={t.cores.ink3}
-          onRefresh={async () => { const e = await atualizaCotacoes(); ui.aviso(e || "Cotações atualizadas", e ? "erro" : "ok"); }} />
-      )}>
+      refreshControl={<RefreshControl refreshing={false} tintColor={t.cores.ink3} onRefresh={atualizaComAviso} />}>
       {conteudo}
     </ScrollView>
+  );
+}
+
+async function atualizaComAviso() {
+  const e = await atualizaCotacoes();
+  ui.aviso(e || "Cotações atualizadas", e ? "erro" : "ok");
+}
+
+// ---------------------------------------------------------------- puxar para atualizar (web)
+// O RefreshControl não existe no navegador: no celular, puxar a página para
+// baixo quando ela está no topo atualiza as cotações. Uma bolinha desce do topo
+// girando com o dedo; passou do ponto, vibra; soltou, gira até terminar. A
+// página não se move (o iPhone já faz o elástico dele na rolagem).
+const LIMITE = 72, MAXIMO = 110;
+function PaginaWeb({ pad, children }: { pad: object; children: React.ReactNode }) {
+  const t = useTema();
+  const toque = !!(FC.dispositivo && FC.dispositivo.ehMobile);
+  const topo = useRef(0), ini = useRef<number | null>(null), passou = useRef(false), tocando = useRef(false);
+  const puxo = useRef(new Animated.Value(0)).current;
+  const [girando, setGirando] = useState(false);
+  const volta = (v = 0) => Animated.spring(puxo, { toValue: v, damping: 24, stiffness: 240, useNativeDriver: false }).start();
+  const solta = async () => {
+    if (ini.current == null) return;
+    ini.current = null;
+    if (!passou.current) { volta(); return; }
+    passou.current = false;
+    setGirando(true); volta(52);
+    try { await atualizaComAviso(); } finally { setGirando(false); volta(); }
+  };
+  const gestos = toque ? {
+    onTouchStart: (e: any) => {
+      tocando.current = !girando && !ocupado.editandoLayout;
+      ini.current = tocando.current && topo.current <= 0 ? e.nativeEvent.touches[0].pageY : null;
+      passou.current = false;
+    },
+    onTouchMove: (e: any) => {
+      const y = e.nativeEvent.touches[0].pageY;
+      // rolou até o topo no meio do gesto: o puxão começa daqui
+      if (ini.current == null) { if (tocando.current && topo.current <= 0) ini.current = y; return; }
+      const d = y - ini.current;
+      if (topo.current > 0 || d < 0) { ini.current = null; volta(); return; }
+      // resistência: o dedo anda mais que a bolinha
+      const v = Math.min(MAXIMO, d * 0.5);
+      puxo.setValue(v);
+      const p = v >= LIMITE;
+      if (p !== passou.current) { passou.current = p; if (p) vibra.leve(); }
+    },
+    onTouchEnd: () => { tocando.current = false; solta(); },
+    onTouchCancel: () => { tocando.current = false; ini.current = null; passou.current = false; volta(); },
+  } : {};
+  return (
+    <View style={{ flex: 1 }} {...gestos}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={pad} keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16} onScroll={(e) => { topo.current = e.nativeEvent.contentOffset.y; }}>
+        {children}
+      </ScrollView>
+      {toque ? (
+        <Animated.View pointerEvents="none" accessibilityElementsHidden
+          style={{ position: "absolute", top: 0, left: 0, right: 0, alignItems: "center",
+            opacity: puxo.interpolate({ inputRange: [0, 24, 40], outputRange: [0, 0, 1], extrapolate: "clamp" }),
+            transform: [{ translateY: puxo.interpolate({ inputRange: [0, MAXIMO], outputRange: [-40, MAXIMO - 40] }) }] }}>
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: t.cores.bg2, alignItems: "center", justifyContent: "center",
+            boxShadow: t.cores.sombraAlta } as any}>
+            <Animated.View style={{ transform: [{ rotate: puxo.interpolate({ inputRange: [0, LIMITE], outputRange: ["-180deg", "0deg"], extrapolate: "clamp" }) }] }}>
+              <Gira ativo={girando}><Icone nome="atualizar" tam={18} cor={t.cores.acento} /></Gira>
+            </Animated.View>
+          </View>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 

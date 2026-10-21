@@ -7,6 +7,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Polyline, Stop } from "react-n
 import { useTema } from "../tema";
 import { Num, T } from "./kit";
 import FC from "../nucleo";
+import { reduzMovimento } from "./movimento";
 
 const CURVA = Easing.bezier(0.32, 0.72, 0, 1);
 
@@ -17,6 +18,7 @@ function useAnima(v: number, dur = 1000) {
   const [x, setX] = useState(0);
   const atual = useRef(0);
   useEffect(() => {
+    if (reduzMovimento()) { atual.current = v; setX(v); return; }
     const t0 = Date.now(), de = atual.current;
     let raf = 0;
     const passo = () => {

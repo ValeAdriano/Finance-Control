@@ -13,7 +13,7 @@ import { Pagina } from "../casca/casca";
 import { Anel, Botao, Cartao, Item, Kpi, Kpis, Lista, Num, Pilula, Rs, Secao, T, Vazio } from "../ui/kit";
 import { Icone } from "../ui/icone";
 import { EstadoMercado } from "./comum/alertas";
-import { abreAtivo } from "./comum/ativo";
+import { abreAtivo, acoesRapidasAtivo } from "./comum/ativo";
 import { formAtivo, formRendaFixa } from "./comum/formularios";
 import { CabecalhoGrupo, CabecalhoInvestimentos } from "./comum/investimentos";
 import { Alocacao } from "./comum/blocos";
@@ -45,7 +45,7 @@ function LinhaMeu({ a, renda, total }: { a: any; renda: any; total: number }) {
   const rt = FC.estado.dados.rentab && FC.estado.dados.rentab.ativos.find((x: any) => x.ticker === a.ticker);
   const res = rt && ok(rt.periodo_pct) ? rt.periodo_pct : p && ok(p.variacao) ? p.variacao : null;
   return (
-    <Item onPress={() => abreAtivo(a.ticker)} chevron detalheLinhas={2} esquerda={<Anel score={a.score} cor={a.cor} />}
+    <Item onPress={() => abreAtivo(a.ticker)} onLongPress={() => acoesRapidasAtivo(a.ticker)} chevron detalheLinhas={2} esquerda={<Anel score={a.score} cor={a.cor} />}
       titulo={
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <T style={{ fontWeight: "600", fontSize: 15 }}>{a.ticker}</T>

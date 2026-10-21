@@ -22,6 +22,8 @@ import { useApp } from "../estado/app";
 import { useMedidas } from "./medidas";
 import { Icone, type NomeIcone } from "./icone";
 import FC from "../nucleo";
+import { vibra } from "../plataforma/vibra";
+import { reduzMovimento } from "./movimento";
 
 
 /** tela de toque (celular/tablet no navegador, ou app nativo) */
@@ -228,19 +230,22 @@ export function Num({ children, style, cls, cor, ...resto }: TProps) {
 /** fmt.brl do site: o texto em reais, marcado como dinheiro do usuário */
 export const brl = (v: number | null | undefined, casas = 2) => FC.fmt.brlTexto(v, casas);
 
-/** Valor que conta até o alvo (data-conta) — 1,1 s com ease-out. */
+/** Valor que conta até o alvo (data-conta), 1,1 s com ease-out. */
 export function Conta({ valor, modo = "brl", casas = 2, ...resto }: TProps & { valor: number; modo?: "brl" | "int" | "num"; casas?: number }) {
   const veu = useApp((s) => s.carregandoDados);
   const [v, setV] = useState(valor);
   const anterior = useRef<number | null>(null);
+  const mostrado = useRef(0);
   useEffect(() => {
-    if (!FC.ok(valor) || veu || anterior.current === valor) { setV(valor); anterior.current = valor; return; }
+    if (!FC.ok(valor) || veu || anterior.current === valor || reduzMovimento()) { setV(valor); anterior.current = valor; mostrado.current = FC.ok(valor) ? valor : 0; return; }
     anterior.current = valor;
-    const t0 = Date.now(), dur = 1100;
+    // a primeira vez conta do zero; depois, do número que está na tela até o novo
+    const t0 = Date.now(), dur = 1100, de = mostrado.current;
     let raf = 0;
     const passo = () => {
       const p = Math.min(1, (Date.now() - t0) / dur);
-      setV(valor * (1 - Math.pow(1 - p, 4)));
+      mostrado.current = de + (valor - de) * (1 - Math.pow(1 - p, 4));
+      setV(mostrado.current);
       if (p < 1) raf = requestAnimationFrame(passo);
     };
     raf = requestAnimationFrame(passo);
@@ -520,9 +525,11 @@ export function Lista({ children, style }: { children: React.ReactNode; style?: 
   );
 }
 
-export function Item({ esquerda, titulo, detalhe, valores, direita, chevron, onPress, children, alinhar = "center", detalheLinhas = 1 }: {
+export function Item({ esquerda, titulo, detalhe, valores, direita, chevron, onPress, onLongPress, children, alinhar = "center", detalheLinhas = 1 }: {
   esquerda?: React.ReactNode; titulo?: React.ReactNode; detalhe?: React.ReactNode; valores?: React.ReactNode; direita?: React.ReactNode;
   chevron?: boolean; onPress?: () => void; children?: React.ReactNode; alinhar?: ViewStyle["alignItems"]; detalheLinhas?: number;
+  /** tocar e segurar: atalho para ações rápidas (vibra ao abrir) */
+  onLongPress?: () => void;
 }) {
   const t = useTema();
   const { estreito } = useMedidas();
@@ -545,10 +552,16 @@ export function Item({ esquerda, titulo, detalhe, valores, direita, chevron, onP
       {chevron ? <Icone nome="chevron" tam={18} cor={t.cores.ink3} /> : null}
     </>
   );
+  const segurou = useRef(false);
   const estilo: ViewStyle = { flexDirection: "row", alignItems: alinhar, gap: t.espaco.e3, paddingVertical: estreito ? 12 : 14, paddingHorizontal: estreito ? 14 : t.espaco.e4, minHeight: 60 };
   if (!onPress) return <View style={estilo}>{miolo}</View>;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button"
+    <Pressable onPress={onPress} accessibilityRole="button" delayLongPress={420}
+      onLongPress={onLongPress ? () => { vibra.leve(); if (Platform.OS === "web") segurou.current = true; else onLongPress(); } : undefined}
+      // no navegador, o clique que vem ao soltar o dedo cairia na folha recém-aberta: abre ao soltar
+      onPressOut={onLongPress ? () => { if (segurou.current) { segurou.current = false; setTimeout(onLongPress, 60); } } : undefined}
+      accessibilityActions={onLongPress ? [{ name: "longpress", label: "Ações rápidas" }] : undefined}
+      onAccessibilityAction={onLongPress ? (e) => { if (e.nativeEvent.actionName === "longpress") onLongPress(); } : undefined}
       style={({ pressed, hovered }: any) => [estilo, pressed ? { backgroundColor: t.cores.campo } : hovered ? { backgroundColor: t.cores.bg3 } : null]}>
       {miolo}
     </Pressable>
