@@ -23,10 +23,11 @@
     { chave: "projecoes", nome: "Projeções", icone: "projecoes", desc: "aba Projeções: patrimônio e renda futuros em moeda de hoje", rotas: ["projecoes"] },
     { chave: "agro", nome: "Agronegócio", icone: "agro", desc: "aba Agro: rebanho, compras, vendas, custos e pesagens do gado", rotas: ["agro"] },
     { chave: "fii", nome: "Fundos Imobiliários (FIIs)", icone: "ativos", desc: "FIIs na carteira e nas opções de classes de ativos", classes: ["fii"] },
-    { chave: "cripto", nome: "Criptomoedas", icone: "moeda", desc: "BTC, ETH e outras criptos com cotação em reais", classes: ["cripto"] },
+    { chave: "cripto", nome: "Criptomoedas", icone: "cripto", desc: "BTC, ETH e outras criptos com cotação em reais, e a aba Cripto: ranking, gráficos e a ficha de cada moeda", classes: ["cripto"], rotas: ["cripto"] },
     { chave: "exterior", nome: "Bolsa dos EUA", icone: "ativos", desc: "ações e ETFs negociados nos Estados Unidos", classes: ["acao_us", "etf_us"] },
     { chave: "renda", nome: "Análise de setores", icone: "renda", desc: "aba Renda: empresas de setores perenes pelos seus critérios de dividendo", rotas: ["renda"] },
     { chave: "simular", nome: "Simulador de compras", icone: "simular", desc: "aba Simular: o efeito de uma cesta na alocação antes de comprar", rotas: ["simular"] },
+    { chave: "noticias", nome: "Notícias", icone: "jornal", desc: "aba Notícias: manchetes do mercado e de cripto, atualizadas sozinhas", rotas: ["noticias"] },
     { chave: "engajamento", nome: "Sequência e vídeo", icone: "play", desc: "o foguinho da sequência de aportes e o vídeo de divulgação" },
   ];
   // sem escolha salva, liga o que a conta já usa
@@ -45,6 +46,7 @@
       renda: false,
       simular: false,
       engajamento: false,
+      noticias: true,
     };
     if (salvos) {
       return Object.fromEntries(FC.MODULOS.map((m) => [

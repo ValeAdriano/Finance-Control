@@ -14,7 +14,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://ahbftafpbailgmjughsq.supabase.co wss://ahbftafpbailgmjughsq.supabase.co https://api.pwnedpasswords.com; worker-src 'self' blob:; frame-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://coin-images.coingecko.com https://assets.coingecko.com https://www.infomoney.com.br https://infomoney.com.br https://www.moneytimes.com.br https://moneytimes.com.br https://einvestidor.estadao.com.br https://www.estadao.com.br https://classic.exame.com https://exame.com https://images.cointelegraph.com https://s3.cointelegraph.com https://br.cointelegraph.com https://livecoins.com.br https://portaldobitcoin.uol.com.br https://conteudo.imguol.com.br; font-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://ahbftafpbailgmjughsq.supabase.co wss://ahbftafpbailgmjughsq.supabase.co https://api.pwnedpasswords.com; worker-src 'self' blob:; frame-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },

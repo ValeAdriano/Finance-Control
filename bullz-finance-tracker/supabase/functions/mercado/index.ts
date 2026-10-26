@@ -18,6 +18,11 @@
 //   {acao: "fiis_cvm", forcar?}                  vacância financeira, concentração e tipo de cada FII (CVM)
 //   {acao: "tesouro", forcar?}                   títulos do Tesouro Direto: taxa e preço do último dia
 //   {acao: "indices", forcar?}                   completa CDI, Selic e IPCA em indices_diarios
+//   {acao: "cripto_mercado", simbolos?, forcar?} top 100 do CoinGecko + as da carteira, e o global
+//   {acao: "cripto_grafico", id, dias}           preço, market cap e volume (dias: 1, 7, 30, 90, 365, max)
+//   {acao: "cripto_detalhe", id}                 ficha da moeda: supply, máxima histórica, descrição
+//   {acao: "cripto_busca", q}                    busca de moedas por nome ou código
+//   {acao: "noticias", tema?}                    manchetes por RSS (tema: mercado ou cripto)
 //   {acao: "apagar_conta", confirmacao: "APAGAR"} apaga a conta e todos os dados
 //   {acao: "registro_diario"}                    só o agendamento (x-cron-secret):
 //                                                grava a foto do dia de cada usuário
@@ -27,6 +32,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { lerZip, resumoFiis } from "./cvm.ts";
+import { juntaNoticias, leRss } from "./rss.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -583,6 +589,130 @@ async function cotacoesCripto(tickers: string[]) {
   return saida;
 }
 
+// ------------------------------------------------------------------ mercado cripto
+// O módulo Cripto (estilo CoinMarketCap): ranking, gráfico por período e a
+// ficha de cada moeda, tudo do CoinGecko em reais. A API gratuita aceita
+// poucas chamadas por minuto, então tudo passa pelo cache do banco: com
+// mil pessoas na tela, o CoinGecko vê uma chamada por minuto.
+const CG = "https://api.coingecko.com/api/v3";
+const idValido = (id: unknown) => typeof id === "string" && /^[a-z0-9][a-z0-9-]{0,80}$/.test(id) ? id : null;
+const DIAS_GRAFICO: Record<string, number> = { "1": 60 * 1000, "7": 10 * 60 * 1000, "30": HORA, "90": 2 * HORA, "365": 6 * HORA, "max": 12 * HORA };
+
+const linhaMercado = (c: any) => ({
+  id: c.id, simbolo: String(c.symbol || "").toUpperCase(), nome: c.name, imagem: c.image ?? null, rank: c.market_cap_rank ?? null,
+  preco: c.current_price ?? null, var_1h: c.price_change_percentage_1h_in_currency ?? null,
+  var_24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? null,
+  var_7d: c.price_change_percentage_7d_in_currency ?? null, market_cap: c.market_cap ?? null, volume: c.total_volume ?? null,
+  max_24h: c.high_24h ?? null, min_24h: c.low_24h ?? null, circulante: c.circulating_supply ?? null,
+  // 168 pontos por hora é mais do que a sparkline precisa: 1 a cada 4 h
+  spark: ((c.sparkline_in_7d || {}).price || []).filter((_: number, i: number, l: number[]) => i % 4 === 0 || i === l.length - 1)
+    .map((v: number) => Number(v.toPrecision(6))),
+});
+const urlMercado = (extra: string) => `${CG}/coins/markets?vs_currency=brl&order=market_cap_desc&sparkline=true` +
+  `&price_change_percentage=1h,24h,7d&${extra}`;
+
+async function criptoMercado(simbolos: string[], forcar: boolean) {
+  const [lista, global] = await Promise.all([
+    comCacheInfo("cg:markets:brl:100", 60 * 1000, forcar, async () =>
+      JSON.parse(await baixa(urlMercado("per_page=100&page=1"))).map(linhaMercado)),
+    comCache("cg:global", 5 * 60 * 1000, forcar, async () => {
+      const g = JSON.parse(await baixa(`${CG}/global`)).data || {};
+      return { market_cap: (g.total_market_cap || {}).brl ?? null, volume: (g.total_volume || {}).brl ?? null,
+        var_24h: g.market_cap_change_percentage_24h_usd ?? null, moedas: g.active_cryptocurrencies ?? null,
+        dominancia: Object.fromEntries(Object.entries(g.market_cap_percentage || {}).slice(0, 6)) };
+    }).catch(() => null),
+  ]);
+  const moedas: any[] = lista.dados as any[];
+  // as moedas da carteira que não estão no top 100 entram no fim
+  const faltam = simbolos.filter((s) => !moedas.some((m) => m.simbolo === simboloBase(s)));
+  if (faltam.length) {
+    const ids = (await Promise.all(faltam.map(idCoingecko))).filter(Boolean).sort() as string[];
+    if (ids.length) {
+      const extra = await comCache(`cg:markets:brl:ids:${ids.join(",")}`, 2 * 60 * 1000, forcar, async () =>
+        JSON.parse(await baixa(urlMercado(`ids=${ids.join(",")}`))).map(linhaMercado)).catch(() => []);
+      for (const m of extra as any[]) if (!moedas.some((x) => x.id === m.id)) moedas.push(m);
+    }
+  }
+  return { moedas, global, em: lista.em, ...(lista.velho ? { velho: true } : {}) };
+}
+
+async function criptoGrafico(id: string, dias: string, forcar: boolean) {
+  const r = await comCacheInfo(`cg:chart:${id}:${dias}`, DIAS_GRAFICO[dias], forcar, async () => {
+    const d = JSON.parse(await baixa(`${CG}/coins/${id}/market_chart?vs_currency=brl&days=${dias}`));
+    // [ms, valor] com 6 dígitos significativos: o "max" do BTC passa de 4 mil pontos
+    const curto = (l: number[][]) => (l || []).filter((p) => p && p[1] != null).map(([t, v]) => [t, Number(Number(v).toPrecision(6))]);
+    return { precos: curto(d.prices), market_caps: curto(d.market_caps), volumes: curto(d.total_volumes) };
+  });
+  return { ...(r.dados as object), em: r.em, ...(r.velho ? { velho: true } : {}) };
+}
+
+async function criptoDetalhe(id: string, forcar: boolean) {
+  return comCache(`cg:coin:${id}`, 10 * 60 * 1000, forcar, async () => {
+    const c = JSON.parse(await baixa(`${CG}/coins/${id}?localization=true&tickers=false&market_data=true` +
+      `&community_data=false&developer_data=false&sparkline=false`));
+    const m = c.market_data || {};
+    const brl = (o: any) => (o || {}).brl ?? null;
+    const desc = String((c.description || {}).pt || (c.description || {}).en || "").replace(/<[^>]*>/g, "").replace(/\r?\n\s*\r?\n/g, "\n\n").trim();
+    return {
+      id: c.id, simbolo: String(c.symbol || "").toUpperCase(), nome: c.name, imagem: (c.image || {}).large ?? null,
+      rank: c.market_cap_rank ?? null, categorias: (c.categories || []).filter(Boolean).slice(0, 4),
+      descricao: desc.length > 1200 ? desc.slice(0, 1197).replace(/\s+\S*$/, "") + "…" : desc,
+      site: ((c.links || {}).homepage || []).find((u: string) => /^https?:\/\//.test(u)) ?? null,
+      preco: brl(m.current_price), market_cap: brl(m.market_cap), fdv: brl(m.fully_diluted_valuation), volume: brl(m.total_volume),
+      max_24h: brl(m.high_24h), min_24h: brl(m.low_24h),
+      ath: brl(m.ath), ath_var: brl(m.ath_change_percentage), ath_data: brl(m.ath_date),
+      atl: brl(m.atl), atl_var: brl(m.atl_change_percentage), atl_data: brl(m.atl_date),
+      var_24h: brl(m.price_change_percentage_24h_in_currency), var_7d: brl(m.price_change_percentage_7d_in_currency),
+      var_30d: brl(m.price_change_percentage_30d_in_currency), var_1a: brl(m.price_change_percentage_1y_in_currency),
+      circulante: m.circulating_supply ?? null, total: m.total_supply ?? null, maximo: m.max_supply ?? null,
+    };
+  });
+}
+
+async function criptoBusca(q: string) {
+  return comCache(`cg:busca:${q.toLowerCase()}`, 6 * HORA, false, async () =>
+    (JSON.parse(await baixa(`${CG}/search?query=${encodeURIComponent(q)}`)).coins || []).slice(0, 12).map((c: any) => ({
+      id: c.id, simbolo: String(c.symbol || "").toUpperCase(), nome: c.name, imagem: c.large || c.thumb || null, rank: c.market_cap_rank ?? null })));
+}
+
+// ------------------------------------------------------------------ notícias
+// Manchetes de portais por RSS: título, hora, imagem e o link da matéria.
+// Fonte que cair fica de fora (e volta sozinha); as outras seguem.
+const FEEDS: Record<string, Array<{ fonte: string; url: string }>> = {
+  mercado: [
+    { fonte: "InfoMoney", url: "https://www.infomoney.com.br/mercados/feed/" },
+    { fonte: "InfoMoney", url: "https://www.infomoney.com.br/feed/" },
+    { fonte: "Money Times", url: "https://www.moneytimes.com.br/feed/" },
+    { fonte: "E-Investidor", url: "https://einvestidor.estadao.com.br/feed/" },
+    { fonte: "Exame", url: "https://exame.com/feed/" },
+  ],
+  cripto: [
+    { fonte: "Cointelegraph", url: "https://br.cointelegraph.com/rss" },
+    { fonte: "Livecoins", url: "https://livecoins.com.br/feed/" },
+    { fonte: "Portal do Bitcoin", url: "https://portaldobitcoin.uol.com.br/feed/" },
+    { fonte: "InfoMoney", url: "https://www.infomoney.com.br/mercados/criptomoedas/feed/" },
+    { fonte: "Money Times", url: "https://www.moneytimes.com.br/criptomoedas/feed/" },
+  ],
+};
+
+async function noticias(tema: string, forcar: boolean) {
+  const feeds = FEEDS[tema] ?? FEEDS.mercado;
+  const r = await comCacheInfo(`noticias:${tema}`, 2 * 60 * 1000, forcar, async () => {
+    const fontes: Record<string, boolean> = {};
+    const listas = await Promise.all(feeds.map(async (f) => {
+      try {
+        const l = leRss(await baixa(f.url), f.fonte);
+        fontes[f.fonte] = fontes[f.fonte] || l.length > 0;
+        return l;
+      } catch { fontes[f.fonte] = fontes[f.fonte] || false; return []; }
+    }));
+    const itens = juntaNoticias(listas, 60);
+    if (!itens.length) throw new Error("nenhuma fonte de notícias respondeu");
+    return { itens, fontes };
+  });
+  return { ...(r.dados as object), em: r.em, ...(r.velho ? { velho: true } : {}) };
+}
+
 // ------------------------------------------------------------------ cotação de agora
 // Sempre em reais: fora do BRL, converte pelo câmbio de agora (a variação
 // do dia junta a do ativo e a da moeda). A chave ":brl" separa do cache
@@ -922,6 +1052,28 @@ Deno.serve(async (req) => {
         ticker: String(i.ticker || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), classe: String(i.classe || "acao_br") }))
         .filter((i: any) => i.ticker);
       return resposta(await proventos(itens));
+    }
+
+    if (corpo.acao === "cripto_mercado") {
+      const simbolos = (corpo.simbolos ?? []).slice(0, 30).map((s: any) => String(s || "").toUpperCase().replace(/[^A-Z0-9-]/g, "")).filter(Boolean);
+      return resposta(await criptoMercado(simbolos, forcar));
+    }
+    if (corpo.acao === "cripto_grafico") {
+      const id = idValido(corpo.id), dias = String(corpo.dias ?? "7");
+      if (!id || !DIAS_GRAFICO[dias]) return resposta({ erro: "moeda ou período inválido" }, 400);
+      return resposta(await criptoGrafico(id, dias, forcar));
+    }
+    if (corpo.acao === "cripto_detalhe") {
+      const id = idValido(corpo.id);
+      if (!id) return resposta({ erro: "moeda inválida" }, 400);
+      return resposta(await criptoDetalhe(id, forcar));
+    }
+    if (corpo.acao === "cripto_busca") {
+      const q = String(corpo.q ?? "").trim().slice(0, 40);
+      return resposta(q.length < 2 ? [] : await criptoBusca(q));
+    }
+    if (corpo.acao === "noticias") {
+      return resposta(await noticias(corpo.tema === "cripto" ? "cripto" : "mercado", forcar));
     }
 
     // Exclusão da conta pelo próprio dono (exigência das lojas de apps).

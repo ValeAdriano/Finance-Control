@@ -365,6 +365,34 @@
       if (!itens.length) return {};
       return (await chama({ acao: "cotacoes", itens })) || {};
     },
+    // módulo Cripto: ranking (cache de 1 min no servidor), gráfico por período, ficha e busca
+    async criptoMercado(simbolos = []) {
+      return (await chama({ acao: "cripto_mercado", simbolos })) || { moedas: [] };
+    },
+    async criptoGrafico(id, dias) {
+      const k = `cg:${id}:${dias}`;
+      // o gráfico de 1 dia muda a cada minuto; os longos, em horas
+      const c = doNavegador(k, dias === "1" ? 60 * 1000 : dias === "7" ? 5 * 60 * 1000 : 30 * 60 * 1000);
+      if (c) return c;
+      const d = await chama({ acao: "cripto_grafico", id, dias });
+      if (d && d.precos && d.precos.length) { memoria[k] = { t: Date.now(), d }; }
+      return d;
+    },
+    async criptoDetalhe(id) {
+      const k = "cgd:" + id;
+      const c = doNavegador(k, 5 * 60 * 1000);
+      if (c) return c;
+      const d = await chama({ acao: "cripto_detalhe", id });
+      if (d && d.id) memoria[k] = { t: Date.now(), d };
+      return d;
+    },
+    async criptoBusca(q) {
+      return (await chama({ acao: "cripto_busca", q })) || [];
+    },
+    // manchetes por RSS (cache de 2 min no servidor)
+    async noticias(tema = "mercado") {
+      return (await chama({ acao: "noticias", tema })) || { itens: [] };
+    },
     limpaCacheLocal() {
       for (const k of Object.keys(memoria)) delete memoria[k];
       try {

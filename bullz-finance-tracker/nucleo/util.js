@@ -234,6 +234,8 @@
     moeda: '<circle cx="12" cy="12" r="8.5"/><path d="M14.6 9.4A2.7 2.7 0 0 0 12 8.2c-1.5 0-2.6.8-2.6 1.9s1.1 1.6 2.6 1.9 2.6.8 2.6 1.9-1.1 1.9-2.6 1.9a2.7 2.7 0 0 1-2.6-1.2M12 6.7v1.5M12 15.8v1.5"/>',
     sino: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
     compartilhar: '<path d="M12 3v11M8 7l4-4 4 4"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/>',
+    cripto: '<circle cx="12" cy="12" r="8.5"/><path d="M9.8 8v8M9.8 8.1h3a1.95 1.95 0 0 1 0 3.9h-3M9.8 12h3.5a2 2 0 0 1 0 4H9.8M11 6.6v1.5M11 15.9v1.5M13 6.6v1.5M13 15.9v1.5"/>',
+    jornal: '<rect x="3.5" y="5" width="13.5" height="14" rx="2"/><path d="M17 9h2a1.5 1.5 0 0 1 1.5 1.5v6.5a2 2 0 0 1-2 2H6"/><path d="M7 9h6.5M7 12.2h6.5M7 15.4h4"/>',
     adicionarTela: '<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/>',
   };
   FC.icone = function (nome, tam = 20, extra = "") {

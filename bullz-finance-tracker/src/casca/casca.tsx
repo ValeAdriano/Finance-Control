@@ -290,8 +290,11 @@ export function Pagina({ children, estreita, rolar = true }: { children: React.R
   );
 }
 
+/** o que a tela aberta atualiza junto ao puxar (Cripto, Notícias); a tela liga e desliga */
+export const aoPuxar: { extra: null | (() => Promise<unknown>) } = { extra: null };
+
 async function atualizaComAviso() {
-  const e = await atualizaCotacoes();
+  const [e] = await Promise.all([atualizaCotacoes(), aoPuxar.extra ? aoPuxar.extra().catch(() => null) : null]);
   ui.aviso(e || "Cotações atualizadas", e ? "erro" : "ok");
 }
 

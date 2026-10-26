@@ -59,6 +59,8 @@ export const ROTAS: Rota[] = [
   { id: "renda", nome: "Renda", icone: "renda" },
   { id: "simular", nome: "Simular", icone: "simular" },
   { id: "projecoes", nome: "Projeções", icone: "projecoes" },
+  { id: "cripto", nome: "Cripto", icone: "cripto" },
+  { id: "noticias", nome: "Notícias", icone: "jornal" },
   { id: "ajustes", nome: "Ajustes", icone: "ajustes", oculta: true },
   { id: "retrospectiva", nome: "Retrospectiva", icone: "play", oculta: true },
   { id: "perfil", nome: "Perfil do investidor", icone: "bussola", oculta: true },
