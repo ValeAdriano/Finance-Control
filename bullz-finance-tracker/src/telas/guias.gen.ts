@@ -116,6 +116,26 @@ export const GUIAS: Record<string, { resumo: string; partes: [string, string, st
       ],
       dicas: ["Com “Usar meu plano do Salário” ligado, o aporte mensal e a divisão vêm do plano."],
     },
+    cripto: {
+      resumo: "O mercado de criptomoedas ao vivo, em reais, no jeito do CoinMarketCap: o ranking das 100 maiores, as maiores altas e quedas e a página de cada moeda com gráfico.",
+      partes: [
+        ["cripto", "Ranking", "Preço, variação em 1 hora, 24 horas e 7 dias, valor de mercado, volume e a linha dos últimos 7 dias. As moedas que você tem aparecem marcadas; uma da carteira fora do top 100 entra no fim da lista."],
+        ["projecoes", "Gráfico", "Toque numa moeda: preço ou valor de mercado de 1 dia até toda a história, com o volume embaixo. Verde se subiu no período, vermelho se caiu; a linha tracejada é o preço do começo. Arraste o dedo (ou passe o mouse) para ver cada ponto."],
+        ["info", "Números", "Oferta em circulação contra a máxima, máxima e mínima históricas com a distância de hoje, a faixa do dia e a sua posição, se tiver."],
+        ["jornal", "Notícias", "As manchetes de cripto que citam a moeda aparecem no fim da página."],
+      ],
+      dicas: ["A lista se atualiza sozinha a cada minuto com a tela aberta. Puxe para baixo para atualizar na hora.", "Não achou a moeda? Busque pelo nome: fora do top 100, a busca procura em todas as moedas do CoinGecko."],
+    },
+    noticias: {
+      resumo: "Manchetes do mercado e de cripto, dos principais portais, chegando sozinhas enquanto a tela está aberta.",
+      partes: [
+        ["jornal", "Manchetes", "Título, fonte, hora e imagem. Tocar abre a matéria no site do portal."],
+        ["atualizar", "Ao vivo", "A cada 2 minutos a tela busca de novo. O que chegou fica no botão “N novas manchetes”, para a lista não pular enquanto você lê; as novas entram com um ponto azul."],
+        ["ordenar", "Fontes", "Filtre por portal. Uma fonte fora do ar aparece apagada e volta sozinha."],
+        ["alerta", "Ao vivo da bolsa", "Nos dias úteis, um atalho para o minuto a minuto do Ibovespa no InfoMoney."],
+      ],
+      dicas: ["As manchetes vêm do RSS de cada portal; o conteúdo é de cada veículo."],
+    },
     retrospectiva: {
       resumo: "Seu mês contado em etapas, no estilo das retrospectivas de fim de ano, montado com os seus números do período.",
       partes: [

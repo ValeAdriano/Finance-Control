@@ -422,7 +422,80 @@ export function instalaFixture() {
     indices: async () => indices(),
     cotacoes: async (itens: any[]) => cotacoes(itens),
     tesouro: async () => tesouro(),
+    criptoMercado: async () => criptoMercado(),
+    criptoGrafico: async (id: string, dias: string) => criptoGrafico(id, dias),
+    criptoDetalhe: async (id: string) => criptoDetalhe(id),
+    criptoBusca: async (q: string) => criptoMercado().moedas.filter((m: any) => m.nome.toLowerCase().includes(q.toLowerCase())).slice(0, 8),
+    noticias: async (tema: string) => noticias(tema),
   });
+}
+
+// ---------------------------------------------------------------- cripto e notícias
+// [id, símbolo, nome, preço em R$, supply circulante, supply máximo]
+const MOEDAS: Array<[string, string, string, number, number, number | null]> = [
+  ["bitcoin", "BTC", "Bitcoin", 612000, 19.9e6, 21e6], ["ethereum", "ETH", "Ethereum", 21400, 120.4e6, null],
+  ["tether", "USDT", "Tether", 5.42, 182e9, null], ["binancecoin", "BNB", "BNB", 3610, 140e6, 200e6],
+  ["solana", "SOL", "Solana", 1040, 520e6, null], ["ripple", "XRP", "XRP", 13.2, 59e9, 100e9],
+  ["usd-coin", "USDC", "USDC", 5.42, 74e9, null], ["dogecoin", "DOGE", "Dogecoin", 1.18, 151e9, null],
+  ["cardano", "ADA", "Cardano", 3.9, 36e9, 45e9], ["tron", "TRX", "TRON", 1.92, 94e9, null],
+  ["avalanche-2", "AVAX", "Avalanche", 178, 420e6, 720e6], ["chainlink", "LINK", "Chainlink", 98, 680e6, 1e9],
+  ["polkadot", "DOT", "Polkadot", 31, 1.6e9, null], ["litecoin", "LTC", "Litecoin", 560, 76e6, 84e6],
+  ["uniswap", "UNI", "Uniswap", 52, 630e6, 1e9], ["pepe", "PEPE", "Pepe", 0.0000712, 420e12, 420.69e12],
+];
+function criptoMercado() {
+  const moedas = MOEDAS.map(([id, simbolo, nome, preco, circ], i) => {
+    const r = semente("cg" + id);
+    const v = (a: number) => r2((r() - 0.45) * a);
+    const spark: number[] = [];
+    let p = preco / (1 + v(14) / 100);
+    for (let k = 0; k < 42; k++) { p *= 1 + (r() - 0.48) * 0.025; spark.push(Number(p.toPrecision(6))); }
+    spark.push(preco);
+    return { id, simbolo, nome, imagem: null, rank: i + 1, preco, var_1h: v(1.6), var_24h: v(9), var_7d: r2((preco / spark[0] - 1) * 100),
+      market_cap: preco * circ, volume: preco * circ * (0.02 + r() * 0.08), max_24h: preco * 1.03, min_24h: preco * 0.965, circulante: circ, spark };
+  });
+  const total = moedas.reduce((s, m) => s + m.market_cap, 0) * 1.12;
+  return { moedas, em: new Date().toISOString(),
+    global: { market_cap: total, volume: total * 0.045, var_24h: 1.84, moedas: 17342, dominancia: { btc: (moedas[0].market_cap / total) * 100, eth: (moedas[1].market_cap / total) * 100 } } };
+}
+function criptoGrafico(id: string, dias: string) {
+  const m = criptoMercado().moedas.find((x) => x.id === id) || criptoMercado().moedas[0];
+  const n = dias === "1" ? 288 : dias === "7" ? 168 : dias === "30" ? 720 : dias === "90" ? 2160 : dias === "365" ? 365 : 3600;
+  const passo = (dias === "max" ? 3600 : Number(dias)) * 864e5 / n;
+  const r = semente(id + dias), agora = Math.floor(Date.now() / 60000) * 60000;
+  const ps: number[] = new Array(n);
+  ps[n - 1] = m.preco;
+  const vol = dias === "max" ? 0.03 : 0.012;
+  for (let i = n - 2; i >= 0; i--) ps[i] = ps[i + 1] / (1 + (r() + r() - 1.0) * vol + (dias === "max" ? 0.0018 : 0.0002));
+  const precos = ps.map((v, i) => [agora - (n - 1 - i) * passo, Number(v.toPrecision(6))]);
+  return { precos, market_caps: precos.map(([t, v]) => [t, v * m.circulante]),
+    volumes: precos.map(([t, v]) => [t, v * m.circulante * (0.02 + r() * 0.06)]), em: new Date().toISOString() };
+}
+function criptoDetalhe(id: string) {
+  const m = criptoMercado().moedas.find((x) => x.id === id);
+  if (!m) throw new Error("moeda não encontrada");
+  const max = MOEDAS.find((x) => x[0] === id)![5];
+  return { ...m, categorias: ["Layer 1", "Proof of Work"].slice(0, m.rank === 1 ? 2 : 1), site: "https://example.com",
+    descricao: `${m.nome} é uma criptomoeda de demonstração. Este texto existe só no modo fixture, para a página da moeda ter a seção "Sobre" preenchida com algo parecido com a descrição real que vem do CoinGecko. `.repeat(3).trim(),
+    fdv: max ? m.preco * max : null, total: m.circulante, maximo: max, ath: m.preco * 1.18, ath_var: -15.3, ath_data: FC.datas.soma(hoje(), -210),
+    atl: m.preco * 0.0004, atl_var: 249000, atl_data: "2013-07-05", var_30d: 6.2, var_1a: 48.7 };
+}
+function noticias(tema: string) {
+  const r = semente("nt" + tema + Math.floor(Date.now() / 120000));
+  const base = tema === "cripto"
+    ? ["Bitcoin renova máxima em reais com entrada de ETFs", "Ethereum sobe após atualização da rede", "Solana lidera alta entre as maiores criptos",
+      "CVM publica regras para corretoras de cripto", "XRP dispara com decisão judicial nos EUA", "Dogecoin volta a ganhar tração nas redes",
+      "Stablecoins batem recorde de volume no Brasil", "Mineradores vendem menos BTC no mês", "Chainlink anuncia parceria com bancos"]
+    : ["Ibovespa abre em alta com Vale e Petrobras", "Dólar recua a R$ 5,40 com fluxo estrangeiro", "Copom deve manter a Selic, dizem economistas",
+      "Itaúsa anuncia JCP de R$ 0,15 por ação", "IPCA-15 vem abaixo do esperado", "Fundos imobiliários de papel lideram captação",
+      "Petrobras sobe após reajuste da gasolina", "Bolsas americanas fecham perto da máxima", "Tesouro IPCA+ volta a pagar acima de 6,5%",
+      "Varejo tem melhor mês do ano, diz IBGE", "Banco do Brasil supera projeções no trimestre", "Minério de ferro cai na China"];
+  const fontes = tema === "cripto" ? ["Cointelegraph", "Livecoins", "Portal do Bitcoin"] : ["InfoMoney", "Money Times", "E-Investidor", "Exame"];
+  const agora = Date.now();
+  // de 2 em 2 minutos, uma manchete "nova" entra no topo
+  const itens = base.map((titulo, i) => ({ titulo: i === 0 ? `${titulo} (${new Date(Math.floor(agora / 120000) * 120000).toTimeString().slice(0, 5)})` : titulo,
+    link: `https://example.com/${tema}/${i === 0 ? Math.floor(agora / 120000) : i}`, fonte: fontes[i % fontes.length], imagem: null,
+    quando: new Date(agora - (i * 23 + Math.floor(r() * 10)) * 60000).toISOString(), resumo: "Resumo de demonstração da manchete, como vem no RSS do portal." }));
+  return { itens, fontes: Object.fromEntries(fontes.map((f, i) => [f, i < fontes.length - 1 || tema === "cripto"])), em: new Date().toISOString() };
 }
 
 function tesouro() {
