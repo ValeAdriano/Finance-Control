@@ -65,11 +65,11 @@ export function Alocacao({ d }: { d: any }) {
   const { estreito } = useMedidas();
   const [aberto, setAberto] = useState<string | null>(null);
   if (!d.alocacao.length) return null;
-  // pilar com meta 0% fica fora do equilíbrio: aparece com a fatia do patrimônio todo
-  const mostra = (l: any) => (l.fora_meta ? l.pct : l.pct_meta);
+  // a barra é sempre a fatia do patrimônio todo; o texto e o traço seguem a meta
+  const mostra = (l: any) => l.pct;
   const fora = d.alocacao.filter((l: any) => l.fora_meta);
   const escala = Math.max(...d.alocacao.map((l: any) => Math.max(mostra(l), l.alvo_pct))) * 1.12 || 100;
-  const sub = `a barra é o que você tem; o traço, a sua meta${fora.length ? `. ${fora.map((l: any) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta` : ""}`;
+  const sub = `a barra é a fatia do patrimônio total; o traço, a sua meta${fora.length ? `. ${fora.map((l: any) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta` : ""}`;
   return (
     <Secao titulo="Alocação por pilar" sub={sub} direita={<Botao variante="texto" pequeno onPress={() => vai("/ajustes/criterios")}>Mudar metas</Botao>}>
       <Lista>
