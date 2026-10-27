@@ -65,11 +65,12 @@ export function Alocacao({ d }: { d: any }) {
   const { estreito } = useMedidas();
   const [aberto, setAberto] = useState<string | null>(null);
   if (!d.alocacao.length) return null;
-  // a barra é sempre a fatia do patrimônio todo; o texto e o traço seguem a meta
+  // barra e traço na escala do patrimônio todo; a meta vale sobre os pilares
+  // com meta (alvo_no_patrimonio) e o texto continua medido só sobre eles
   const mostra = (l: any) => l.pct;
   const fora = d.alocacao.filter((l: any) => l.fora_meta);
-  const escala = Math.max(...d.alocacao.map((l: any) => Math.max(mostra(l), l.alvo_pct))) * 1.12 || 100;
-  const sub = `a barra é a fatia do patrimônio total; o traço, a sua meta${fora.length ? `. ${fora.map((l: any) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta` : ""}`;
+  const escala = Math.max(...d.alocacao.map((l: any) => Math.max(mostra(l), l.alvo_no_patrimonio || 0))) * 1.12 || 100;
+  const sub = `a barra é a fatia do patrimônio total; o traço, a sua meta${fora.length ? `. ${fora.map((l: any) => l.nome).join(" e ")} ${fora.length === 1 ? "tem" : "têm"} meta 0% e ${fora.length === 1 ? "fica" : "ficam"} fora da conta da meta` : ""}`;
   return (
     <Secao titulo="Alocação por pilar" sub={sub} direita={<Botao variante="texto" pequeno onPress={() => vai("/ajustes/criterios")}>Mudar metas</Botao>}>
       <Lista>
@@ -82,7 +83,7 @@ export function Alocacao({ d }: { d: any }) {
                   <T style={{ fontWeight: "600", fontSize: 15 }}>{l.nome}</T>
                   <T style={{ fontSize: 13, color: t.cores.ink3 }}>{l.composicao.length} {l.composicao.length === 1 ? "item" : "itens"}</T>
                 </View>}
-              detalhe={<View style={{ marginTop: t.espaco.e2, flexDirection: "row" }}><BarraAlocacao pct={mostra(l)} alvo={l.fora_meta ? null : l.alvo_pct} escala={escala} cor={l.cor} /></View>}
+              detalhe={<View style={{ marginTop: t.espaco.e2, flexDirection: "row" }}><BarraAlocacao pct={mostra(l)} alvo={l.fora_meta ? null : l.alvo_no_patrimonio} escala={escala} cor={l.cor} /></View>}
               valores={
                 <View style={{ alignItems: "flex-end", minWidth: 120 }}>
                   {l.fora_meta ? (
