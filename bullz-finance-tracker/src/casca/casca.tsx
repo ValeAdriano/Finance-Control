@@ -275,7 +275,7 @@ export function Pagina({ children, estreita, rolar = true }: { children: React.R
     : celular ? { paddingTop: 24, paddingHorizontal: 16, paddingBottom: 116 + insets.bottom }
     : { paddingTop: 48, paddingHorizontal: 24, paddingBottom: 96 };
   const conteudo = (
-    <Animated.View style={{ width: "100%", maxWidth: estreita ? 720 : 1180, alignSelf: "center", opacity: a,
+    <Animated.View style={{ width: "100%", maxWidth: estreita ? 720 : 1180, alignSelf: "center", opacity: a, flex: rolar ? undefined : 1,
       transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }] }}>
       {children}
     </Animated.View>

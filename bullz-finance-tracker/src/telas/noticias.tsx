@@ -14,10 +14,15 @@ import { Botao, Cabecalho, Mensagem, Roda, T, Vazio } from "../ui/kit";
 import { Segmentado } from "../ui/campos";
 import { Icone } from "../ui/icone";
 import { SeloAoVivo, imagemSegura, useRelogio } from "./comum/ao-vivo";
+import { BaralhoNoticias, type Carta } from "./comum/baralho-noticias";
+import { useSalvas } from "../estado/noticias-salvas";
+import { ui } from "../ui/folha";
 import { atualizaNoticias, mostraPendentes, useAoVivo, useNoticias, type Noticia, type Tema } from "../estado/cripto";
 import FC from "../nucleo";
 
 const mem: { tema: Tema; fonte: string | null } = { tema: "mercado", fonte: null };
+// filtro especial do baralho: só as que você salvou
+const SALVAS = "__salvas";
 const PAGINA = 25;
 
 /** o ao vivo do InfoMoney de hoje (só existe nos dias úteis) */
@@ -89,10 +94,64 @@ export default function Noticias() {
     return () => { aoPuxar.extra = null; };
   }, [tema]);
 
+  const salvas = useSalvas((s) => s.itens);
   const fontes = useMemo(() => Object.keys(f.fontes).sort(), [f.fontes]);
-  const lista = fonte ? f.itens.filter((n) => n.fonte === fonte) : f.itens;
+  const lista = fonte === SALVAS ? salvas : fonte ? f.itens.filter((n) => n.fonte === fonte) : f.itens;
   const pendentes = fonte ? f.pendentes.filter((n) => n.fonte === fonte) : f.pendentes;
   const aoVivo = tema === "mercado" ? linkAoVivo(FC.datas.hoje()) : null;
+
+  if (estreito) {
+    const cartas: Carta[] = [...(aoVivo && !fonte ? [{ tipo: "aovivo" as const, url: aoVivo }] : []), ...lista.map((n) => ({ tipo: "noticia" as const, n }))];
+    const filtrar = () => ui.folha({
+      titulo: "Filtrar notícias",
+      corpo: (api) => (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <ChipFonte rotulo="Todas" ativo={!fonte} onPress={() => { setFonte(null); api.fechar(); }} />
+          <ChipFonte rotulo={`Salvas (${salvas.length})`} ativo={fonte === SALVAS} onPress={() => { setFonte(SALVAS); api.fechar(); }} />
+          {fontes.map((x) => <ChipFonte key={x} rotulo={x} ativo={fonte === x} fora={!f.fontes[x]} onPress={() => { setFonte(x); api.fechar(); }} />)}
+        </View>
+      ),
+    });
+    const rotuloFiltro = fonte === SALVAS ? "Salvas" : fonte || "Todas as fontes";
+    return (
+      <Pagina rolar={false}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: t.espaco.e3 }}>
+          <T style={{ fontSize: 28, fontWeight: "700", letterSpacing: -0.6 }}>Notícias</T>
+          <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 10 }}>
+            {f.em ? <SeloAoVivo em={f.em} velho={f.velho || !!f.erro} carregando={f.carregando} /> : null}
+            <Pressable onPress={async () => { await atualizaNoticias(tema); mostraPendentes(tema); }} accessibilityRole="button" accessibilityLabel="Atualizar notícias" hitSlop={8}>
+              <Icone nome="atualizar" tam={20} cor={t.cores.ink2} />
+            </Pressable>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: t.espaco.e2, alignItems: "center", marginBottom: t.espaco.e3 }}>
+          <View style={{ flex: 1 }}>
+            <Segmentado<Tema> opcoes={[{ v: "mercado", rotulo: "Mercado" }, { v: "cripto", rotulo: "Cripto" }]} valor={tema}
+              aoMudar={(v) => { setTema(v); if (fonte !== SALVAS) setFonte(null); }} rotuloA11y="Assunto" cheio />
+          </View>
+          <Pressable onPress={filtrar} accessibilityRole="button" accessibilityLabel={`Filtrar: ${rotuloFiltro}`}
+            style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 980,
+              backgroundColor: fonte ? t.cores.ink : t.cores.campo, opacity: pressed ? 0.7 : 1, maxWidth: 150 })}>
+            <T style={{ fontSize: 13.5, fontWeight: "600", color: fonte ? t.cores.bg2 : t.cores.ink2 }} numberOfLines={1}>{rotuloFiltro}</T>
+            <View style={{ transform: [{ rotate: "90deg" }] }}><Icone nome="chevron" tam={12} cor={fonte ? t.cores.bg2 : t.cores.ink2} /></View>
+          </Pressable>
+        </View>
+        {pendentes.length && fonte !== SALVAS ? (
+          <Pressable onPress={() => mostraPendentes(tema)} accessibilityRole="button"
+            style={({ pressed }) => ({ alignSelf: "center", paddingVertical: 6, paddingHorizontal: 14, marginBottom: t.espaco.e2, borderRadius: 980, backgroundColor: t.cores.acento, opacity: pressed ? 0.8 : 1 })}>
+            <T style={{ color: "#fff", fontWeight: "600", fontSize: 13.5 }}>{`↑ ${pendentes.length} ${pendentes.length === 1 ? "nova manchete" : "novas manchetes"}`}</T>
+          </Pressable>
+        ) : null}
+        {!f.itens.length && fonte !== SALVAS ? (
+          f.erro ? <Vazio icone="jornal" titulo="As notícias não carregaram" texto={f.erro} acao={<Botao variante="sec" onPress={() => atualizaNoticias(tema)}>Tentar de novo</Botao>} />
+            : <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16 }}><Roda /><T style={{ color: t.cores.ink2 }}>Buscando as manchetes…</T></View>
+        ) : (
+          <BaralhoNoticias cartas={cartas} chave={`${tema}:${fonte || ""}:${fonte === SALVAS ? salvas.length : ""}`}
+            aoFim={fonte === SALVAS && !salvas.length ? <T v="dica" style={{ textAlign: "center" }}>Toque no botão do meio para salvar uma notícia e ler depois.</T> : null} />
+        )}
+      </Pagina>
+    );
+  }
 
   return (
     <Pagina>
