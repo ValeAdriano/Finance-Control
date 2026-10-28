@@ -47,15 +47,20 @@
 
   // ---------------------------------------------------------------- linhas
   // series: [{nome, pontos:[[x,y]], classe:'l1'|'l2'|'lref'..., area?}]
-  // banda: {inf:[[x,y]], sup:[[x,y]]}
-  function linhas({ series, banda, altura = 260, y = "brl", x = "data", zero = false, degrau = false, privado = true }) {
+  // banda: {inf:[[x,y]], sup:[[x,y]], classe?} ou uma lista delas (leque)
+  // alvo: {valor, rotulo} — linha horizontal tracejada (fica de fora se
+  // estiver longe demais dos dados para não achatar o gráfico)
+  function linhas({ series, banda, alvo, altura = 260, y = "brl", x = "data", zero = false, degrau = false, privado = true }) {
+    const bandas = !banda ? [] : Array.isArray(banda) ? banda.filter(Boolean) : [banda];
     const validas = series.filter((s) => s.pontos && s.pontos.length > 1);
     if (!validas.length) return html`<p class="texto-p">Ainda não há dados suficientes para o gráfico.</p>`;
     return marcador(altura, (L) => {
       const H = altura, mE = 58, mD = 14, mT = 12, mB = 28;
       const W = Math.max(L, 280);
-      const todos = validas.flatMap((s) => s.pontos).concat(banda ? banda.inf.concat(banda.sup) : []);
+      const todos = validas.flatMap((s) => s.pontos).concat(bandas.flatMap((b) => b.inf.concat(b.sup)));
       const xs = todos.map((p) => ts(p[0])), ys = todos.map((p) => p[1]).filter(ok);
+      const mostraAlvo = alvo && ok(alvo.valor) && alvo.valor <= Math.max(...ys) * 1.6;
+      if (mostraAlvo) ys.push(alvo.valor);
       let x0 = Math.min(...xs), x1 = Math.max(...xs);
       if (x0 === x1) x1 = x0 + 1;
       const ylo = zero ? Math.min(0, ...ys) : Math.min(...ys), yhi = Math.max(...ys);
@@ -99,10 +104,15 @@
         const anc = pxv < mE + 20 ? "start" : pxv > W - mD - 20 ? "end" : "middle";
         s += `<text x="${pxv}" y="${H - 8}" text-anchor="${anc}">${escapa(rot)}</text>`;
       });
-      if (banda) {
-        const sup = banda.sup.map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`);
-        const inf = [...banda.inf].reverse().map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`);
-        s += `<polygon class="banda surge" points="${sup.concat(inf).join(" ")}"/>`;
+      for (const b of bandas) {
+        const sup = b.sup.map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`);
+        const inf = [...b.inf].reverse().map((p) => `${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`);
+        s += `<polygon class="${b.classe || "banda"} surge" points="${sup.concat(inf).join(" ")}"/>`;
+      }
+      if (mostraAlvo) {
+        const ya = py(alvo.valor).toFixed(1);
+        s += `<line class="alvo" x1="${mE}" x2="${W - mD}" y1="${ya}" y2="${ya}"/>`;
+        if (alvo.rotulo) s += `<text class="alvo-rot" x="${mE + 6}" y="${Number(ya) - 6}" text-anchor="start">${escapa(alvo.rotulo)}</text>`;
       }
       for (const se of validas) {
         const d = caminho(se.pontos);
