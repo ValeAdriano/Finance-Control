@@ -45,17 +45,59 @@ function salva(n: Noticia) {
 }
 
 // ---------------------------------------------------------------- conteúdo da carta
-function Capa({ n, altura }: { n: Noticia; altura: number }) {
-  const t = useTema();
+// cada portal ganha sempre a mesma cor da série do tema
+type Cores = ReturnType<typeof useTema>["cores"];
+export function corDaFonte(nome: string, c: Cores): string {
+  let h = 0;
+  for (let k = 0; k < nome.length; k++) h = (h * 31 + nome.charCodeAt(k)) >>> 0;
+  return [c.s1, c.s2, c.s3, c.s4, c.s5][h % 5];
+}
+
+// imagem da matéria, se houver e carregar; sem ela, a carta vira capa tipográfica
+function useImagem(n: Noticia) {
   const url = imagemSegura(n.imagem);
   const [falhou, setFalhou] = useState(false);
-  if (url && !falhou) {
-    return <Image source={{ uri: url }} style={{ width: "100%", height: altura, backgroundColor: t.cores.campo }} contentFit="cover" transition={150}
-      onError={() => setFalhou(true)} accessibilityIgnoresInvertColors />;
-  }
+  return { url: url && !falhou ? url : null, falhou: () => setFalhou(true) };
+}
+
+function Capa({ url, altura, aoFalhar }: { url: string; altura: number; aoFalhar: () => void }) {
+  const t = useTema();
+  return <Image source={{ uri: url }} style={{ width: "100%", height: altura, backgroundColor: t.cores.campo }} contentFit="cover" transition={150}
+    onError={aoFalhar} accessibilityIgnoresInvertColors />;
+}
+
+function PilulaFonte({ n, cor }: { n: Noticia; cor: string }) {
+  const t = useTema();
   return (
-    <View style={{ width: "100%", height: altura, backgroundColor: t.cores.acentoSuave, alignItems: "center", justifyContent: "center" }}>
-      <T style={{ fontSize: 22, fontWeight: "700", color: t.cores.acento }} numberOfLines={1}>{n.fonte}</T>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <View style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 980, backgroundColor: cor + "2e", flexShrink: 1 }}>
+        <T style={{ fontSize: 12.5, fontWeight: "700", color: cor, letterSpacing: 0.2 }} numberOfLines={1}>{n.fonte}</T>
+      </View>
+      <T style={{ fontSize: 13, color: t.cores.ink3 }}>{n.quando ? FC.datas.ha(n.quando) : ""}</T>
+    </View>
+  );
+}
+
+// sem imagem: a manchete é a capa, sobre um fundo na cor do portal
+function CapaTexto({ n, altura, salva: salvaNa }: { n: Noticia; altura: number; salva: boolean }) {
+  const t = useTema();
+  const cor = corDaFonte(n.fonte || "", t.cores);
+  return (
+    <View style={{ flex: 1, backgroundColor: cor + "1f" }}>
+      <View style={{ height: 4, backgroundColor: cor }} />
+      <T style={{ position: "absolute", top: -18, right: 14, fontSize: 180, lineHeight: 200, fontWeight: "800", color: cor, opacity: 0.12 }}
+        accessibilityElementsHidden importantForAccessibility="no">{"\u201C"}</T>
+      <View style={{ flex: 1, padding: 22, gap: 14 }}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <PilulaFonte n={n} cor={cor} />
+          {salvaNa ? <View style={{ marginLeft: "auto" }}><Icone nome="check" tam={16} cor={t.cores.verde} /></View> : null}
+        </View>
+        <View style={{ flex: 1, justifyContent: "center", gap: 14 }}>
+          <T style={{ fontSize: 28, lineHeight: 34, fontWeight: "800", letterSpacing: -0.6 }} numberOfLines={6}>{n.titulo}</T>
+          {n.resumo ? <T style={{ fontSize: 15.5, lineHeight: 23, color: t.cores.ink2 }} numberOfLines={altura > 600 ? 8 : altura > 480 ? 6 : 4}>{n.resumo}</T> : null}
+        </View>
+        <T style={{ fontSize: 12.5, color: t.cores.ink3 }}>Toque para ler · arraste para passar</T>
+      </View>
     </View>
   );
 }
@@ -74,10 +116,16 @@ function Rosto({ c, altura, salva: salvaNa }: { c: Carta; altura: number; salva:
       </View>
     );
   }
-  const n = c.n;
+  return <RostoNoticia n={c.n} altura={altura} salva={salvaNa} />;
+}
+
+function RostoNoticia({ n, altura, salva: salvaNa }: { n: Noticia; altura: number; salva: boolean }) {
+  const t = useTema();
+  const img = useImagem(n);
+  if (!img.url) return <CapaTexto n={n} altura={altura} salva={salvaNa} />;
   return (
     <View style={{ flex: 1 }}>
-      <Capa n={n} altura={Math.round(altura * 0.42)} />
+      <Capa url={img.url} altura={Math.round(altura * 0.42)} aoFalhar={img.falhou} />
       <View style={{ flex: 1, padding: 20, gap: 8 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <T style={{ fontSize: 13, fontWeight: "600", color: t.cores.acento, flexShrink: 1 }} numberOfLines={1}>{n.fonte}</T>
@@ -104,6 +152,8 @@ function Aberta({ n, fechar }: { n: Noticia; fechar: () => void }) {
   const insets = useSafeAreaInsets();
   const salvas = useSalvas((s) => s.itens);
   const ja = estaSalva(salvas, n.link);
+  const img = useImagem(n);
+  const cor = corDaFonte(n.fonte || "", t.cores);
   // arrastar para baixo fecha, como um cartão do sistema
   const y = useSharedValue(0);
   const pan = Gesture.Pan().activeOffsetY(12).failOffsetX([-20, 20])
@@ -124,14 +174,15 @@ function Aberta({ n, fechar }: { n: Noticia; fechar: () => void }) {
         </View>
       </GestureDetector>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
-        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-          <View style={{ borderRadius: t.raios.r, overflow: "hidden" }}><Capa n={n} altura={220} /></View>
-        </View>
-        <View style={{ padding: 20, gap: 10 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <T style={{ fontSize: 13.5, fontWeight: "600", color: t.cores.acento }}>{n.fonte}</T>
-            <T style={{ fontSize: 13.5, color: t.cores.ink3 }}>{n.quando ? FC.datas.ha(n.quando) : ""}</T>
+        {img.url ? (
+          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <View style={{ borderRadius: t.raios.r, overflow: "hidden" }}><Capa url={img.url} altura={220} aoFalhar={img.falhou} /></View>
           </View>
+        ) : (
+          <View style={{ marginHorizontal: 20, marginTop: 8, height: 4, width: 48, borderRadius: 2, backgroundColor: cor }} />
+        )}
+        <View style={{ padding: 20, gap: 12 }}>
+          <PilulaFonte n={n} cor={cor} />
           <T style={{ fontSize: 26, lineHeight: 32, fontWeight: "700", letterSpacing: -0.5 }}>{n.titulo}</T>
           {n.resumo ? <T style={{ fontSize: 17, lineHeight: 26, color: t.cores.ink2 }}>{n.resumo}</T> : null}
           <T v="dica" style={{ marginTop: 8 }}>O texto completo é do {n.fonte}; o botão abaixo abre a matéria no site do portal.</T>
