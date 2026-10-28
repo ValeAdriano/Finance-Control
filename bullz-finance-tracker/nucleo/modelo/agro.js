@@ -145,7 +145,7 @@
         if (!tem) continue;
         const n2 = Math.min(falta, tem);
         tira(m, c, n2);
-        ajustes.push({ data: m.data, tipo: m.tipo, cabecas: n2, de: c, para: m.categoria });
+        ajustes.push({ id: m.id, data: m.data, tipo: m.tipo, cabecas: n2, de: c, para: m.categoria });
         falta -= n2;
         if (!falta) return;
       }
@@ -190,7 +190,7 @@
         const lote = m.lote || ondeEsta(porLote, m.categoria);
         // só muda de categoria o que existe nela: o excesso não cria cabeças
         const n = Math.min(m.cabecas, Math.max(0, rebanho[m.categoria] || 0));
-        if (n < m.cabecas) ajustes.push({ data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
+        if (n < m.cabecas) ajustes.push({ id: m.id, data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
         if (n && temPeso(m)) entraPeso(m.categoria_destino, m.peso_medio_kg, n, m.data);
         if (n) { mexe(faz, lote, m.categoria, -n); mexe(faz, lote, m.categoria_destino, n); }
       } else if (t.sinal < 0) {
@@ -420,5 +420,17 @@
     return { fluxos, porId, saldo, saldoEm };
   }
 
-  FC.agro = { analisa, arrobas, valorDaOperacao, caixa, valorCabeca, valorEntrada, valorSemPeso, ORIGEM };
+  // a cotação que avalia o rebanho ficou velha? (só importa se alguma
+  // categoria depende dela; avaliando pelo custo ou pelas operações, não)
+  const DIAS_COTACAO = 30;
+  function cotacaoVelha(ag, cfg, hoje = FC.datas.hoje()) {
+    if (!ag || ag.pelo_custo || !(ag.total > 0)) return null;
+    const depende = ag.porCategoria.some((c) => c.origem_valor === "por_cabeca" || c.origem_valor === "arroba" || c.origem_valor === "tipico");
+    if (!depende) return null;
+    if (!cfg.data_cotacao) return { dias: null };
+    const dias = FC.datas.dias(cfg.data_cotacao, hoje);
+    return dias > DIAS_COTACAO ? { dias } : null;
+  }
+
+  FC.agro = { analisa, arrobas, valorDaOperacao, caixa, valorCabeca, valorEntrada, valorSemPeso, cotacaoVelha, DIAS_COTACAO, ORIGEM };
 })();
