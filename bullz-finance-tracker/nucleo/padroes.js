@@ -276,7 +276,8 @@
     aporte_mensal: 500,
     reinvestir_proventos: true,
     distribuicao_aporte: "rebalancear",
-    valorizacao_real_anual: { acoes: 4, real_estate: 0.5, alternativos: 3.5, caixa: 0, agro: 3 },
+    // % a.a. por pilar; vazio usa a fórmula médio + real + atual (FC.projecao)
+    valorizacao_premissa: {},
     crescimento_aporte_real: 0,   // % a.a. acima da inflação (aumento de renda)
     volatilidade: {},             // % a.a. por pilar; vazio usa a dos seus ativos + referência
     // vazio: sai do CDI/IPCA de hoje e converge para FC.projecao.LONGO_PRAZO

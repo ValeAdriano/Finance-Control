@@ -10,7 +10,17 @@
  * 5. O juro de hoje não dura 20 anos: CDI e IPCA saem do valor atual e
  *    convergem para o longo prazo (padrão no caminho do Focus/BCB).
  *
- * A valorização digitada é a mediana (retorno geométrico) de cada pilar.
+ * Valorização real de cada pilar (sem proventos), quando você não digita:
+ *   médio  — referência de longo prazo do mercado para a classe
+ *   real   — o que os seus ativos do pilar renderam de fato (TIR real menos
+ *            o DY), pesando mais quanto mais anos de histórico
+ *   atual  — o que o preço de hoje embute ("building blocks"): juro real
+ *            médio do horizonte + prêmio de risco da classe − DY atual.
+ *            DY alto hoje (preço baixo) deixa menos para a valorização
+ *   valorização = (0,4·médio + 0,4·atual + 0,2·c·real) / (0,8 + 0,2·c),
+ *   c = min(1, anos de histórico / 5)
+ *
+ * A valorização é a mediana (retorno geométrico) de cada pilar.
  * Os sorteios são lognormais em torno dela, então a média fica acima e a
  * mediana bate com a conta determinística. */
 (function () {
@@ -38,6 +48,25 @@
   const ALIQ_GANHO = { acoes: 15, real_estate: 20, alternativos: 15, agro: 0 };
   const CAMINHOS = 500, SEMENTE = 20240917;
   const TAXA_SAQUE = 4;
+  // valorização real de longo prazo (sem proventos), % a.a.
+  const VAL_MEDIO = { acoes: 4, real_estate: 0.5, alternativos: 3.5, agro: 3 };
+  // prêmio de risco real sobre a renda fixa (FC.PERFIL.premios: ações 4, FIIs 2,5, cripto 6)
+  const PREMIO = { acoes: 4, real_estate: 2.5, alternativos: 6 };
+  const PESOS_VAL = { medio: 0.4, atual: 0.4, real: 0.2 };
+  const ANOS_CONFIANCA = 5;
+  const limita = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function valorizacaoPorFontes(k, dy, hist, juroReal) {
+    const medio = VAL_MEDIO[k] ?? 2;
+    const premio = (FC.PERFIL && FC.PERFIL.premios ? { acoes: FC.PERFIL.premios.acoes, real_estate: FC.PERFIL.premios.fiis, alternativos: FC.PERFIL.premios.cripto } : PREMIO)[k];
+    const atual = premio != null ? limita(juroReal + premio - (dy || 0), -5, 15) : null;
+    const real = hist && hist.anos > 0 && hist.valor != null ? limita(hist.valor - (dy || 0), -10, 20) : null;
+    const c = real != null ? Math.min(1, hist.anos / ANOS_CONFIANCA) : 0;
+    const pesos = { medio: PESOS_VAL.medio, atual: atual != null ? PESOS_VAL.atual : 0, real: PESOS_VAL.real * c };
+    const soma = pesos.medio + pesos.atual + pesos.real;
+    const valor = (pesos.medio * medio + pesos.atual * (atual || 0) + pesos.real * (real || 0)) / soma;
+    return { valor, medio, atual, real, anos: hist ? hist.anos : 0, pesos: { medio: pesos.medio / soma, atual: pesos.atual / soma, real: pesos.real / soma } };
+  }
 
   // ---------------------------------------------------------------- dados
   // retornos mensais (log) de uma série diária [[data, preço]]
@@ -109,13 +138,14 @@
     for (const a of r.ativos || []) {
       const k = pilarDe[a.ticker];
       if (!k || a.xirr == null || !(a.valor_atual > 0)) continue;
-      const x = (acc[k] = acc[k] || { s: 0, w: 0 });
-      x.s += a.xirr * a.valor_atual; x.w += a.valor_atual;
+      const x = (acc[k] = acc[k] || { s: 0, w: 0, d: 0 });
+      x.s += a.xirr * a.valor_atual; x.w += a.valor_atual; x.d += (a.dias || 0) * a.valor_atual;
     }
-    const out = Object.fromEntries(Object.entries(acc).map(([k, x]) => [k, real(x.s / x.w, ipca)]));
+    // { valor: % real a.a., anos: tempo médio de histórico, pesado pelo valor }
+    const out = Object.fromEntries(Object.entries(acc).map(([k, x]) => [k, { valor: real(x.s / x.w, ipca), anos: x.d / x.w / 365 }]));
     const cl = r.classes || {};
-    if (cl.renda_fixa && cl.renda_fixa.xirr != null) out.caixa = real(cl.renda_fixa.xirr, ipca);
-    if (cl.agro && cl.agro.xirr != null) out.agro = real(cl.agro.xirr, ipca);
+    if (cl.renda_fixa && cl.renda_fixa.xirr != null) out.caixa = { valor: real(cl.renda_fixa.xirr, ipca), anos: (cl.renda_fixa.dias || 0) / 365 };
+    if (cl.agro && cl.agro.xirr != null) out.agro = { valor: real(cl.agro.xirr, ipca), anos: (cl.agro.dias || 0) / 365 };
     return out;
   }
 
@@ -194,7 +224,7 @@
   function prepara(pilares, prem, alvosObj, macro, hoje) {
     const meses = Math.round(Number(prem.horizonte_anos) || 20) * MESES;
     const modo = prem.distribuicao_aporte || "rebalancear";
-    const val = prem.valorizacao_real_anual || {};
+    const val = prem._valorizacao || {};
     const volUser = prem.volatilidade || {};
     const ks = Object.keys(pilares);
     // se não há nenhum pilar (carteira vazia), o aporte cria os pilares da meta
@@ -389,6 +419,20 @@
 
     const alvos = dados.alocacao_alvo || {};
     const pilares = perfilDosPilares(dados);
+    const hist = historicoReal(dados, ipcaHoje);
+    // juro real médio ao longo do horizonte (já com a convergência)
+    let jr = 0;
+    for (let m = 1; m <= meses; m++) jr += real(macro.cdi[m], macro.ipca[m]);
+    jr /= meses;
+    const manual = prem.valorizacao_premissa || {};
+    const fontes = {}, valFinal = {};
+    for (const k of FC.PILARES.map((x) => x.chave)) {
+      if (k === "caixa") continue;
+      fontes[k] = valorizacaoPorFontes(k, pilares[k] ? pilares[k].dy : 0, hist[k], jr);
+      const u = num(manual[k]);
+      valFinal[k] = u != null ? u : fontes[k].valor;
+    }
+    prem = { ...prem, _valorizacao: valFinal };
     const P = prepara(pilares, prem, alvos, macro, hoje);
     const base = deterministico(P, pilares);
 
@@ -417,18 +461,17 @@
     }
     delete mc.cruzou;
 
-    const val = prem.valorizacao_real_anual || {};
-    const hist = historicoReal(dados, ipcaHoje);
+    const val = valFinal;
     const ordem = FC.PILARES.map((p) => p.chave);
     const risco = Object.fromEntries(P.ks.map((k, i) => [k, P.risco[i]]));
     const resumo = Object.entries(pilares).map(([k, p]) => {
-      const comum = { chave: k, nome: FC.PILAR_NOME[k], valor: p.valor, volatilidade: risco[k] ? risco[k].vol : null, vol_origem: risco[k] ? risco[k].origem : null, vol_observada: risco[k] ? risco[k].observada : null, historico_real: hist[k] ?? null };
+      const comum = { chave: k, nome: FC.PILAR_NOME[k], valor: p.valor, volatilidade: risco[k] ? risco[k].vol : null, vol_origem: risco[k] ? risco[k].origem : null, vol_observada: risco[k] ? risco[k].observada : null, historico_real: hist[k] ? hist[k].valor : null, historico_anos: hist[k] ? hist[k].anos : null };
       if (k === "caixa") {
         const tt = FC.soma(p.titulos, (t) => t.valor) || 1;
         const em = (m) => FC.soma(P.titulos, (t) => (t.valor * (Math.pow(1 + t.f[Math.min(m, meses)], MESES) - 1) * 100)) / tt;
         return { ...comum, dy: null, valorizacao: null, total: P.titulos.length ? em(1) : 0, total_lp: P.titulos.length ? em(meses) : 0, titulos: p.titulos };
       }
-      return { ...comum, dy: p.dy, valorizacao: Number(val[k]) || 0, total: (Number(val[k]) || 0) + p.dy, titulos: [] };
+      return { ...comum, dy: p.dy, valorizacao: Number(val[k]) || 0, valorizacao_fontes: fontes[k], valorizacao_manual: num(manual[k]) != null, total: (Number(val[k]) || 0) + p.dy, titulos: [] };
     }).sort((a, b) => ordem.indexOf(a.chave) - ordem.indexOf(b.chave));
     const caixa = resumo.find((l) => l.chave === "caixa");
     const rv = resumo.filter((l) => l.chave !== "caixa" && l.valor > 0).map((l) => l.total);
@@ -439,7 +482,7 @@
     }));
     return {
       usando_plano: usandoPlano,
-      base, mc, independencia, pilares: resumo, macro_lp: macroLp,
+      base, mc, independencia, pilares: resumo, macro_lp: { ...macroLp, juro_real_medio: jr }, valorizacao: fontes,
       usando_macro_padrao: num(lp.cdi) == null && num(lp.ipca) == null, premissas: prem,
       // mesmo com o juro convergindo, a renda fixa segue acima da renda variável
       alerta_caixa: !!caixa && caixa.valor > 0 && rv.length > 0 && caixa.total_lp > Math.max(...rv),
@@ -447,5 +490,5 @@
     };
   }
 
-  FC.projecao = { projeta, LONGO_PRAZO, VOL_REFERENCIA, TAXA_SAQUE, CAMINHOS, _interno: { retornosMensais, volObservada, cholesky, mulberry32, quantil } };
+  FC.projecao = { projeta, LONGO_PRAZO, VOL_REFERENCIA, TAXA_SAQUE, CAMINHOS, VAL_MEDIO, PESOS_VAL, valorizacaoPorFontes, _interno: { retornosMensais, volObservada, cholesky, mulberry32, quantil } };
 })();

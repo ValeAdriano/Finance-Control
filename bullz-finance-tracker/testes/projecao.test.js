@@ -125,3 +125,29 @@ test("aporte crescendo acima da inflação aumenta o total aportado", () => {
   perto(fixo.base.aportado, 2000 * 240, 1e-6);
   assert.ok(cresce.base.aportado > fixo.base.aportado * 1.2);
 });
+
+test("valorização: médio, atual e o seu histórico, com peso pelo tempo", () => {
+  const f = FC.projecao.valorizacaoPorFontes;
+  // sem histórico: metade médio, metade atual (juro real 5 + prêmio 4 − DY 6 = 3)
+  const sem = f("acoes", 6, null, 5);
+  perto(sem.atual, 3, 1e-9);
+  perto(sem.valor, (4 + 3) / 2, 1e-9);
+  // 5 anos ou mais: 40/40/20; o "seu" é a TIR real menos o DY
+  const cheio = f("acoes", 6, { valor: 14, anos: 6 }, 5);
+  perto(cheio.real, 8, 1e-9);
+  perto(cheio.valor, 0.4 * 4 + 0.4 * 3 + 0.2 * 8, 1e-9);
+  // 2,5 anos: metade do peso do histórico
+  perto(f("acoes", 6, { valor: 14, anos: 2.5 }, 5).pesos.real, 0.1 / 0.9, 1e-9);
+  // agro não tem "atual": só médio e histórico
+  assert.equal(f("agro", 0, null, 5).atual, null);
+  perto(f("agro", 0, null, 5).valor, FC.projecao.VAL_MEDIO.agro, 1e-9);
+});
+
+test("valorização digitada vale sobre a fórmula", () => {
+  const p = projeta(dados(), prem({ valorizacao_premissa: { acoes: 7 } }), { aporte_para: false });
+  const acoes = p.pilares.find((l) => l.chave === "acoes");
+  assert.equal(acoes.valorizacao, 7);
+  assert.equal(acoes.valorizacao_manual, true);
+  const fii = p.pilares.find((l) => l.chave === "real_estate");
+  perto(fii.valorizacao, p.valorizacao.real_estate.valor, 1e-9);
+});

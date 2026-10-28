@@ -8,7 +8,7 @@ import { useTema } from "../tema";
 import { useEstado } from "../estado/app";
 import { useMedidas } from "../ui/medidas";
 import { Pagina } from "../casca/casca";
-import { B, Botao, Cabecalho, Cartao, Composicao, Grade, Item, Kpi, Kpis, Legenda, Lista, Mensagem, Ponto, Rs, Secao, T, Tabela } from "../ui/kit";
+import { B, Botao, Cabecalho, Cartao, Composicao, Detalhes, Grade, Item, Kpi, Kpis, Legenda, Lista, Mensagem, Ponto, Rs, Secao, T, Tabela } from "../ui/kit";
 import { Campo, Entrada, Interruptor, Seletor } from "../ui/campos";
 import { Grafico } from "../ui/grafico";
 import { Icone } from "../ui/icone";
@@ -32,6 +32,16 @@ function aporteObservado(base: any) {
   const meses = FC.salario.mesesAte(mesAtual, 13).slice(0, 12).filter((m: string) => m >= primeiro);
   if (meses.length < 3) return null;
   return { media: FC.soma(meses, (m: string) => FC.salario.investidoNoMes(base, m)) / meses.length, meses: meses.length };
+}
+
+// "médio 4,0% × 40% + atual 0,5% × 40% + seu 2,0% × 20% = 2,2%"
+function formula(f: any) {
+  if (!f) return "—";
+  const n = (v: number) => FC.fmt.num(v, 1) + "%", w = (v: number) => FC.fmt.num(v * 100, 0) + "%";
+  const partes = [`médio ${n(f.medio)} × ${w(f.pesos.medio)}`];
+  if (f.atual != null) partes.push(`atual ${n(f.atual)} × ${w(f.pesos.atual)}`);
+  if (f.real != null && f.pesos.real > 0) partes.push(`seu ${n(f.real)} × ${w(f.pesos.real)}`);
+  return partes.join(" + ") + ` = ${n(f.valor)}`;
 }
 
 function Independencia({ p }: { p: any }) {
@@ -59,7 +69,9 @@ function Independencia({ p }: { p: any }) {
           <Kpi rotulo="Aporte para 80% de chance" valor={ind.aporte_para_80 != null ? brl0(ind.aporte_para_80) : chance >= 80 || ind.ja_atingido ? "o atual basta" : "—"} dinheiro={ind.aporte_para_80 != null}
             peq={ind.aporte_para_80 != null ? `por mês, no lugar de ${brl0(p.base.aportado / (anos * 12))} de média` : "com as premissas de hoje"} />
         </Kpis>
-        <T v="p" style={{ marginTop: t.espaco.e4 }}>A taxa de saque de <B>{FC.fmt.num(ind.taxa_saque, 1)}%</B> é a parte do patrimônio que dá para tirar por ano, corrigindo pela inflação, sem esgotar o dinheiro. A regra dos 4% vem de dados americanos (Bengen, Trinity). No Brasil, estudos com carteira majoritária em renda fixa chegam a 5%, e simulações mais duras ficam abaixo de 4%. Para viver de renda por 40 anos ou mais, 3% a 3,5% é a margem prudente. {ind.renda_alvo_origem === "objetivos" ? "A renda-alvo vem dos seus objetivos." : ""}</T>
+        <Detalhes rotulo={`Por que ${FC.fmt.num(ind.taxa_saque, 1)}% de saque?`} tam={13}>
+        <T v="p">A taxa de saque de <B>{FC.fmt.num(ind.taxa_saque, 1)}%</B> é a parte do patrimônio que dá para tirar por ano, corrigindo pela inflação, sem esgotar o dinheiro. A regra dos 4% vem de dados americanos (Bengen, Trinity). No Brasil, estudos com carteira majoritária em renda fixa chegam a 5%, e simulações mais duras ficam abaixo de 4%. Para viver de renda por 40 anos ou mais, 3% a 3,5% é a margem prudente. {ind.renda_alvo_origem === "objetivos" ? "A renda-alvo vem dos seus objetivos." : ""}</T>
+        </Detalhes>
       </Cartao>
     </Secao>
   );
@@ -69,7 +81,6 @@ function Resultado({ p }: { p: any }) {
   const t = useTema();
   const { estreito } = useMedidas();
   const b = p.base, mc = p.mc, f = mc.faixas;
-  const colocou = b.inicial + b.aportado;
   const brl0 = (v: number) => FC.fmt.brlTexto(v, 0);
   const zero = (s: any[]) => [[0, b.inicial], ...s];
   const ind = p.independencia;
@@ -81,13 +92,12 @@ function Resultado({ p }: { p: any }) {
         </Mensagem>
       ) : null}
       <Independencia p={p} />
-      <Secao titulo="Patrimônio projetado" sub={`a linha é a mediana; a faixa escura junta metade dos ${FC.fmt.int(mc.caminhos)} caminhos simulados, a clara 80% deles`}>
+      <Secao titulo="Patrimônio projetado" sub="a linha é o caminho do meio; a faixa, onde a maioria dos cenários termina">
         <Cartao>
           <Kpis style={{ marginBottom: 24 }}>
             <Kpi rotulo="Hoje" valor={brl0(b.inicial)} dinheiro />
             <Kpi rotulo={`Em ${p.premissas.horizonte_anos} anos, na mediana`} valor={brl0(mc.p50.final)} dinheiro peq={<Rs style={{ fontSize: 12.5, color: t.cores.ink2 }}>{`entre ${brl0(mc.p10.final)} e ${brl0(mc.p90.final)}`}</Rs>} />
             <Kpi rotulo="Depois do IR" valor={brl0(mc.p50.final_liquido)} dinheiro peq="se resgatasse tudo no fim" />
-            <Kpi rotulo="Multiplicador" valor={colocou ? FC.fmt.num(mc.p50.final / colocou, 1) + "×" : "—"} peq="sobre o que você tem hoje + os aportes" />
           </Kpis>
           <Grafico marcador={FC.graficos.linhas({
             series: [{ nome: "Mediana", pontos: zero(f.p50), classe: "l1" }, { nome: "Cenário ruim (P10)", pontos: zero(f.p10), classe: "lref2" }, { nome: "Cenário bom (P90)", pontos: zero(f.p90), classe: "lref2" }],
@@ -96,6 +106,7 @@ function Resultado({ p }: { p: any }) {
           <Legenda itens={[{ cor: t.cores.s1, rotulo: "mediana" }, { cor: t.cores.s1, rotulo: "50% e 80% dos caminhos", tipo: "banda" }, ...(ind && !ind.ja_atingido ? [{ cor: t.cores.verde, rotulo: "patrimônio para a independência" }] : [])]} />
         </Cartao>
       </Secao>
+      <Detalhes rotulo="Ver cenários e como a conta é feita" tam={15} style={{ marginTop: t.espaco.e5 }}>
       <Secao titulo="Cenários" sub={`em ${p.premissas.horizonte_anos} anos, em moeda de hoje`}>
         <Cartao semPad>
           <Tabela minimo={estreito ? 460 : 760} cabecas={[{ t: "Cenário", largura: 150 }, { t: "Patrimônio", n: true, largura: 140 }, { t: "Depois do IR", n: true, largura: 140 }, { t: "Proventos/mês", n: true, largura: 130 }, ...(estreito ? [] : [{ t: "Leitura", largura: 260 }])]}
@@ -133,15 +144,15 @@ function Resultado({ p }: { p: any }) {
       </Secao>
       <Secao titulo="Premissas por pilar" sub="o retorno total é o número que você precisa achar plausível; o seu histórico ajuda a calibrar">
         <Cartao semPad>
-          <Tabela minimo={estreito ? 640 : 980} cabecas={[{ t: "Pilar", largura: 140 }, { t: "Valor hoje", n: true }, { t: "Proventos", n: true }, { t: "Valorização real", n: true, largura: 130 }, { t: "Retorno total real", n: true, largura: 140 }, { t: "Volatilidade", n: true, largura: 110 }, { t: "Seu histórico real", n: true, largura: 140 }, ...(estreito ? [] : [{ t: "Origem do risco", largura: 230 }])]}
+          <Tabela minimo={estreito ? 640 : 980} cabecas={[{ t: "Pilar", largura: 140 }, { t: "Valor hoje", n: true }, { t: "Proventos", n: true }, { t: "Valorização real", n: true, largura: 130 }, { t: "Retorno total real", n: true, largura: 140 }, { t: "Volatilidade", n: true, largura: 110 }, { t: "Seu histórico real", n: true, largura: 140 }, ...(estreito ? [] : [{ t: "De onde vem a valorização", largura: 300 }])]}
             linhas={p.pilares.map((l: any) => [{ v: <B>{l.nome}</B> }, { v: brl0(l.valor), dinheiro: true }, ok(l.dy) ? FC.fmt.num(l.dy) + "%" : "—",
               ok(l.valorizacao) ? FC.fmt.num(l.valorizacao) + "%" : "—",
               { v: l.chave === "caixa" ? `${FC.fmt.num(l.total)}% → ${FC.fmt.num(l.total_lp)}%` : FC.fmt.num(l.total) + "%", peso: "600" },
               ok(l.volatilidade) ? FC.fmt.num(l.volatilidade, 0) + "%" : "—",
               ok(l.historico_real) ? { v: FC.fmt.num(l.historico_real) + "%", cls: l.historico_real >= 0 ? "pos" : "neg" } : "—",
-              ...(estreito ? [] : [{ v: <T style={{ fontSize: 13, color: t.cores.ink2 }}>{l.chave === "caixa" ? "taxa contratada de cada título; CDI depois do vencimento" : l.vol_origem}</T> }])])} />
+              ...(estreito ? [] : [{ v: <T style={{ fontSize: 13, color: t.cores.ink2 }}>{l.chave === "caixa" ? "taxa contratada de cada título; CDI depois do vencimento" : l.valorizacao_manual ? "valorização: a sua premissa" : formula(l.valorizacao_fontes)}</T> }])])} />
         </Cartao>
-        <T v="p" style={{ marginTop: t.espaco.e3 }}>Quando o pilar tem pouca série, a volatilidade mistura a dos seus ativos com uma referência de mercado (carteira de ações ~25% ao ano, FIIs ~12%, cripto ~60%, rebanho ~15%; o Ibovespa teve ~31% em 2000–2024). O histórico real é a TIR do que você já investiu, descontado o IPCA de 12 meses: um bom termômetro, mas poucos anos de bolsa dizem pouco sobre os próximos vinte.</T>
+        <T v="p" style={{ marginTop: t.espaco.e3 }}><B>Valorização</B> = 40% do <B>médio</B> (referência de longo prazo da classe) + 40% do <B>atual</B> (juro real médio do horizonte, {FC.fmt.num(p.macro_lp.juro_real_medio, 1)}%, mais o prêmio de risco da classe, menos o DY de hoje: preço baixo paga DY alto e sobra menos para valorizar) + até 20% do <B>seu histórico</B> (TIR real menos o DY, com peso cheio a partir de 5 anos). Quando o pilar tem pouca série, a volatilidade mistura a dos seus ativos com uma referência de mercado (carteira de ações ~25% ao ano, FIIs ~12%, cripto ~60%, rebanho ~15%; o Ibovespa teve ~31% em 2000–2024). O histórico real é a TIR do que você já investiu, descontado o IPCA de 12 meses: um bom termômetro, mas poucos anos de bolsa dizem pouco sobre os próximos vinte.</T>
       </Secao>
       {p.titulos_caixa.length ? (
         <Secao titulo="Renda fixa contratada" sub="a parte que não depende de premissa de mercado, até vencer">
@@ -153,6 +164,7 @@ function Resultado({ p }: { p: any }) {
           </Lista>
         </Secao>
       ) : null}
+      </Detalhes>
     </View>
   );
 }
@@ -176,7 +188,7 @@ export default function Projecoes() {
     return {
       aporte_mensal: txt(p.aporte_mensal), horizonte_anos: txt(p.horizonte_anos),
       crescimento_aporte_real: txt(p.crescimento_aporte_real),
-      ...Object.fromEntries(FC.PILARES.filter((x: any) => x.chave !== "caixa").map((x: any) => ["val_" + x.chave, txt((p.valorizacao_real_anual || {})[x.chave] ?? 0)])),
+      ...Object.fromEntries(FC.PILARES.filter((x: any) => x.chave !== "caixa").map((x: any) => ["val_" + x.chave, txt((p.valorizacao_premissa || {})[x.chave])])),
       ...Object.fromEntries(FC.PILARES.filter((x: any) => x.chave !== "caixa").map((x: any) => ["vol_" + x.chave, txt((p.volatilidade || {})[x.chave])])),
       cdi_lp: txt(p.macro_longo_prazo.cdi), ipca_lp: txt(p.macro_longo_prazo.ipca), meses_convergencia: txt(p.meses_convergencia),
       renda_alvo: txt(p.renda_alvo), taxa_saque: txt(p.taxa_saque),
@@ -192,8 +204,8 @@ export default function Projecoes() {
       horizonte_anos: Math.max(1, Math.min(60, Math.round(n("horizonte_anos") || base.horizonte_anos))),
       crescimento_aporte_real: n("crescimento_aporte_real") ?? 0,
       distribuicao_aporte: extra.distribuicao_aporte, reinvestir_proventos: extra.reinvestir_proventos,
-      valorizacao_real_anual: Object.fromEntries(FC.PILARES.filter((p: any) => p.chave !== "caixa").map((p: any) => [p.chave, n("val_" + p.chave) ?? (base.valorizacao_real_anual || {})[p.chave] ?? 0])),
-      // vazio cai no padrão do modelo (volatilidade dos seus ativos, longo prazo do Focus, objetivos)
+      // vazio cai no padrão do modelo (fórmula médio + real + atual, volatilidade dos seus ativos, longo prazo do Focus, objetivos)
+      valorizacao_premissa: Object.fromEntries(FC.PILARES.filter((p: any) => p.chave !== "caixa").map((p: any) => [p.chave, n("val_" + p.chave)])),
       volatilidade: Object.fromEntries(FC.PILARES.filter((p: any) => p.chave !== "caixa").map((p: any) => [p.chave, n("vol_" + p.chave)])),
       macro_longo_prazo: { cdi: n("cdi_lp"), ipca: n("ipca_lp") },
       meses_convergencia: n("meses_convergencia"), renda_alvo: n("renda_alvo"), taxa_saque: n("taxa_saque"),
@@ -213,7 +225,13 @@ export default function Projecoes() {
   const lpPadrao = { cdi: ((1 + FC.projecao.LONGO_PRAZO.juro_real / 100) * (1 + FC.projecao.LONGO_PRAZO.ipca / 100) - 1) * 100 };
   const linhaPilar = (k: string) => (proj ? proj.pilares.find((l: any) => l.chave === k) : null);
   const volCalc = (k: string) => { const l = linhaPilar(k); return l && (campos["vol_" + k] ?? "") === "" ? l.volatilidade : l ? l.vol_observada : null; };
-  const hist = (k: string) => { const l = linhaPilar(k); return l && ok(l.historico_real) ? `seu histórico: ${FC.fmt.num(l.historico_real)}% real (com proventos)` : undefined; };
+  // "médio 4 · real 2 · atual 1": as três fontes da fórmula, para a dica do campo
+  const fontes = (k: string) => {
+    const f = proj && proj.valorizacao ? proj.valorizacao[k] : null;
+    if (!f) return undefined;
+    const partes = [`médio ${FC.fmt.num(f.medio, 1)}`, f.real != null ? `seu ${FC.fmt.num(f.real, 1)}` : null, f.atual != null ? `atual ${FC.fmt.num(f.atual, 1)}` : null].filter(Boolean);
+    return partes.join(" · ");
+  };
   const muda = (c: Record<string, string>, extra: any = {}) => {
     const novo = montaPrem(prefs.premissas, c, { usar_plano: prem.usar_plano, distribuicao_aporte: prem.distribuicao_aporte, reinvestir_proventos: prem.reinvestir_proventos, ...extra });
     rascunho = novo; setCampos(c); setPrem(novo); setSimulado(true);
@@ -239,7 +257,7 @@ export default function Projecoes() {
   const rot = (texto: string) => <T style={{ fontSize: 13, fontWeight: "500", color: t.cores.ink2, marginTop: t.espaco.e4, marginBottom: t.espaco.e3 }}>{texto}</T>;
   return (
     <Pagina>
-      <Cabecalho titulo="Projeções" sub="Projeção não é previsão: é a aritmética das premissas, em moeda de hoje." />
+      <Cabecalho titulo="Projeções" sub="Quanto você pode ter e quando pode viver de renda, em dinheiro de hoje." />
       <Cartao>
         {temPlano ? (
           <View style={{ marginBottom: t.espaco.e3 }}>
@@ -253,49 +271,50 @@ export default function Projecoes() {
           </View>
         )}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
-          {campo("aporte_mensal", "Aporte mensal (R$)", usando ? "vem do plano" : undefined, { desabilitado: usando })}
-          {campo("horizonte_anos", "Horizonte (anos)")}
-          {campo("crescimento_aporte_real", "Aporte cresce (% a.a.)", "acima da inflação", { placeholder: "0" })}
-          <View style={{ flexBasis: 160, flexGrow: 1 }}>
-            <Campo rotulo="Destino do aporte">
-              {usando ? <Seletor valor="plano" aoMudar={() => {}} opcoes={[{ v: "plano", rotulo: "Conforme o plano" }]} rotuloA11y="Destino do aporte" />
-                : <Seletor valor={prem.distribuicao_aporte} aoMudar={(v) => muda(campos, { distribuicao_aporte: v })} rotuloA11y="Destino do aporte"
-                    opcoes={[{ v: "rebalancear", rotulo: "Pilar mais defasado" }, { v: "proporcional", rotulo: "Proporcional à meta" }]} />}
-            </Campo>
-          </View>
-          <View style={{ flexBasis: 160, flexGrow: 1, justifyContent: "flex-end" }}>
-            <Interruptor valor={!!prem.reinvestir_proventos} aoMudar={(v) => muda(campos, { reinvestir_proventos: v })} rotulo="Reinvestir dividendos" />
-          </View>
+          {campo("aporte_mensal", "Quanto você aporta por mês (R$)", usando ? "vem do plano" : obs ? `sua média: ${FC.fmt.brlTexto(obs.media, 0)}` : undefined, { desabilitado: usando })}
+          {campo("horizonte_anos", "Por quantos anos")}
+          {campo("renda_alvo", "Renda que você quer ter (R$/mês)", objetivos && objetivos.renda_desejada_mensal ? "vazio: a dos seus objetivos" : "ex.: o seu custo de vida", { placeholder: objetivos && objetivos.renda_desejada_mensal ? FC.fmt.num(objetivos.renda_desejada_mensal, 0) : "" })}
         </View>
         {obs && !usando && Math.abs(obs.media - (Number(prem.aporte_mensal) || 0)) > 1 ? (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: t.espaco.e3 }}>
-            <Icone nome="info" tam={14} cor={t.cores.ink2} />
-            <T style={{ fontSize: 13, color: t.cores.ink2, flexShrink: 1 }}>Nos últimos {obs.meses} meses você aportou em média <Rs style={{ fontSize: 13, fontWeight: "600" }}>{FC.fmt.brlTexto(obs.media, 0)}</Rs> por mês.</T>
-            <Botao variante="texto" pequeno onPress={() => muda({ ...campos, aporte_mensal: txt(Math.round(obs.media)) })}>Usar esse valor</Botao>
-          </View>
+          <Botao variante="texto" pequeno style={{ alignSelf: "flex-start", marginTop: t.espaco.e2 }} onPress={() => muda({ ...campos, aporte_mensal: txt(Math.round(obs.media)) })}>{`Usar a minha média dos últimos ${obs.meses} meses`}</Botao>
         ) : null}
-        {rot("Valorização real ao ano, sem contar proventos (%) — é a mediana de cada pilar")}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
-          {FC.pilaresLigados().filter((p: any) => p.chave !== "caixa").map((p: any) => campo("val_" + p.chave, p.nome, hist(p.chave)))}
-        </View>
-        {rot("Volatilidade ao ano (%) — em branco usa a dos seus ativos misturada à de mercado")}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
-          {FC.pilaresLigados().filter((p: any) => p.chave !== "caixa").map((p: any) => {
-            const v = volCalc(p.chave);
-            return campo("vol_" + p.chave, p.nome, v != null ? `calculada: ${FC.fmt.num(v, 0)}%` : undefined, { placeholder: v != null ? FC.fmt.num(v, 0) : "" });
-          })}
-        </View>
-        {rot(`Juro de longo prazo — em branco, o CDI e o IPCA de hoje convergem para ${FC.fmt.num(lpPadrao.cdi, 1)}% e ${FC.fmt.num(FC.projecao.LONGO_PRAZO.ipca, 1)}% (juro real de ${FC.fmt.num(FC.projecao.LONGO_PRAZO.juro_real, 1)}%, na linha do Focus)`)}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
-          {campo("cdi_lp", "CDI de longo prazo (% a.a.)", `hoje ${ok(m.cdi) ? FC.fmt.num(m.cdi) : "—"}%`, { placeholder: FC.fmt.num(lpPadrao.cdi, 1) })}
-          {campo("ipca_lp", "IPCA de longo prazo (% a.a.)", `hoje ${ok(m.ipca_12m) ? FC.fmt.num(m.ipca_12m) : "—"}%`, { placeholder: FC.fmt.num(FC.projecao.LONGO_PRAZO.ipca, 1) })}
-          {campo("meses_convergencia", "Chega lá em (meses)", undefined, { placeholder: String(FC.projecao.LONGO_PRAZO.meses) })}
-        </View>
-        {rot("Independência financeira")}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
-          {campo("renda_alvo", "Renda mensal desejada (R$)", objetivos && objetivos.renda_desejada_mensal ? "vazio: a dos seus objetivos" : "ex.: o seu custo de vida", { placeholder: objetivos && objetivos.renda_desejada_mensal ? FC.fmt.num(objetivos.renda_desejada_mensal, 0) : "" })}
-          {campo("taxa_saque", "Taxa de saque (% a.a.)", "3,5% a 5% no Brasil", { placeholder: FC.fmt.num(FC.projecao.TAXA_SAQUE, 1) })}
-        </View>
+        <Detalhes rotulo="Ajustar premissas" tam={14} style={{ marginTop: t.espaco.e4 }}>
+          {rot("Aportes")}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
+            {campo("crescimento_aporte_real", "Aporte cresce (% a.a.)", "acima da inflação", { placeholder: "0" })}
+            <View style={{ flexBasis: 160, flexGrow: 1 }}>
+              <Campo rotulo="Destino do aporte">
+                {usando ? <Seletor valor="plano" aoMudar={() => {}} opcoes={[{ v: "plano", rotulo: "Conforme o plano" }]} rotuloA11y="Destino do aporte" />
+                  : <Seletor valor={prem.distribuicao_aporte} aoMudar={(v) => muda(campos, { distribuicao_aporte: v })} rotuloA11y="Destino do aporte"
+                      opcoes={[{ v: "rebalancear", rotulo: "Pilar mais defasado" }, { v: "proporcional", rotulo: "Proporcional à meta" }]} />}
+              </Campo>
+            </View>
+            <View style={{ flexBasis: 160, flexGrow: 1, justifyContent: "flex-end" }}>
+              <Interruptor valor={!!prem.reinvestir_proventos} aoMudar={(v) => muda(campos, { reinvestir_proventos: v })} rotulo="Reinvestir dividendos" />
+            </View>
+          </View>
+          {rot("Valorização real ao ano, sem proventos (%) — em branco usa a fórmula: 40% médio do mercado, 40% o que o preço atual embute, até 20% o seu histórico")}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
+            {FC.pilaresLigados().filter((p: any) => p.chave !== "caixa").map((p: any) => {
+              const f = proj && proj.valorizacao ? proj.valorizacao[p.chave] : null;
+              return campo("val_" + p.chave, p.nome, fontes(p.chave), { placeholder: f ? FC.fmt.num(f.valor, 1) : "" });
+            })}
+          </View>
+          {rot("Volatilidade ao ano (%) — em branco usa a dos seus ativos misturada à de mercado")}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
+            {FC.pilaresLigados().filter((p: any) => p.chave !== "caixa").map((p: any) => {
+              const v = volCalc(p.chave);
+              return campo("vol_" + p.chave, p.nome, undefined, { placeholder: v != null ? FC.fmt.num(v, 0) : "" });
+            })}
+          </View>
+          {rot(`Juros e inflação — em branco, os de hoje convergem para CDI de ${FC.fmt.num(lpPadrao.cdi, 1)}% e IPCA de ${FC.fmt.num(FC.projecao.LONGO_PRAZO.ipca, 1)}%, na linha do Focus`)}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: t.espaco.e3 }}>
+            {campo("cdi_lp", "CDI de longo prazo (% a.a.)", `hoje ${ok(m.cdi) ? FC.fmt.num(m.cdi) : "—"}%`, { placeholder: FC.fmt.num(lpPadrao.cdi, 1) })}
+            {campo("ipca_lp", "IPCA de longo prazo (% a.a.)", `hoje ${ok(m.ipca_12m) ? FC.fmt.num(m.ipca_12m) : "—"}%`, { placeholder: FC.fmt.num(FC.projecao.LONGO_PRAZO.ipca, 1) })}
+            {campo("meses_convergencia", "Chega lá em (meses)", undefined, { placeholder: String(FC.projecao.LONGO_PRAZO.meses) })}
+            {campo("taxa_saque", "Taxa de saque (% a.a.)", "3,5% a 5% no Brasil", { placeholder: FC.fmt.num(FC.projecao.TAXA_SAQUE, 1) })}
+          </View>
+        </Detalhes>
         <View style={{ flexDirection: "row", justifyContent: "space-between", flexWrap: "wrap", alignItems: "center", gap: t.espaco.e3, marginTop: t.espaco.e4 }}>
           <T style={{ fontSize: 13, color: t.cores.ink2, flexShrink: 1 }}>{simulado ? "Simulação não salva — os números usam os valores acima." : prefs.premissas_salvas ? "Usando as premissas que você salvou." : "Usando as premissas padrão."}</T>
           <View style={{ flexDirection: "row", gap: t.espaco.e3 }}>
