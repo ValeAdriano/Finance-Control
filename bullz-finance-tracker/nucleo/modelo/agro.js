@@ -7,7 +7,10 @@
  * Valor do rebanho = cabeças × peso vivo × rendimento de carcaça ÷ 15
  * × preço da arroba. O peso vem da informação mais recente da categoria
  * (pesagem ou movimento com peso, com quem entra depois na média pelas
- * cabeças); sem nada, de um peso típico — e a tela diz qual foi usada. */
+ * cabeças). Sem peso informado não se chuta peso antes do resto: vale o
+ * valor por cabeça da Cotação, depois o preço por cabeça das suas últimas
+ * compras e vendas da categoria e, só sem nada disso, o peso típico × @.
+ * A tela diz de onde veio cada valor. */
 (function () {
   const FC = window.FC;
   const ok = FC.ok;
@@ -31,6 +34,25 @@
     const preco = Number((cfg.arroba_por_categoria || {})[cat]) || Number(cfg.preco_arroba) || 0;
     return arrobas(kg, Number(cfg.rendimento_carcaca) || 52) * preco;
   }
+  // preço por cabeça das últimas operações da categoria (até 3, pesando as cabeças)
+  const ULTIMAS = 3;
+  function precoDasOperacoes(lista) {
+    const ult = lista.slice(-ULTIMAS);
+    const cab = FC.soma(ult, (x) => x.cabecas);
+    return cab ? FC.soma(ult, (x) => x.valor) / cab : null;
+  }
+  const temPesoMov = (m) => ok(m.peso_medio_kg) && m.peso_medio_kg > 0;
+
+  // valor de uma cabeça sem peso informado: Cotação por cabeça → suas
+  // operações → peso típico × @. Devolve {valor, origem}
+  function valorSemPeso(cat, cfg, ops) {
+    const porCabeca = Number((cfg.valor_cabeca_por_categoria || {})[cat]);
+    if (ok(porCabeca) && porCabeca > 0) return { valor: porCabeca, origem: "por_cabeca" };
+    const op = ops && ops[cat] ? precoDasOperacoes(ops[cat]) : null;
+    if (op > 0) return { valor: op, origem: "operacoes" };
+    return { valor: valorCabeca(cat, FC.PESO_TIPICO[cat], cfg), origem: "tipico" };
+  }
+
   // "outra entrada" sem valor entra pelo valor estimado (preenchido em analisa):
   // é capital posto na atividade, não lucro
   const valorEntrada = (m) => (m.valor_total > 0 ? m.valor_total : m.valor_estimado || 0);
@@ -53,6 +75,29 @@
       }
     }
     return abertos.reduce((s, l) => s + l.n * l.porCab, 0);
+  }
+
+  // giro das vendas: cada venda leva as cabeças que entraram primeiro e
+  // carrega o custo e o tempo de pasto delas (nascimento custa zero)
+  function giro(movs) {
+    const ordem = { compra: 0, nascimento: 0, entrada: 0, venda: 1, morte: 1, saida: 1 };
+    const abertos = [];
+    let cab = 0, custo = 0, dias = 0;
+    for (const m of movs.filter((x) => x.tipo in ordem && x.cabecas > 0)) {
+      if (ordem[m.tipo] === 0) {
+        const total = m.tipo === "compra" ? m.valor_total + m.despesas : m.tipo === "entrada" ? valorEntrada(m) : 0;
+        abertos.push({ n: m.cabecas, porCab: total / m.cabecas, data: m.data });
+        continue;
+      }
+      let falta = m.cabecas;
+      while (falta > 0 && abertos.length) {
+        const l = abertos[0], q = Math.min(falta, l.n);
+        if (m.tipo === "venda") { cab += q; custo += q * l.porCab; dias += q * Math.max(0, FC.datas.dias(l.data, m.data)); }
+        l.n -= q; falta -= q;
+        if (l.n <= 0) abertos.shift();
+      }
+    }
+    return { cab, custo, dias };
   }
 
   function analisa(agro, cfg) {
@@ -100,7 +145,7 @@
         if (!tem) continue;
         const n2 = Math.min(falta, tem);
         tira(m, c, n2);
-        ajustes.push({ data: m.data, tipo: m.tipo, cabecas: n2, de: c, para: m.categoria });
+        ajustes.push({ id: m.id, data: m.data, tipo: m.tipo, cabecas: n2, de: c, para: m.categoria });
         falta -= n2;
         if (!falta) return;
       }
@@ -125,22 +170,27 @@
       const a = pesoCat[cat], tem = a ? Math.max(0, Math.min(a.cab, rebanho[cat] || 0)) : 0;
       pesoCat[cat] = { kg: tem ? (a.kg * tem + kg * n) / (tem + n) : kg, cab: tem + n, fonte: "movimento", data };
     };
-    const kgEm = (cat) => (pesoCat[cat] ? pesoCat[cat].kg : FC.PESO_TIPICO[cat]);
-    const temPeso = (m) => ok(m.peso_medio_kg) && m.peso_medio_kg > 0;
+    const temPeso = temPesoMov;
+    // preço por cabeça de cada compra/venda, por categoria, na ordem do tempo
+    const ops = {};
     for (const m of movs) {
       const t = FC.TIPOS_MOV[m.tipo];
       if (!t) continue;
       pesagensAte(m.data);
       // outra entrada sem valor: estimada como o valor do rebanho na data.
       // Fica no próprio lançamento para caixa() e os fluxos da carteira.
-      if (m.tipo === "entrada") m.valor_estimado = m.valor_total > 0 ? null
-        : m.cabecas * valorCabeca(m.categoria, temPeso(m) ? m.peso_medio_kg : kgEm(m.categoria), cfg);
+      if (m.tipo === "entrada") {
+        const kg = temPeso(m) ? m.peso_medio_kg : pesoCat[m.categoria] ? pesoCat[m.categoria].kg : null;
+        m.valor_estimado = m.valor_total > 0 ? null
+          : m.cabecas * (kg ? valorCabeca(m.categoria, kg, cfg) : valorSemPeso(m.categoria, cfg, ops).valor);
+      }
+      if ((m.tipo === "compra" || m.tipo === "venda") && m.valor_total > 0 && m.cabecas > 0) (ops[m.categoria] = ops[m.categoria] || []).push({ cabecas: m.cabecas, valor: m.valor_total });
       if (m.tipo === "reclassificacao") {
         const faz = m.fazenda || ondeEsta(porFazenda, m.categoria);
         const lote = m.lote || ondeEsta(porLote, m.categoria);
         // só muda de categoria o que existe nela: o excesso não cria cabeças
         const n = Math.min(m.cabecas, Math.max(0, rebanho[m.categoria] || 0));
-        if (n < m.cabecas) ajustes.push({ data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
+        if (n < m.cabecas) ajustes.push({ id: m.id, data: m.data, tipo: m.tipo, cabecas: m.cabecas - n, de: m.categoria, para: m.categoria_destino, ignorado: true });
         if (n && temPeso(m)) entraPeso(m.categoria_destino, m.peso_medio_kg, n, m.data);
         if (n) { mexe(faz, lote, m.categoria, -n); mexe(faz, lote, m.categoria_destino, n); }
       } else if (t.sinal < 0) {
@@ -165,17 +215,25 @@
     // ---------------------------------------------------------- valor
     const porCategoria = [];
     let valorRebanho = 0;
+    // valor de uma cabeça hoje, por categoria (também estima a "outra entrada" no formulário)
+    const valorCabecaHoje = {};
+    for (const cat of Object.keys(FC.CATEGORIAS_GADO)) {
+      const porCabeca = Number((cfg.valor_cabeca_por_categoria || {})[cat]);
+      if (ok(porCabeca) && porCabeca > 0) valorCabecaHoje[cat] = { valor: porCabeca, origem: "por_cabeca" };
+      else if (peso[cat].fonte !== "típico") valorCabecaHoje[cat] = { valor: valorCabeca(cat, peso[cat].kg, cfg), origem: "arroba" };
+      else valorCabecaHoje[cat] = valorSemPeso(cat, cfg, ops);
+    }
     for (const [cat, n] of Object.entries(rebanho)) {
       if (n <= 0) continue;
       const kg = peso[cat].kg;
-      const porCabeca = (cfg.valor_cabeca_por_categoria || {})[cat];
       const precoArroba = Number((cfg.arroba_por_categoria || {})[cat]) || Number(cfg.preco_arroba) || 0;
       const arr = arrobas(kg, rend);
-      const valor = n * valorCabeca(cat, kg, cfg);
+      const v = valorCabecaHoje[cat];
+      const valor = n * v.valor;
       valorRebanho += valor;
       porCategoria.push({ categoria: cat, nome: FC.CATEGORIAS_GADO[cat], cabecas: n, kg, fonte_peso: peso[cat].fonte,
-        data_peso: peso[cat].data, arrobas_cabeca: arr, preco_arroba: precoArroba, valor,
-        por_cabeca: ok(Number(porCabeca)) && Number(porCabeca) > 0 });
+        data_peso: peso[cat].data, arrobas_cabeca: arr, preco_arroba: precoArroba, valor, valor_cabeca: v.valor, origem_valor: v.origem,
+        por_cabeca: v.origem === "por_cabeca" });
     }
     // avaliado pelo que foi pago: o rebanho vale o custo até ser vendido, e o
     // ganho só aparece na venda (a divisão por categoria é por cabeça)
@@ -183,7 +241,7 @@
     if (peloCusto) {
       const custo = custoEmAberto(movs);
       const cab = porCategoria.reduce((s, c) => s + c.cabecas, 0);
-      for (const c of porCategoria) { c.valor = cab ? (custo * c.cabecas) / cab : 0; c.pelo_custo = true; }
+      for (const c of porCategoria) { c.valor = cab ? (custo * c.cabecas) / cab : 0; c.valor_cabeca = cab ? custo / cab : 0; c.pelo_custo = true; c.origem_valor = "custo"; }
       valorRebanho = custo;
     }
     porCategoria.sort((a, b) => b.valor - a.valor);
@@ -227,6 +285,14 @@
       mortes: FC.soma(movs.filter((m) => m.tipo === "morte"), (m) => m.cabecas),
       nascimentos: FC.soma(movs.filter((m) => m.tipo === "nascimento"), (m) => m.cabecas),
     };
+    // ---------------------------------------------------------- indicadores (sem peso)
+    const g = giro(movs);
+    financeiro.tempo_medio_dias = g.cab ? g.dias / g.cab : null;
+    // natalidade: nascimentos dos últimos 12 meses sobre as matrizes de hoje
+    const umAno = FC.datas.soma(FC.datas.hoje(), -365);
+    const nasc12 = FC.soma(movs.filter((m) => m.tipo === "nascimento" && m.data >= umAno), (m) => m.cabecas);
+    const matrizes = Math.max(0, rebanho.vaca || 0);
+    financeiro.natalidade_pct = matrizes ? (nasc12 / matrizes) * 100 : null;
     // mortalidade sobre o que passou pela fazenda
     const entradas = FC.soma(movs.filter((m) => ["compra", "nascimento", "entrada"].includes(m.tipo)), (m) => m.cabecas);
     financeiro.mortalidade_pct = entradas ? (financeiro.mortes / entradas) * 100 : null;
@@ -252,6 +318,17 @@
         mes = m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, "0")}`;
       }
     }
+
+    // custo por cabeça por mês: custos ÷ (cabeças médias × meses com gado)
+    const comGado = serie.filter((x) => x.cabecas > 0);
+    const cabMedia = comGado.length ? FC.soma(comGado, (x) => x.cabecas) / comGado.length : 0;
+    financeiro.custo_cabeca_mes = cabMedia && comGado.length && totalCustos ? totalCustos / cabMedia / comGado.length : null;
+    // margem por cabeça vendida: o líquido da venda menos o que a cabeça custou
+    // para entrar e o custo de mantê-la pelo tempo que ficou
+    const liqVendas = FC.soma(vendas, (m) => m.valor_total - m.despesas);
+    financeiro.margem_cabeca = g.cab && cabVendidas
+      ? liqVendas / cabVendidas - g.custo / g.cab - (financeiro.custo_cabeca_mes || 0) * (g.dias / g.cab / 30.44)
+      : null;
 
     // ---------------------------------------------------------- GMD
     const gmd = [];
@@ -285,8 +362,12 @@
         ganho, gmd: ganho / dias, arrobas_mes: (arrobas(ganho, rend) / dias) * 30, pesagens: ps.length });
     }
 
+    // quem pesa o gado: alguma pesagem ou algum lançamento com peso. Sem isso,
+    // a tela esconde o que depende de peso em vez de cobrar
+    const usaPeso = pesagens.length > 0 || movs.some(temPeso);
     return { ajustes, rebanho, total, porFazenda, porLote, porCategoria, valorRebanho, pelo_custo: peloCusto, peso, financeiro, serie, gmd,
-      inconsistentes, rendimento: rend, tem_dados: movs.length + custos.length + pesagens.length > 0 };
+      inconsistentes, rendimento: rend, tem_dados: movs.length + custos.length + pesagens.length > 0,
+      usa_peso: usaPeso, valor_cabeca_hoje: valorCabecaHoje };
   }
 
   // cálculo do valor de uma operação a partir do modo de preço escolhido
@@ -339,5 +420,17 @@
     return { fluxos, porId, saldo, saldoEm };
   }
 
-  FC.agro = { analisa, arrobas, valorDaOperacao, caixa, valorCabeca, valorEntrada, ORIGEM };
+  // a cotação que avalia o rebanho ficou velha? (só importa se alguma
+  // categoria depende dela; avaliando pelo custo ou pelas operações, não)
+  const DIAS_COTACAO = 30;
+  function cotacaoVelha(ag, cfg, hoje = FC.datas.hoje()) {
+    if (!ag || ag.pelo_custo || !(ag.total > 0)) return null;
+    const depende = ag.porCategoria.some((c) => c.origem_valor === "por_cabeca" || c.origem_valor === "arroba" || c.origem_valor === "tipico");
+    if (!depende) return null;
+    if (!cfg.data_cotacao) return { dias: null };
+    const dias = FC.datas.dias(cfg.data_cotacao, hoje);
+    return dias > DIAS_COTACAO ? { dias } : null;
+  }
+
+  FC.agro = { analisa, arrobas, valorDaOperacao, caixa, valorCabeca, valorEntrada, valorSemPeso, cotacaoVelha, DIAS_COTACAO, ORIGEM };
 })();

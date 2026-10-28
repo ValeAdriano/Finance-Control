@@ -133,6 +133,13 @@
         link: "#/dividendos" });
     }
 
+    // ---- agro: a cotação que dá o valor do rebanho ficou velha
+    if (dados.agro && FC.agro && (!FC.modulo || FC.modulo("agro"))) {
+      const v = FC.agro.cotacaoVelha(dados.agro, (prefs || {}).agro || {}, hoje);
+      if (v) saida.push({ nivel: "info", titulo: v.dias == null ? "Informe a data da cotação do gado" : `A cotação do gado tem ${FC.fmt.int(v.dias)} dias`,
+        texto: "O valor do rebanho no patrimônio vem dela. Atualize o preço por cabeça (ou da @) com o da sua praça.", link: "#/agro" });
+    }
+
     // ---- exposição ao dólar (só informativo)
     if (investido > 0) {
       const dolar = FC.soma(ativos.filter((a) => a.classe === "acao_us" || a.classe === "etf_us" || a.classe === "cripto" || ETF_DOLAR.has(a.ticker)), (a) => a.posicao.atual);

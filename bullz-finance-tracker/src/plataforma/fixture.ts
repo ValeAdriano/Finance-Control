@@ -4,7 +4,8 @@
  *
  * Liga com:  web → ?fixture=1 na URL (fica na sessão da aba)
  *            nativo → EXPO_PUBLIC_FIXTURE=1
- * Variantes: ?fixture=admin (conta admin), ?fixture=vazia (conta nova).
+ * Variantes: ?fixture=admin (conta admin), ?fixture=vazia (conta nova),
+ *            ?fixture=sempeso (agro lançado só por cabeça, sem pesagens).
  *
  * Nada aqui fala com o Supabase: auth, tabelas e Edge Function são trocados
  * por versões em memória com a mesma forma de dados. */
@@ -297,6 +298,14 @@ export function instalaFixture() {
   const vazia = MODO_FIXTURE === "vazia";
   const admin = MODO_FIXTURE === "admin";
   const db: any = baseDemo(vazia);
+  // quem não pesa o gado: sem pesagens e sem peso nos lançamentos (preço por cabeça)
+  if (MODO_FIXTURE === "sempeso") {
+    db.agro_pesagens = [];
+    for (const m of db.agro_movimentos) {
+      if (m.preco_arroba && m.cabecas) m.preco_cabeca = Math.round(m.valor_total / m.cabecas);
+      m.peso_medio_kg = null; m.preco_arroba = null;
+    }
+  }
   const usuario = { id: "fixture-usuario", email: "demo@bullz.local", user_metadata: { nome: "Demo" }, factors: [] };
   let logado = true;
   const logs: any[] = [];
