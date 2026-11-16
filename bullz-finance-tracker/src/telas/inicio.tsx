@@ -26,8 +26,8 @@ import {
 import { formAtivo, formRendaFixa } from "./comum/formularios";
 import { CartaoPerfil, CartaoPlanoRealidade, ChecklistAtivacao } from "./comum/perfil";
 import { ChipSequencia, sequencia } from "./comum/sequencia";
+import { ChipsPeriodo, type Periodo } from "./comum/desempenho";
 import FC from "../nucleo";
-import { vibra } from "../plataforma/vibra";
 
 const ok = (v: any) => FC.ok(v);
 const sinal = (v: number) => (v >= 0 ? "+" : "−");
@@ -41,31 +41,12 @@ function saudacao() {
 
 // ---------------------------------------------------------------- período do Início
 // o mesmo período vale para o velocímetro, a curva e os destaques
-type Periodo = "dia" | "mes" | "ano" | "tudo";
 const PERIODOS: Array<{ v: Periodo; rotulo: string }> = [{ v: "dia", rotulo: "Dia" }, { v: "mes", rotulo: "Mês" }, { v: "ano", rotulo: "Ano" }, { v: "tudo", rotulo: "Tudo" }];
-const NOME_PERIODO: Record<Periodo, string> = { dia: "hoje", mes: "nos últimos 30 dias", ano: "nos últimos 12 meses", tudo: "desde o início" };
+const NOME_PERIODO: Record<Periodo, string> = { dia: "no último pregão", mes: "nos últimos 30 dias", ano: "nos últimos 12 meses", tudo: "desde o início" };
 function inicioDoPeriodo(p: Periodo, primeiro: string | null) {
   const hoje = FC.datas.hoje();
   const d = p === "dia" ? FC.datas.soma(hoje, -1) : p === "mes" ? FC.datas.soma(hoje, -30) : p === "ano" ? FC.datas.soma(hoje, -365) : primeiro || hoje;
   return primeiro && d < primeiro ? primeiro : d;
-}
-
-function ChipsPeriodo({ valor, aoMudar }: { valor: Periodo; aoMudar: (p: Periodo) => void }) {
-  const t = useTema();
-  return (
-    <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", justifyContent: "center" }} accessibilityRole="tablist" accessibilityLabel="Período">
-      {PERIODOS.map((p) => {
-        const sel = p.v === valor;
-        return (
-          <Pressable key={p.v} onPress={() => { if (!sel) vibra.toque(); aoMudar(p.v); }} accessibilityRole="tab" accessibilityState={{ selected: sel }}
-            style={{ paddingVertical: 6, paddingHorizontal: 14, borderRadius: 980, minHeight: 32, justifyContent: "center",
-              backgroundColor: sel ? t.cores.ink : t.cores.campo }}>
-            <Text style={{ fontSize: 13.5, fontWeight: sel ? "600" : "400", color: sel ? t.cores.bg : t.cores.ink2 }}>{p.rotulo}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
 }
 
 // ---------------------------------------------------------------- anéis
@@ -297,7 +278,7 @@ function Topo({ d, imp, seq, des, periodo, setPeriodo }: { d: any; imp: any; seq
       </View>
 
       <View style={{ marginTop: t.espaco.e3, alignItems: "center", gap: t.espaco.e2 }} onLayout={(ev: LayoutChangeEvent) => setLarg(ev.nativeEvent.layout.width)}>
-        <ChipsPeriodo valor={periodo} aoMudar={setPeriodo} />
+        <ChipsPeriodo opcoes={PERIODOS} valor={periodo} aoMudar={setPeriodo} />
         <Velocimetro valor={des.score} cor={cor} tam={estreito ? 150 : 170}
           rotulo={des.suficiente ? des.faixa.nome : "Sem dados"}
           onPress={() => abreComposicao(des, d, imp)}

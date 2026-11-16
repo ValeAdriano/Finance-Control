@@ -78,6 +78,29 @@ test("sem dados · insuficiente, arco em 50", () => {
   assert.equal(s.suficiente, false);
 });
 
+// ---------------------------------------------------------------- dia
+test("dia · último pregão fechado, mesmo com o Ibov sem o ponto de hoje (fim de semana, cache)", () => {
+  const { ix, ibov } = refs(40, 0.0004, 0.001);
+  const ibovSemFds = ibov.filter(([d]) => d <= dia(-3));            // o Ibov parou há 3 dias
+  const r = FC.desempenho.calcula({ pontos: serie(40, { rv: 0.002, rf: 0.0004 }), ix, ibov: ibovSemFds, periodo: "dia" });
+  assert.equal(r.suficiente, true, r.motivo);
+  assert.equal(r.ate, dia(-3));
+  assert.equal(r.de, dia(-4));
+  const rv = r.partes.find((x) => x.chave === "rv");
+  perto(rv.retorno, 0.2, 1e-6);
+  perto(rv.retorno_ref, 0.1, 1e-6);
+  assert.equal(r.faixa.chave, "no_ritmo");                         // +0,1 p.p. num dia: perto de 50
+});
+
+test("dia · sem Ibov, renda fixa pelos dois últimos dias úteis", () => {
+  const { ix } = refs(40, 0.0004, 0);
+  const r = FC.desempenho.calcula({ pontos: serie(40, { rf: 0.0004, vRv: 0 }), ix, ibov: [], periodo: "dia" });
+  assert.equal(r.suficiente, true, r.motivo);
+  assert.ok(FC.datas.ehUtil(r.de) && FC.datas.ehUtil(r.ate) && r.ate < hoje, `${r.de} → ${r.ate}`);
+  assert.equal(r.partes.map((x) => x.chave).join(), "rf");
+  assert.ok(r.partes[0].retorno_ref > 0);
+});
+
 test("tendência · um ponto por dia do período, terminando na nota final", () => {
   const r = FC.desempenho.calcula({ pontos: serie(40, { rv: 0.002, rf: 0.0004 }), ...refs(40, 0.0004, 0.001), periodo: "mes" });
   assert.equal(r.tendencia.length, 30);

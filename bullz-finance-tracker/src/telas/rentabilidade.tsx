@@ -1,5 +1,6 @@
-/* Investimentos › Rentabilidade: os números brutos do desempenho — a nota
- * do Início aberta por período e por parte, a frase contra CDI e inflação,
+/* Investimentos › Rentabilidade: os números brutos do desempenho: a nota
+ * do Início aberta por período e por parte (comum/desempenho.tsx), a frase
+ * contra CDI e inflação,
  * as medidas técnicas (TIR, Dietz, TWR, por classe, juros do dia) e o
  * crescimento do patrimônio com Selic e Ibovespa. */
 import React, { useState } from "react";
@@ -7,44 +8,11 @@ import { View } from "react-native";
 import { useTema } from "../tema";
 import { useEstado } from "../estado/app";
 import { Pagina } from "../casca/casca";
-import { Cartao, Pilula, Secao, T, Tabela } from "../ui/kit";
+import { Secao } from "../ui/kit";
 import { EstadoMercado } from "./comum/alertas";
 import { CabecalhoInvestimentos } from "./comum/investimentos";
-import { CRESC_PADRAO, Crescimento, DetalhesTecnicos, Frase, Macro, comparativo, desempenhoDoPainel, resumoIR } from "./comum/blocos";
-import FC from "../nucleo";
-
-const PERIODOS: Array<[string, string]> = [["dia", "Dia"], ["mes", "30 dias"], ["ano", "12 meses"], ["tudo", "Desde o início"]];
-const pct = (v: any) => (FC.ok(v) ? `${FC.fmt.delta(v, 2)}%` : "—");
-
-function PorPeriodo({ d }: { d: any }) {
-  const t = useTema();
-  const linhas: any[] = [];
-  for (const [p, nome] of PERIODOS) {
-    const des = desempenhoDoPainel(d, p);
-    if (!des.suficiente) { linhas.push([{ v: nome }, { v: "sem dados", cls: "muito-fraco" }, "—", "—", "—", "—", "—"]); continue; }
-    const parte = (k: string) => des.partes.find((x: any) => x.chave === k);
-    const rv = parte("rv"), rf = parte("rf"), ag = parte("agro");
-    linhas.push([
-      { v: nome, leg: `${FC.datas.br(des.de)} a ${FC.datas.br(des.ate)}` },
-      { v: <Pilula cor={des.faixa.cor}>{`${Math.round(des.score)} · ${des.faixa.nome}`}</Pilula> },
-      rv ? { v: pct(rv.retorno), cls: rv.retorno >= 0 ? "pos" : "neg", leg: `peso ${FC.fmt.num(rv.peso * 100, 0)}%` } : "—",
-      rv ? pct(rv.retorno_ref) : "—",
-      rf ? { v: pct(rf.retorno), cls: rf.retorno >= 0 ? "pos" : "neg", leg: `peso ${FC.fmt.num(rf.peso * 100, 0)}%` } : "—",
-      rf ? pct(rf.retorno_ref) : "—",
-      ag ? { v: pct(ag.retorno), cls: ag.retorno >= ag.retorno_ref ? "pos" : "neg", leg: `${ag.vendas} venda${ag.vendas > 1 ? "s" : ""} · CDI ${pct(ag.retorno_ref)}` } : { v: "sem venda", cls: "muito-fraco" },
-    ]);
-  }
-  return (
-    <Secao titulo="Desempenho contra as referências" sub="a nota do Início, aberta por período e por parte">
-      <Cartao semPad>
-        <Tabela minimo={860}
-          cabecas={[{ t: "Período", largura: 170 }, { t: "Nota", largura: 150 }, { t: "Renda variável", n: true }, { t: "Ibovespa", n: true }, { t: "Renda fixa", n: true }, { t: "CDI", n: true }, { t: "Agro (vendas)", n: true, largura: 150 }]}
-          linhas={linhas} />
-      </Cartao>
-      <T v="p" style={{ marginTop: t.espaco.e3 }}>Retorno ponderado pelo tempo (aportes e resgates não contam como rendimento). Renda variável inclui ações, FIIs, ETFs e cripto, com os proventos; renda fixa inclui o caixa de proventos. O agro só entra quando há venda no período: o ciclo de cada lote vendido (venda contra custo de entrada e custos da atividade) contra o CDI do mesmo prazo.</T>
-    </Secao>
-  );
-}
+import { CRESC_PADRAO, Crescimento, DetalhesTecnicos, Frase, Macro, comparativo, resumoIR } from "./comum/blocos";
+import { DesempenhoPorPeriodo } from "./comum/desempenho";
 
 export default function Rentabilidade() {
   const t = useTema();
@@ -60,7 +28,7 @@ export default function Rentabilidade() {
       {cab}
       <EstadoMercado />
       {tt ? <Frase c={comparativo(tt)} /> : null}
-      <PorPeriodo d={d} />
+      <DesempenhoPorPeriodo d={d} />
       <Secao titulo="Medidas técnicas" sub="TIR, retorno no período e TWR; por classe; juros do dia">
         {tt ? <DetalhesTecnicos d={d} imp={imp} aberto /> : <View style={{ marginTop: t.espaco.e2 }}><Macro m={d.macro} /></View>}
       </Secao>

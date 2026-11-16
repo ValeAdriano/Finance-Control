@@ -5,7 +5,8 @@
  * (com o caixa de proventos) contra o CDI. O agro não rende enquanto o gado
  * está no pasto: entra só pelas vendas do período, cada ciclo vendido (venda
  * líquida contra o custo de entrada e os custos da atividade) contra o CDI
- * do mesmo prazo, com peso pelo valor vendido. Cada parte ganha
+ * do mesmo prazo, com peso pelo valor vendido. O "dia" é o último pregão
+ * fechado (veja janelaDia). Cada parte ganha
  * 50 + 50·tanh((retorno − referência) / escala): igual à referência = 50,
  * bem acima tende a 100, bem abaixo tende a 0. A nota geral é a média das
  * partes ponderada pelo valor médio de cada uma no período.
@@ -28,6 +29,20 @@
     { chave: "acima", nome: "Acima", ate: 100, cor: "verde" },
   ];
   const faixaDe = (score) => FAIXAS.find((f) => score <= f.ate) || FAIXAS[2];
+
+  // "dia" é o último pregão fechado: do fechamento anterior ao último
+  // fechamento que a referência tem. Comparar ontem com hoje quase nunca
+  // funciona: o Ibovespa chega com o fechamento anterior e o CDI não anda
+  // em fim de semana ou feriado. Sem a série do Ibov, os dias úteis.
+  function janelaDia(pontos, ibov, hoje) {
+    const tem = new Set(pontos.map((p) => p.data));
+    let datas = (ibov || []).map(([d]) => d).filter((d) => d <= hoje && tem.has(d));
+    if (datas.length < 2) {
+      datas = [];
+      for (let d = D().soma(hoje, -1); datas.length < 2 && d >= pontos[0].data; d = D().soma(d, -1)) if (D().ehUtil(d)) datas.unshift(d);
+    }
+    return datas.length >= 2 ? { de: datas.at(-2), ate: datas.at(-1) } : null;
+  }
 
   function inicioDe(periodo, hoje, primeiro) {
     const d = periodo === "dia" ? D().soma(hoje, -1) : periodo === "mes" ? D().soma(hoje, -30)
@@ -84,9 +99,14 @@
 
   function calcula({ pontos, ciclos = [], ix, ibov, periodo = "mes", hoje = D().hoje() }) {
     if (!pontos || pontos.length < 2) return vazio(periodo, null, hoje, "sem histórico");
-    const de = inicioDe(periodo, hoje, pontos[0].data);
-    const trecho = pontos.filter((p) => p.data >= de && p.data <= hoje && p.partes);
-    if (trecho.length < 2) return vazio(periodo, de, hoje, "sem dias suficientes no período");
+    let de, ate = hoje;
+    if (periodo === "dia") {
+      const j = janelaDia(pontos, ibov, hoje);
+      if (!j) return vazio(periodo, null, hoje, "sem pregão no período");
+      ({ de, ate } = j);
+    } else de = inicioDe(periodo, hoje, pontos[0].data);
+    const trecho = pontos.filter((p) => p.data >= de && p.data <= ate && p.partes);
+    if (trecho.length < 2) return vazio(periodo, de, ate, "sem dias suficientes no período");
     const dias = Math.max(1, D().dias(trecho[0].data, trecho.at(-1).data));
 
     // por parte, de uma vez: o retorno encadeado dia a dia (TWR) e o valor médio
@@ -125,7 +145,7 @@
       const g = notaGeral(trecho[i].data);
       if (g) { ultimo = g; tendencia.push({ data: trecho[i].data, score: g.score }); }
     }
-    if (!ultimo) return vazio(periodo, de, hoje, "a referência do período ainda não tem dados");
+    if (!ultimo) return vazio(periodo, de, ate, "a referência do período ainda não tem dados");
     // no "tudo", um ponto por semana (e sempre o último)
     const tend = periodo === "tudo" && tendencia.length > 120
       ? tendencia.filter((_, i) => i % 7 === 0 || i === tendencia.length - 1) : tendencia;
@@ -134,5 +154,5 @@
       partes: ultimo.partes.sort((a, b) => b.peso - a.peso), tendencia: tend };
   }
 
-  FC.desempenho = { calcula, faixaDe, FAIXAS, PERIODOS, PARTES, escala };
+  FC.desempenho = { calcula, faixaDe, janelaDia, FAIXAS, PERIODOS, PARTES, escala };
 })();
