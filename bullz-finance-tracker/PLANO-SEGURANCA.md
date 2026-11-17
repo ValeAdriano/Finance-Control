@@ -233,6 +233,7 @@ envelope cifrado:
 | Admin → Onboarding mostra quantos perfis conservador/moderado/arrojado | essa contagem por perfil vira um evento anônimo da telemetria (com consentimento) ou sai |
 | Apagar conta pela Edge Function | continua (apagar não precisa ler) |
 | Exportar/backup em JSON | o app decifra e exporta (como hoje, mas decifrando antes) |
+| Conexão com IA: a Edge Function `mcp` lê as tabelas em claro para responder ao assistente (ver "Conexão com IA" no `nucleo/README.md`) | **decisão pendente**, porque os dois não convivem: ou o MCP vira uma ponte local, que decifra no aparelho do dono, ou a conta que liga uma conexão com IA abre mão do ponta a ponta. Resolver antes de começar a S4 |
 
 ### S4.5 Senha, recuperação e e-mail com a criptografia
 - **Trocar a senha (logado):** deriva nova chave mestra, reembrulha a DEK, troca o segredo de

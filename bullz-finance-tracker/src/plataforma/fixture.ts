@@ -347,6 +347,22 @@ export function instalaFixture() {
     if (!db[nome]) db[nome] = [];
     return db[nome];
   };
+  // conexões com IA: um assistente já conectado e, na tela de consentimento
+  // (/oauth/consent?authorization_id=demo), o pedido de um segundo
+  const conexoes: any[] = [{ id: "fixture-claude", nome: "Claude", site: "https://claude.ai", desde: new Date(Date.now() - 12 * 864e5).toISOString(), com_dados: true, escrita: false }];
+  Object.assign(FC.mcp, {
+    pedido: async (id: string) => ({ authorization_id: id, redirect_uri: "https://chatgpt.com/connector_platform_oauth_redirect", scope: "email",
+      client: { id: "fixture-chatgpt", name: "ChatGPT", uri: "https://chatgpt.com", logo_uri: "" }, user: { id: usuario.id, email: usuario.email } }),
+    aprova: async (_id: string, cliente: any, escrita: boolean) => {
+      if (!conexoes.some((c) => c.id === cliente.id)) conexoes.push({ id: cliente.id, nome: cliente.name, site: cliente.uri, desde: new Date().toISOString(), com_dados: true, escrita });
+      return "/ajustes";
+    },
+    nega: async () => "/inicio",
+    lista: async () => conexoes.map((c) => ({ ...c })),
+    mudaEscrita: async (id: string, escrita: boolean) => { const c = conexoes.find((x) => x.id === id); if (c) c.escrita = escrita; return c; },
+    revoga: async (id: string) => { const i = conexoes.findIndex((x) => x.id === id); if (i >= 0) conexoes.splice(i, 1); },
+  });
+
   Object.assign(FC.db, {
     carregaTudo: async () => {
       const c = JSON.parse(JSON.stringify(db));

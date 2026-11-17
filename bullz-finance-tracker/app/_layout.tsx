@@ -9,7 +9,7 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Slot } from "expo-router";
+import { Slot, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { TemaProvider, useTema } from "../src/tema";
 import { useApp, inicia } from "../src/estado/app";
@@ -25,6 +25,9 @@ instalaFixture();
 function Portao() {
   const t = useTema();
   const fase = useApp((s) => s.fase);
+  // /oauth/consent (um assistente de IA pedindo acesso) é uma tela só, fora da
+  // casca: passa pelo mesmo login e 2FA, mas sem menu nem abas
+  const avulsa = (usePathname() || "").startsWith("/oauth/");
   useEffect(() => { inicia(); }, []);
   return (
     <View style={{ flex: 1, backgroundColor: t.cores.bg }}>
@@ -32,7 +35,7 @@ function Portao() {
       {fase === "iniciando" ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Roda /></View>
       ) : fase === "app" ? (
-        <Casca><Slot /></Casca>
+        avulsa ? <Slot /> : <Casca><Slot /></Casca>
       ) : (
         <Login />
       )}

@@ -305,6 +305,8 @@ alter table public.ganhos add column if not exists dia_numero integer
 --  aceitar a linha).
 -- ============================================================
 -- fica num schema que a API REST não expõe: só as políticas a usam
+-- (mfa_ok é redefinida no fim do arquivo, no bloco do MCP, com o caso do
+-- cliente de IA autorizado; a definição que vale é aquela)
 create schema if not exists privado;
 revoke all on schema privado from public, anon;
 grant usage on schema privado to authenticated;
@@ -845,4 +847,132 @@ grant execute on function public.acesso_segredo() to service_role;
 -- o maior período olhado é 24 h: o resto some
 select cron.unschedule('fc-limpa-tentativas') where exists (select 1 from cron.job where jobname = 'fc-limpa-tentativas');
 select cron.schedule('fc-limpa-tentativas', '15 * * * *', $$delete from privado.tentativas_acesso where quando < now() - interval '25 hours'$$);
+notify pgrst, 'reload schema';
+
+-- ============================================================
+--  CONEXÃO COM IA (MCP)
+--  A Edge Function "mcp" atende assistentes de IA (Claude, ChatGPT…) em
+--  nome do usuário. O login é o OAuth 2.1 do Supabase Auth: o token é um
+--  JWT comum da conta, com a claim client_id dizendo qual cliente o pediu.
+--
+--  Esse token vale na API inteira, não só na função. Então o que um
+--  cliente de IA pode fazer é decidido AQUI, no banco:
+--    · sem linha em mcp_acessos, o cliente não lê nem grava nada;
+--    · com linha e escrita = false, só lê;
+--    · perfil, plano, telemetria e administração ficam fora do alcance.
+--  A linha nasce na tela de consentimento do app (sessão direta, já
+--  passada pelo 2FA) e some em Ajustes → Segurança → Conexões com IA.
+-- ============================================================
+create table if not exists public.mcp_acessos (
+  user_id   uuid not null default auth.uid() references auth.users on delete cascade,
+  client_id text not null check (length(client_id) between 1 and 200),
+  nome      text not null default '' check (length(nome) <= 120),
+  escrita   boolean not null default false,
+  criado_em timestamptz not null default now(),
+  primary key (user_id, client_id)
+);
+
+-- sessão direta = login do próprio app (sem client_id no token)
+create or replace function privado.sessao_direta()
+returns boolean language sql stable set search_path = '' as $$
+  select coalesce(auth.jwt() ->> 'client_id', '') = '';
+$$;
+revoke all on function privado.sessao_direta() from public, anon;
+grant execute on function privado.sessao_direta() to authenticated;
+
+-- o cliente de IA deste token foi autorizado pelo dono? (e para gravar?)
+create or replace function privado.mcp_ok(escreve boolean)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce(auth.jwt() ->> 'client_id', '') = ''
+      or exists (select 1 from public.mcp_acessos m
+                 where m.user_id = auth.uid() and m.client_id = auth.jwt() ->> 'client_id'
+                   and (not escreve or m.escrita));
+$$;
+revoke all on function privado.mcp_ok(boolean) from public, anon;
+grant execute on function privado.mcp_ok(boolean) to authenticated;
+
+-- a função do MCP pergunta antes de responder: sem autorização, a RLS
+-- devolveria listas vazias e a IA diria que a conta não tem nada
+create or replace function public.mcp_acesso()
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'cliente', coalesce(auth.jwt() ->> 'client_id', ''),
+    'autorizado', privado.mcp_ok(false),
+    'escrita', privado.mcp_ok(true),
+    'nome', (select m.nome from public.mcp_acessos m
+             where m.user_id = auth.uid() and m.client_id = auth.jwt() ->> 'client_id'));
+$$;
+revoke all on function public.mcp_acesso() from public, anon;
+grant execute on function public.mcp_acesso() to authenticated;
+
+-- 2FA: o token de um cliente de IA pode não carregar o aal2 de quem o
+-- aprovou. A exigência continua de pé, cobrada na origem: a linha em
+-- mcp_acessos só é criada por uma sessão direta que passou pelo código.
+create or replace function privado.mfa_ok()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((auth.jwt() ->> 'aal') = 'aal2', false)
+      or not exists (select 1 from auth.mfa_factors f
+                     where f.user_id = auth.uid() and f.status = 'verified')
+      or exists (select 1 from public.mcp_acessos m
+                 where m.user_id = auth.uid() and m.client_id = auth.jwt() ->> 'client_id');
+$$;
+
+-- a autorização em si: só o dono, só por sessão direta e, com 2FA ligado,
+-- só depois do código. Um cliente de IA nunca concede nada a si mesmo.
+alter table public.mcp_acessos enable row level security;
+drop policy if exists "dono" on public.mcp_acessos;
+create policy "dono" on public.mcp_acessos for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists "so sessao direta" on public.mcp_acessos;
+create policy "so sessao direta" on public.mcp_acessos as restrictive for all to authenticated
+  using ((select privado.sessao_direta()) and (select privado.mfa_ok()))
+  with check ((select privado.sessao_direta()) and (select privado.mfa_ok()));
+revoke all on public.mcp_acessos from anon;
+grant select, insert, update, delete on public.mcp_acessos to authenticated;
+
+do $$
+declare t text;
+begin
+  -- o que as ferramentas do MCP alcançam: ler exige autorização; gravar,
+  -- a autorização de escrita
+  foreach t in array array['ativos','renda_fixa','aportes','preferencias','agro_movimentos','agro_custos',
+                           'agro_pesagens','patrimonio_historico','ganhos'] loop
+    execute format('drop policy if exists "mcp le" on public.%I', t);
+    execute format($p$create policy "mcp le" on public.%I as restrictive for select to authenticated
+                     using ((select privado.mcp_ok(false)))$p$, t);
+    execute format('drop policy if exists "mcp insere" on public.%I', t);
+    execute format($p$create policy "mcp insere" on public.%I as restrictive for insert to authenticated
+                     with check ((select privado.mcp_ok(true)))$p$, t);
+    execute format('drop policy if exists "mcp altera" on public.%I', t);
+    execute format($p$create policy "mcp altera" on public.%I as restrictive for update to authenticated
+                     using ((select privado.mcp_ok(true))) with check ((select privado.mcp_ok(true)))$p$, t);
+    execute format('drop policy if exists "mcp apaga" on public.%I', t);
+    execute format($p$create policy "mcp apaga" on public.%I as restrictive for delete to authenticated
+                     using ((select privado.mcp_ok(true)))$p$, t);
+  end loop;
+
+  -- fora do MCP: só o próprio app mexe
+  foreach t in array array['perfil_rascunho','perfil_investidor','plano_investimento','onboarding_eventos','uso_eventos'] loop
+    execute format('drop policy if exists "sem cliente de ia" on public.%I', t);
+    execute format($p$create policy "sem cliente de ia" on public.%I as restrictive for all to authenticated
+                     using ((select privado.sessao_direta())) with check ((select privado.sessao_direta()))$p$, t);
+  end loop;
+end $$;
+
+-- log: o cliente autorizado lê e registra o que fez (a auditoria das
+-- gravações do MCP mora aqui, com origem = 'mcp')
+drop policy if exists "mcp le" on public.log_sistema;
+create policy "mcp le" on public.log_sistema as restrictive for select to authenticated
+  using ((select privado.mcp_ok(false)));
+drop policy if exists "mcp insere" on public.log_sistema;
+create policy "mcp insere" on public.log_sistema as restrictive for insert to authenticated
+  with check ((select privado.mcp_ok(false)));
+
+-- token de cliente de IA nunca é admin, mesmo que a conta seja
+create or replace function privado.eh_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.admins a where a.user_id = auth.uid())
+     and privado.mfa_ok() and privado.sessao_direta();
+$$;
+
 notify pgrst, 'reload schema';

@@ -16,6 +16,7 @@ module.exports = [
   "modelo/agro.js",
   "modelo/rentabilidade.js",
   "modelo/carteira.js",
+  "modelo/base.js",
   "modelo/perfil.js",
   "modelo/recomendacao.js",
   "modelo/renda.js",

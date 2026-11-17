@@ -109,20 +109,8 @@ FC.carregaProventos = async function (forcar = false) {
 };
 
 // ---------------------------------------------------------------- preferências
-FC.montaPrefs = function (brutas: any) {
-  return {
-    alocacao_alvo: { ...FC.PADRAO_ALOCACAO, ...(brutas.alocacao_alvo || {}) },
-    premissas: FC.mescla(FC.PADRAO_PREMISSAS, brutas.premissas),
-    // objetivos e dados dos títulos moram no mesmo jsonb, mas não são premissas da projeção
-    premissas_salvas: !!brutas.premissas && Object.keys(brutas.premissas).some((k) => k !== "objetivos" && k !== "titulos"),
-    regras: brutas.regras ? FC.mescla(FC.PADRAO_REGRAS, brutas.regras) : JSON.parse(JSON.stringify(FC.PADRAO_REGRAS)),
-    renda: brutas.renda || JSON.parse(JSON.stringify(FC.PADRAO_RENDA)),
-    agro: FC.mescla(FC.PADRAO_AGRO, brutas.agro),
-    plano: FC.mescla(FC.PADRAO_PLANO, brutas.plano),
-    proventos: FC.mescla(FC.PADRAO_PROVENTOS, brutas.proventos),
-    layout: brutas.layout || null,
-  };
-};
+// a montagem das preferências é do núcleo (nucleo/modelo/base.js): o MCP usa a mesma
+FC.montaPrefs = FC.base.montaPrefs;
 
 FC.recalcula = function () {
   if (!estado.base) return;
@@ -136,16 +124,8 @@ FC.recarregaBase = async function () {
   FC.recalcula();
 };
 
-// tickers cujo histórico interessa: carteira, watchlist e o que aparece
-// nos aportes (para o gráfico de crescimento do patrimônio)
-function itensDeMercado() {
-  const m = new Map<string, any>();
-  for (const a of estado.base.ativos) m.set(a.ticker, { ticker: a.ticker, classe: a.classe });
-  for (const a of estado.base.aportes) {
-    if (a.tipo === "ativo" && a.ticker && !m.has(a.ticker)) m.set(a.ticker, { ticker: a.ticker, classe: "acao_br" });
-  }
-  return [...m.values()];
-}
+// tickers cujo histórico interessa: carteira, watchlist e o que aparece nos aportes
+const itensDeMercado = (): any[] => FC.base.itensDeMercado(estado.base);
 
 function fimDoCarregamentoInicial() {
   if (estado.carregandoInicial) {
@@ -168,23 +148,8 @@ FC.carregaMercado = async function (forcar = false) {
       FC.mercado.fiisCvm(forcar).catch((e: any) => { console.error(e); return null; }),
     ]);
     estado.mercado = { ...estado.mercado, universo, historicos: { ...estado.mercado.historicos, ...historicos } };
-    // o raio-x da CVM entra em cada FII do universo (e serve de par para os outros)
-    if (cvm && cvm.fundos && universo && universo.fiis) {
-      for (const [t, v] of Object.entries<any>(cvm.fundos)) {
-        const f = universo.fiis[t];
-        if (!f) continue;
-        f.cvm = { ...v, fonte: cvm.fonte };
-        f.vacancia_financeira = v.vacancia_financeira ?? null;
-        f.concentracao = v.tipo === "papel" ? (v.cri || {}).maior : v.tipo === "fof" ? (v.fii || {}).maior
-          : v.tipo === "hibrido" ? v.maior_imovel ?? (v.cri || {}).maior ?? null : v.maior_imovel ?? null;
-      }
-    }
-    // sem a série diária (ou com ela incompleta), a renda fixa rende pela
-    // taxa anual do Banco Central em vez de ficar parada no valor aplicado
-    const reserva = (universo && universo.macro) || {};
-    if (indices || (reserva.cdi != null && !(estado.mercado.indices && estado.mercado.indices.tem))) {
-      estado.mercado.indices = FC.rentab.preparaIndices(indices || {}, reserva);
-    }
+    FC.base.juntaCvm(universo, cvm);
+    FC.base.aplicaIndices(estado.mercado, indices);
     // Ibovespa para as comparações (sem travar o resto)
     if (!estado.bench) FC.mercado.benchmarks(5).then((b: any) => { estado.bench = b; rerender(); }).catch((e: any) => console.error(e));
     await buscaCotacoes();

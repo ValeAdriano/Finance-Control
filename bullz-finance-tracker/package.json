@@ -14,6 +14,7 @@
     "gera:icones": "node scripts/gera-icones.js",
     "gera:icone-app": "node scripts/gera-icones-app.js",
     "gera:palco": "node scripts/gera-palco.js",
+    "gera:mcp": "node scripts/gera-nucleo-mcp.js",
     "apk": "sh scripts/gera-apk.sh"
   },
   "dependencies": {
@@ -58,6 +59,7 @@
     "eslint": "^9.39.5",
     "eslint-config-expo": "^57.0.2",
     "prettier": "^3.9.10",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^4.6.7"
   }
 }
