@@ -32,7 +32,7 @@ Na coluna **Status**, quando as plataformas divergirem, anote por plataforma (ex
 | N11 | Renda (setores) | `modelo/renda.js` | JSON igual | · |
 | N12 | Perfil e recomendação | `modelo/perfil.js`, `modelo/recomendacao.js` | testes do site passam no app | = |
 | N13 | Layout | `layout.js` | `tests/layout.test.js` passa no app | ~ |
-| N14 | Importador de extratos | `modelo/importador.js` | mesmos lançamentos para os extratos de exemplo | · |
+| N14 | Importador de extratos | `modelo/importador.js` | mesmos lançamentos para os extratos de exemplo; B3 (Negociação, Movimentação) e Binance (transações, trades, Convert) em `testes/importador.test.js` | ~ |
 | N15 | Retrospectiva (dados) | `modelo/retrospectiva.js` | JSON igual | · |
 | N16 | Formatação pt-BR (moeda, %, datas, "há x min") | `util.js` (`fmt`, `datas`) | strings iguais | ~ |
 | T1 | Tokens de cor claro/escuro e contraste alto | `css/app.css` `:root` | valores iguais | = |
@@ -111,7 +111,7 @@ Na coluna **Status**, quando as plataformas divergirem, anote por plataforma (ex
 | P1 | Novo aporte: compra, venda, renda fixa, provento | `telas/aportes.js` | venda acima da posição | Web ~ · iOS · · Android · |
 | P2 | Repetir aporte (folha "Aportar em…") | `telas/aportes.js` | — | Web ~ · iOS · · Android · |
 | P3 | Histórico com filtros e apagar | `telas/aportes.js` | vazio | Web ~ · iOS · · Android · |
-| P4 | Importar extrato (CSV/ZIP com senha) | `telas/aportes.js`, `modelo/importador.js` | senha errada, repetidos | Web ~ · iOS · · Android · |
+| P4 | Importar extrato (XLSX/CSV/ZIP com senha) | `telas/aportes.js`, `modelo/importador.js` | senha errada, repetidos | Web ~ · iOS · · Android · |
 
 ## Demais abas (F4)
 

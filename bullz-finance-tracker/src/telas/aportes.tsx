@@ -490,11 +490,31 @@ function Historico() {
 // ---------------------------------------------------------------- importação
 /** arquivo escolhido no formato que o importador do site espera (arrayBuffer) */
 async function escolheArquivo(): Promise<{ name: string; arrayBuffer: () => Promise<ArrayBuffer> } | null> {
-  const r = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/plain", "application/zip", "application/x-zip-compressed", "*/*"], copyToCacheDirectory: true });
+  const r = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/plain", "application/zip", "application/x-zip-compressed",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "*/*"], copyToCacheDirectory: true });
   if (r.canceled || !r.assets || !r.assets.length) return null;
   const a: any = r.assets[0];
   if (Platform.OS === "web" && a.file) return a.file;
   return { name: a.name, arrayBuffer: async () => (await fetch(a.uri)).arrayBuffer() };
+}
+
+type Pedido = { ticker: string; classe: string; dia: string };
+/** busca o histórico (já em reais) dos ativos que o extrato pediu, desde o
+ *  dia mais antigo, e devolve o resolvePreco(ticker, dia, classe) do importador */
+async function precosDoDia(pedidos: Pedido[]) {
+  const hoje = new Date();
+  const maisAntigo = pedidos.reduce((m, p) => (p.dia < m ? p.dia : m), hoje.toISOString().slice(0, 10));
+  const anos = Math.min(10, Math.max(3, Math.ceil((hoje.getTime() - Date.parse(maisAntigo)) / (365.25 * 864e5)) + 1));
+  const series: Record<string, any> = {};
+  for (const classe of new Set(pedidos.map((p) => p.classe))) {
+    const h = await FC.mercado.historicos(pedidos.filter((p) => p.classe === classe).map((p) => ({ ticker: p.ticker, classe })), anos);
+    if (classe === "acao_br") Object.assign(FC.estado.mercado.historicos, h);
+    for (const [tk, serie] of Object.entries(h)) series[classe + ":" + tk] = serie;
+  }
+  return (tk: string, dia: string, classe = "acao_br") => {
+    const s = series[classe + ":" + tk];
+    return s && !s.erro ? FC.carteira.precoEm(s.precos, dia) : null;
+  };
 }
 
 function FormImportar({ api }: { api: ApiFolha }) {
@@ -509,17 +529,18 @@ function FormImportar({ api }: { api: ApiFolha }) {
     if (!arq) { ui.aviso("Escolha um arquivo.", "erro"); return; }
     try {
       const opcoes: any = { senha: senha || null, tituloCaixa: cofre };
-      // 1ª passada descobre quais preços o extrato do C6 precisa; busca esses
-      // históricos e lê de novo, agora com o preço do dia
-      const pedidos = new Set<string>();
-      opcoes.resolvePreco = (tk: string) => { pedidos.add(tk); return null; };
-      let lido = await FC.importador.le(arq, opcoes);
-      if (pedidos.size) {
-        const h = await FC.mercado.historicos([...pedidos].map((tk) => ({ ticker: tk, classe: "acao_br" })), 3);
-        Object.assign(FC.estado.mercado.historicos, h);
-        opcoes.resolvePreco = (tk: string, dia: string) => { const s = h[tk]; return s && !s.erro ? FC.carteira.precoEm(s.precos, dia) : null; };
-        lido = await FC.importador.le(arq, opcoes);
-      }
+      // 1ª passada (rascunho) descobre quais preços o extrato precisa: o C6
+      // não traz a quantidade e a Binance cota em USDT, BNB… Busca esses
+      // históricos (já em reais) e lê de novo, agora com o preço do dia.
+      const pedidos = new Map<string, Pedido>();
+      opcoes.resolvePreco = (tk: string, dia: string, classe = "acao_br") => {
+        const k = classe + ":" + tk, p = pedidos.get(k);
+        if (!p || dia < p.dia) pedidos.set(k, { ticker: tk, classe, dia });
+        return null;
+      };
+      let lido = await FC.importador.le(arq, { ...opcoes, rascunho: true });
+      if (pedidos.size) opcoes.resolvePreco = await precosDoDia([...pedidos.values()]);
+      lido = await FC.importador.le(arq, opcoes);
       const linhas = lido.itens.map((i: any) => ({
         tipo: i.tipo, data: i.data, ticker: i.ticker || null,
         quantidade: i.tipo === "ativo" ? (i.venda ? -i.quantidade : i.quantidade) : null,
@@ -533,14 +554,17 @@ function FormImportar({ api }: { api: ApiFolha }) {
       const conhecidos = new Set(FC.estado.base.ativos.map((a: any) => a.ticker));
       const universo = FC.estado.mercado.universo || { fiis: {}, acoes: {} };
       const faltam = [...new Set<string>(linhas.filter((l: any) => l.tipo === "ativo").map((l: any) => l.ticker))].filter((tk) => !conhecidos.has(tk));
+      const cripto = new Set<string>(lido.itens.filter((i: any) => i.classe === "cripto").map((i: any) => i.ticker));
       const novosAtivos = faltam.map((tk) => {
+        if (cripto.has(tk)) return { ticker: tk, classe: "cripto", pilar: "alternativos", lista: "carteira", quantidade: 0 };
         const classe = universo.fiis[tk] ? "fii" : universo.acoes[tk] ? "acao_br" : "etf_br";
         return { ticker: tk, classe, pilar: ({ fii: "real_estate", acao_br: "acoes", etf_br: "alternativos" } as any)[classe], lista: "carteira", quantidade: 0 };
       });
       if (novosAtivos.length) await FC.db.inserirVarios("ativos", novosAtivos, "user_id,ticker");
       setRes({ ok: true, texto: <><B>{novos.length}</B> lançamento(s) importado(s) do extrato {lido.formato}.
         {linhas.length - novos.length ? ` ${linhas.length - novos.length} já estavam registrados e foram ignorados.` : ""}
-        {novosAtivos.length ? ` Cadastrei ${novosAtivos.length} ativo(s) novo(s): ${novosAtivos.map((a) => a.ticker).join(", ")} — confira classe e pilar em Investimentos.` : ""}</> });
+        {novosAtivos.length ? ` Cadastrei ${novosAtivos.length} ativo(s) novo(s): ${novosAtivos.map((a) => a.ticker).join(", ")}. Confira classe e pilar em Investimentos.` : ""}
+        {(lido.avisos || []).length ? <>{"\n\n"}{lido.avisos.join("\n")}</> : null}</> });
       await depoisDeMudar(undefined, true);
     } catch (err: any) {
       setRes({ ok: false, texto: FC.ui.traduzErro(err.message || String(err)) });
@@ -549,8 +573,9 @@ function FormImportar({ api }: { api: ApiFolha }) {
 
   return (
     <Form>
-      <T v="p">Reconhece o extrato de negociação da corretora (compras e vendas), o extrato de conta do C6 (compras, proventos e CDB) e o do PicPay (cofrinhos). Importar o mesmo arquivo duas vezes não duplica nada.</T>
-      <Campo rotulo="Arquivo (CSV ou ZIP)">
+      <T v="p">Reconhece os extratos da B3 (Área do Investidor › Extratos: Negociação para compras e vendas, Movimentação para proventos, desdobros e bonificações), da Binance (Histórico de transações, Histórico de trades spot ou Convert), da corretora, do C6 e do PicPay. Importar o mesmo arquivo duas vezes não duplica nada.</T>
+      <T v="p">Da Binance, use um só: o histórico de transações (mais completo) ou o de trades. Os dois juntos duplicam as compras.</T>
+      <Campo rotulo="Arquivo (XLSX, CSV ou ZIP)">
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <Botao variante="sec" pequeno icone="importar" onPress={async () => { const f = await escolheArquivo(); if (f) { setArq(f); setRes(null); } }}>Escolher arquivo</Botao>
           <T style={{ fontSize: 14, color: arq ? t.cores.ink : t.cores.ink3, flexShrink: 1 }} numberOfLines={1}>{arq ? arq.name : "nenhum arquivo escolhido"}</T>
