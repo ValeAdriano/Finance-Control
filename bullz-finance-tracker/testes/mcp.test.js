@@ -342,7 +342,16 @@ test("MCP · apagar_registro apaga um, audita e não alcança tabela fora da lis
 test("MCP · catálogo: nomes únicos, descrições e schemas que viram JSON Schema", async () => {
   const { lista } = await requisicao();
   assert.equal(new Set(lista.map((f) => f.nome)).size, lista.length);
-  assert.equal(lista.filter((f) => !f.escreve).length, 12);
+  // contrato: as 20 ferramentas originais continuam lá, com o mesmo papel (só se adiciona)
+  const ORIGINAIS_LEITURA = ["resumo_patrimonio", "listar_posicoes", "detalhar_ativo", "listar_lancamentos", "listar_renda_fixa", "rentabilidade",
+    "dividendos", "agro_resumo", "agro_lancamentos", "salario_e_plano", "historico_patrimonio", "preferencias"];
+  const ORIGINAIS_ESCRITA = ["registrar_lancamento", "salvar_ativo", "salvar_titulo", "salvar_ganho", "registrar_agro", "atualizar_metas", "editar_registro", "apagar_registro"];
+  for (const n of ORIGINAIS_LEITURA) assert.equal(lista.find((f) => f.nome === n)?.escreve, false, `${n} sumiu ou passou a gravar`);
+  for (const n of ORIGINAIS_ESCRITA) assert.equal(lista.find((f) => f.nome === n)?.escreve, true, `${n} sumiu ou deixou de gravar`);
+  // ferramenta nova de gravação tem o modo simular
+  for (const f of lista.filter((x) => x.escreve && !ORIGINAIS_ESCRITA.includes(x.nome))) {
+    assert.ok("simular" in f.entrada(), `${f.nome} grava e não tem \`simular\``);
+  }
   assert.deepEqual(lista.filter((f) => f.destrutiva).map((f) => f.nome), ["apagar_registro"]);
   for (const f of lista) {
     assert.match(f.nome, /^[a-z_]{3,40}$/);
@@ -381,4 +390,24 @@ test("MCP · o banco só libera ao cliente de IA as tabelas que as ferramentas u
   for (const t of e.TABELAS) assert.ok(liberadas.includes(t), `${t} é editável pelo MCP mas não tem política "mcp" no schema`);
   for (const t of ["perfil_rascunho", "perfil_investidor", "plano_investimento", "onboarding_eventos"]) assert.ok(bloqueadas.includes(t), `${t} deveria estar bloqueada`);
   assert.equal(liberadas.filter((t) => bloqueadas.includes(t)).length, 0);
+});
+
+test("MCP · auditar_dados: lista vazia na conta de demonstração e aponta o que quebra", async () => {
+  const { chama } = await requisicao();
+  const r = await chama("auditar_dados");
+  assert.equal(r.total, 0, JSON.stringify(r.inconsistencias));
+  const db = baseDemo();
+  db.preferencias[0].premissas = { aporte_mensal: 2000 };
+  db.preferencias[0].plano = { modo: "percentual", percentual: 50, destinos: [{ tipo: "pilar", alvo: "caixa", pct: 100 }], reinvestir_dividendos: true };
+  const { chama: c2 } = await requisicao({ db });
+  const r2 = await c2("auditar_dados");
+  assert.deepEqual(r2.inconsistencias.map((x) => x.tipo).sort(), ["premissa_duplicada", "proventos_ambiguos"]);
+});
+
+test("MCP · resumo_patrimonio: bolsa e cripto fecham (resultado = valor − custo)", async () => {
+  const { chama } = await requisicao();
+  const r = await chama("resumo_patrimonio");
+  const b = r.bolsa_e_cripto;
+  assert.ok(Math.abs(b.resultado - (b.valor - b.custo)) <= 0.02, JSON.stringify(b));
+  assert.ok(b.valor_total >= b.valor);
 });

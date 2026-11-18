@@ -67,6 +67,7 @@ export function camposPorTabela(z) {
       valor: positivo.describe("líquido, o que cai na conta"),
       inicio: data.describe("avulso: a data do recebimento"), fim: data.nullable(), observacao: texto(160),
       dia_regra: z.enum(REGRAS_DIA).nullable(), dia_numero: z.number().int().min(1).max(31).nullable(),
+      data_fim_contrato: data.nullable(), data_ultimo_pagamento: data.nullable(),
     },
     agro_movimentos: {
       data, tipo: z.enum(TIPOS_MOV), categoria: gado, categoria_destino: gado.nullable(),

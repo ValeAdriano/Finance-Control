@@ -11,7 +11,7 @@
 
   // ---------------------------------------------------------------- preferências
   function montaPrefs(brutas) {
-    return {
+    const p = {
       alocacao_alvo: { ...FC.PADRAO_ALOCACAO, ...(brutas.alocacao_alvo || {}) },
       premissas: FC.mescla(FC.PADRAO_PREMISSAS, brutas.premissas),
       // objetivos e dados dos títulos moram no mesmo jsonb, mas não são premissas da projeção
@@ -23,6 +23,14 @@
       proventos: FC.mescla(FC.PADRAO_PROVENTOS, brutas.proventos),
       layout: brutas.layout || null,
     };
+    // proventos: o destino é a fonte; o booleano do plano sai dele
+    p.plano.destino_proventos = FC.salario.destinoProventos(p.plano, p.proventos);
+    p.plano.reinvestir_dividendos = FC.salario.reinvesteProventos(p.plano.destino_proventos, p.proventos);
+    // aporte mensal: com plano configurado, ele é a fonte e a premissa vira
+    // derivada (a projeção usa o plano; ver FC.projecao.projeta)
+    const comPlano = !!(p.plano.destinos && p.plano.destinos.length);
+    p.premissas.aporte_mensal_fonte = comPlano ? "plano" : "premissa";
+    return p;
   }
 
   // ---------------------------------------------------------------- mercado

@@ -136,7 +136,9 @@ function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: numb
     const destinos = dest.map((d) => ({ tipo: d.tipo, alvo: d.alvo || opcoesAlvo(d.tipo, null)[0]?.v, pct: FC.lerNum(String(d.pct)) || 0 })).filter((d) => d.alvo && d.pct > 0);
     const s = FC.soma(destinos, (d: any) => d.pct);
     if (destinos.length && Math.abs(s - 100) > 0.5) { ui.aviso(`Os destinos somam ${FC.fmt.num(s, 0)}% — ajuste para 100%.`, "erro"); return; }
-    const novo = { modo, percentual: pctN, valor: FC.lerNum(val) || 0, reinvestir_dividendos: reinv, destinos };
+    const novo = { modo, percentual: pctN, valor: FC.lerNum(val) || 0, reinvestir_dividendos: reinv, destinos,
+      // o destino é a fonte; o booleano é derivado (FC.salario.destinoProventos)
+      destino_proventos: reinv ? (FC.estado?.prefs?.proventos?.destino === "caixa" ? "caixa" : "mesmo_ativo") : "caixa" };
     try { await FC.db.gravaPrefs({ plano: novo }); await depoisDeMudar("Plano salvo — as projeções já usam ele"); } catch (err) { ui.erro(err); }
   };
   return (

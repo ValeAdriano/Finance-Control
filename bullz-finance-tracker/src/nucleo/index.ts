@@ -70,6 +70,7 @@ export function carregaNucleo(): FCTipo {
   require("../../nucleo/modelo/impostos.js");
   require("../../nucleo/modelo/alertas.js");
   require("../../nucleo/modelo/salario.js");
+  require("../../nucleo/modelo/auditoria.js");
   require("../../nucleo/modelo/retrospectiva.js");
   // só pela lógica pura: FC.promo (montaDados, CENAS, TOTAL) e FC.admin
   // (analisa, insights, nomeRota). As telas deles são as do app.

@@ -17,14 +17,36 @@
     modo: "percentual",            // percentual da renda | valor fixo
     percentual: 30,
     valor: 1000,
-    reinvestir_dividendos: true,   // dividendos do mês entram no valor a aportar
+    reinvestir_dividendos: true,   // DERIVADO de destino_proventos (ver destinoProventos)
+    // para onde vão os proventos: "mesmo_ativo" (entram no aporte do mês),
+    // "caixa" (ficam guardados; com caixa de proventos ligado, o que sai dele
+    // para compras conta no mês) ou "pote:<id>" (vão para um pote)
+    destino_proventos: null,
     destinos: [],                  // [{tipo: pilar|ativo|renda_fixa, alvo, pct}]
   };
 
+  // destino dos proventos: o salvo vale; sem ele, sai do legado
+  // (reinvestir_dividendos + destino do caixa de proventos)
+  function destinoProventos(plano, proventos) {
+    const d = plano && plano.destino_proventos;
+    if (d === "mesmo_ativo" || d === "caixa" || (typeof d === "string" && /^pote:.+/.test(d))) return d;
+    if (proventos && proventos.destino === "caixa") return "caixa";
+    return plano && plano.reinvestir_dividendos === false ? "caixa" : "mesmo_ativo";
+  }
+  // o booleano antigo, agora só derivado do destino
+  function reinvesteProventos(destino, proventos) {
+    return destino === "mesmo_ativo" || (destino === "caixa" && !!proventos && proventos.destino === "caixa");
+  }
+
   const mesDe = (iso) => iso.slice(0, 7);
+  // o último mês em que um ganho fixo cai na conta: a data do último
+  // pagamento, se houver; senão o fim (o fim do contrato fica à parte, em
+  // data_fim_contrato, e serve ao proporcional)
+  function fimDosPagamentos(g) { return g.data_ultimo_pagamento || g.fim || null; }
   function valeNoMes(g, mes) {
     if (g.tipo === "avulso") return mesDe(g.inicio) === mes;
-    return mesDe(g.inicio) <= mes && (!g.fim || mesDe(g.fim) >= mes);
+    const fim = fimDosPagamentos(g);
+    return mesDe(g.inicio) <= mes && (!fim || mesDe(fim) >= mes);
   }
 
   function rendaDoMes(ganhos, mes) {
@@ -225,5 +247,5 @@
     return saida.sort((x, y) => x.data.localeCompare(y.data));
   }
 
-  FC.salario = { streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+  FC.salario = { destinoProventos, reinvesteProventos, fimDosPagamentos, streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
 })();

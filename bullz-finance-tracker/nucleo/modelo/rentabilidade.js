@@ -132,19 +132,28 @@
     return ((lo + hi) / 2) * 100;
   }
 
-  // Modified Dietz: ganho ÷ capital médio ponderado pelo tempo que ficou aplicado
-  function dietz(fluxos, valorFinal, fim) {
+  // Modified Dietz: ganho ÷ capital médio ponderado pelo tempo que ficou aplicado.
+  // Quando o capital médio fica pequeno perto do que foi aplicado (vendeu
+  // quase tudo cedo, ou aportou na véspera), o quociente explode e o número
+  // perde o sentido: aí volta null com o motivo, em vez de um −97%.
+  const DIETZ_BASE_MINIMA = 0.1;   // capital médio ≥ 10% do total aplicado
+  function dietzDetalhe(fluxos, valorFinal, fim) {
     const fs = fluxos.filter((f) => Math.abs(f.valor) > 1e-9);
-    if (!fs.length) return null;
+    if (!fs.length) return { pct: null, motivo: "sem fluxos" };
     const ini = fs.reduce((m, f) => (f.data < m ? f.data : m), fs[0].data);
     const T = Math.max(1, D().dias(ini, fim));
     // aqui o fluxo entra com o sinal do bolso para a carteira: aporte +, saída −
     const entra = fs.map((f) => ({ data: f.data, v: -f.valor }));
     const liquido = entra.reduce((s, f) => s + f.v, 0);
+    const aplicado = entra.reduce((s, f) => s + Math.max(0, f.v), 0);
     const base = entra.reduce((s, f) => s + f.v * (D().dias(f.data, fim) / T), 0);
-    if (!(base > 1e-9)) return null;
-    return ((valorFinal - liquido) / base) * 100;
+    if (!(base > 1e-9)) return { pct: null, motivo: "capital médio nulo ou negativo no período" };
+    if (aplicado > 0 && base < aplicado * DIETZ_BASE_MINIMA) {
+      return { pct: null, motivo: "capital médio pequeno demais perto do aplicado (vendas ou aportes concentrados): o percentual não teria sentido" };
+    }
+    return { pct: ((valorFinal - liquido) / base) * 100, motivo: null, capital_medio: base };
   }
+  function dietz(fluxos, valorFinal, fim) { return dietzDetalhe(fluxos, valorFinal, fim).pct; }
 
   // retorno de um lote e o equivalente ao ano (só a partir de 30 dias: abaixo
   // disso, anualizar transforma ruído em número gigante)
@@ -159,10 +168,11 @@
     const comFinal = fluxos.concat(valorFinal > 0 ? [{ data: hoje, valor: valorFinal }] : []);
     const inicio = fluxos.length ? fluxos.reduce((m, f) => (f.data < m ? f.data : m), fluxos[0].data) : hoje;
     const dias = D().dias(inicio, hoje);
+    const dz = dietzDetalhe(fluxos, valorFinal, hoje);
     return {
       aplicado, devolvido, valor_atual: valorFinal,
       ganho: valorFinal + devolvido - aplicado,
-      periodo_pct: dietz(fluxos, valorFinal, hoje),
+      periodo_pct: dz.pct, ...(dz.motivo ? { periodo_motivo: dz.motivo } : {}),
       // a TIR anual só aparece com 90 dias de história
       xirr: dias >= 90 ? xirr(comFinal) : null,
       desde: inicio, dias, ...extra,
@@ -252,7 +262,7 @@
     }
     for (const a of aportes) {
       if (a.tipo !== "ativo" || a.ticker !== item.ticker || !a.data) continue;
-      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: Number(a.preco) });
+      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: FC.carteira.precoDoLancamento(a) });
     }
     return ev.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
   }
@@ -607,6 +617,6 @@
     return out;
   }
 
-  FC.rentab = { crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
+  FC.rentab = { dietzDetalhe, crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
     lotesDoTitulo, valorTituloEm, rotuloTaxa, PADRAO_TAXA, ciclosDoRebanho };
 })();

@@ -403,7 +403,9 @@
   function projeta(dados, prem, opcoes = {}) {
     // com o plano do Salário ligado, o aporte e a divisão vêm dele
     const pp = dados.plano_projecao;
-    const usandoPlano = !!(prem.usar_plano && pp && pp.aporte_mensal > 0);
+    // o plano é a fonte única do aporte: vale sempre que existir, salvo
+    // quando a pessoa desliga de propósito (usar_plano: false)
+    const usandoPlano = !!(prem.usar_plano !== false && pp && pp.aporte_mensal > 0);
     if (usandoPlano) prem = { ...prem, aporte_mensal: pp.aporte_mensal, distribuicao_aporte: "plano", _pesos_plano: pp.pesos };
     const hoje = opcoes.hoje || FC.datas.hoje();
     const m0 = dados.macro || {};

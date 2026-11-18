@@ -58,10 +58,12 @@ function posicao(a) {
   return { id: a.id, ticker: a.ticker, classe: a.classe, pilar: a.pilar, lista: a.lista, preco: np(a.preco), variacao_dia_pct: n2(a.variacao_dia),
     quantidade: p ? n8(p.quantidade) : 0, preco_medio: p ? np(p.preco_medio) : null, custo: p ? n2(p.custo) : null, valor: p ? n2(p.atual) : 0,
     resultado: p ? n2(p.resultado) : null, resultado_pct: p ? n2(p.variacao) : null,
-    nota: n2(a.score), leitura: a.veredito || null, ...(a.erro ? { erro: a.erro } : {}) };
+    nota: n2(a.score), leitura: a.veredito || null, ...(a.erro ? { erro: a.erro } : {}),
+    ...(p && p.custo_estimado ? { custo_estimado: true } : {}), ...(a.cotacao_quebrada ? { cotacao_quebrada: true, nota_sem_cotacao: n2(a.score_bruto) } : {}) };
 }
 const rent = (r) => r && ({ aplicado: n2(r.aplicado), devolvido: n2(r.devolvido), valor_atual: n2(r.valor_atual), ganho: n2(r.ganho),
-  retorno_pct: n2(r.periodo_pct), tir_anual_pct: n2(r.xirr), desde: r.desde || null, dias: r.dias ?? null });
+  retorno_pct: n2(r.periodo_pct), tir_anual_pct: n2(r.xirr), desde: r.desde || null, dias: r.dias ?? null,
+  ...(r.periodo_motivo ? { retorno_motivo: r.periodo_motivo } : {}) });
 
 const entre = (d, de, ate) => (!de || d >= de) && (!ate || d <= ate);
 
@@ -117,7 +119,10 @@ export function ferramentas(z) {
         return {
           patrimonio: n2(r.patrimonio), variacao_hoje: n2(r.variacao_hoje),
           por_classe: { bolsa: n2(r.bolsa), cripto: n2(r.cripto), renda_fixa: n2(r.renda_fixa), agro: n2(r.agro), caixa_de_proventos: n2(r.caixa_proventos) },
-          bolsa_e_cripto: { custo: n2(r.investido), valor: n2(r.atual), resultado: n2(r.resultado), resultado_pct: n2(r.variacao) },
+          // custo, valor e resultado sobre o MESMO conjunto (posições com custo conhecido);
+          // valor_total inclui as sem custo, listadas em sem_custo
+          bolsa_e_cripto: { custo: n2(r.investido), valor: n2(r.atual_com_custo ?? r.atual), resultado: n2(r.resultado), resultado_pct: n2(r.variacao),
+            valor_total: n2(r.atual), sem_custo: r.sem_custo || [], cotacao_quebrada: r.cotacao_quebrada || [] },
           alocacao: d.alocacao.map((l) => ({ pilar: l.chave, nome: l.nome, valor: n2(l.valor), pct_do_patrimonio: n2(l.pct), meta_pct: n2(l.alvo_pct),
             pct_na_base_da_meta: n2(l.pct_meta), desvio_pct: n2(l.desvio_pct), falta_para_a_meta: n2(l.desvio_reais), fora_da_meta: !!l.fora_meta })),
           rentabilidade_desde_o_inicio: d.rentab ? rent(d.rentab.total) : null,
@@ -305,6 +310,7 @@ export function ferramentas(z) {
           mes, renda: enxuga(plano.renda), plano_configurado: enxuga(e.prefs.plano),
           plano_do_mes: { a_investir: n2(plano.total), ja_aportado: n2(plano.aportado), falta: n2(plano.falta), sobra_da_renda: n2(plano.sobra_renda), destinos: enxuga(plano.destinos) },
           ganhos: e.base.ganhos.map((g) => ({ id: g.id, nome: g.nome, categoria: g.categoria, tipo: g.tipo, valor: n2(g.valor), inicio: g.inicio, fim: g.fim || null,
+            data_fim_contrato: g.data_fim_contrato || null, data_ultimo_pagamento: g.data_ultimo_pagamento || null,
             dia_regra: g.dia_regra || null, dia_numero: g.dia_numero ?? null, observacao: g.observacao || "" })),
         };
       },
@@ -341,6 +347,18 @@ export function ferramentas(z) {
         const { titulos, ...premissas } = e.prefs.premissas || {};
         return enxuga({ metas_de_alocacao_pct: e.prefs.alocacao_alvo, premissas, plano: e.prefs.plano, agro: e.prefs.agro, proventos: e.prefs.proventos,
           modulos: e.prefs.modulos, ...(incluir_regras ? { regras: e.prefs.regras } : {}) }, 200);
+      },
+    },
+    {
+      nome: "auditar_dados",
+      titulo: "Auditar os dados",
+      descricao: "Roda as checagens de coerência da conta (custo nulo, resultado que não fecha, retorno sem sentido, aplicado divergente, cotação quebrada, premissa de aporte duplicada, proventos ambíguos, fim de ganho divergente) e devolve as inconsistências encontradas. Só leitura. Lista vazia = nada a apontar.",
+      entrada: () => ({}),
+      async executa(ctx) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: true, comProventos: true });
+        const achados = FC.auditoria.verifica(e);
+        return { total: achados.length, inconsistencias: enxuga(achados, 200), ...avisoMercado(e) };
       },
     },
   ];
@@ -469,7 +487,9 @@ export function ferramentas(z) {
       entrada: () => ({ id: z.string().optional().describe("id do ganho a atualizar (veja salario_e_plano)"),
         nome: texto(80).min(1).optional(), categoria: z.enum(CATEGORIAS_GANHO).optional(), tipo: z.enum(TIPOS_GANHO).optional(),
         valor: positivo.optional(), inicio: dataOpc, fim: data.nullable().optional(), observacao: texto(160).optional(),
-        dia_regra: z.enum(REGRAS_DIA).nullable().optional(), dia_numero: z.number().int().min(1).max(31).nullable().optional() }),
+        dia_regra: z.enum(REGRAS_DIA).nullable().optional(), dia_numero: z.number().int().min(1).max(31).nullable().optional(),
+        data_fim_contrato: data.nullable().optional().describe("recorrente: quando o contrato termina (pode ser depois do último pagamento)"),
+        data_ultimo_pagamento: data.nullable().optional().describe("recorrente: a data do último pagamento; vale no lugar de `fim` para a renda do mês") }),
       async executa(ctx, a) {
         const { FC } = ctx;
         exigeEscrita(ctx);
@@ -484,7 +504,10 @@ export function ferramentas(z) {
           if (a.fim && a.fim < inicio) throw new ErroMcp("A data final vem antes da inicial.");
           salvo = await grava(() => FC.db.inserir("ganhos", { nome: a.nome, categoria: a.categoria || "salario", tipo: a.tipo, valor: a.valor, inicio,
             fim: a.tipo === "recorrente" ? a.fim ?? null : null, observacao: a.observacao || "", dia_regra: a.tipo === "recorrente" ? a.dia_regra ?? null : null,
-            dia_numero: a.tipo === "recorrente" ? a.dia_numero ?? null : null }));
+            dia_numero: a.tipo === "recorrente" ? a.dia_numero ?? null : null,
+            // só manda as colunas novas quando informadas (o banco pode não ter a migration 0001)
+            ...(a.tipo === "recorrente" && a.data_fim_contrato ? { data_fim_contrato: a.data_fim_contrato } : {}),
+            ...(a.tipo === "recorrente" && a.data_ultimo_pagamento ? { data_ultimo_pagamento: a.data_ultimo_pagamento } : {}) }));
         }
         await audita(ctx, id ? "mcp_edicao" : "mcp_cadastro", { tabela: "ganhos", id: salvo.id, nome: salvo.nome });
         return { ok: true, criado: !id, tabela: "ganhos", registro: enxuga(sem(salvo)) };

@@ -5,6 +5,16 @@
   const ok = FC.ok;
 
   // ---------------------------------------------------------------- aportes
+  // Preço por cota de um lançamento: o informado e, sem ele (extrato que só
+  // traz o total), o valor ÷ a quantidade. Os lançamentos são a fonte única
+  // do custo; rentabilidade e posição usam esta mesma conta.
+  function precoDoLancamento(a) {
+    const p = Number(a.preco), q = Math.abs(Number(a.quantidade)), v = Math.abs(Number(a.valor));
+    if (a.preco != null && a.preco !== "" && p > 0) return p;
+    if (q > 0 && v > 0) return v / q;
+    return null;
+  }
+
   // compras e vendas de cada ticker em ordem de data; a venda entra no
   // preço médio pelo custo das cotas que saíram, não pelo preço da venda
   function consolidadoPorTicker(aportes) {
@@ -14,7 +24,7 @@
       const d = (fora[a.ticker] = fora[a.ticker] || { quantidade: 0, n: 0, eventos: [] });
       d.quantidade += a.quantidade;
       d.n += 1;
-      d.eventos.push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: a.preco });
+      d.eventos.push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: precoDoLancamento(a) });
     }
     for (const d of Object.values(fora)) d.eventos.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
     return fora;
@@ -54,12 +64,17 @@
     }
     const atual = q * preco;
     const completo = qCusto >= q - 1e-9;
+    const pm = qCusto ? custo / qCusto : null;
     const p = {
       quantidade: q, quantidade_base: qBase, quantidade_aportes: qAp, n_aportes: reg ? reg.n : 0,
       atual, custo: null, resultado: null, variacao: null,
-      preco_medio: qCusto ? custo / qCusto : null, custo_parcial: !!qCusto && !completo,
+      preco_medio: pm, custo_parcial: !!qCusto && !completo, custo_estimado: false,
     };
-    if (completo && custo) { p.custo = custo; p.resultado = atual - custo; p.variacao = (atual / custo - 1) * 100; }
+    // parte da posição sem custo conhecido: com preço médio, ele vale para a
+    // posição inteira (preço médio × quantidade) e o custo sai marcado como estimado
+    let c = completo ? custo : null;
+    if (!completo && pm) { c = pm * q; p.custo_estimado = true; }
+    if (c) { p.custo = c; p.resultado = atual - c; p.variacao = (atual / c - 1) * 100; }
     return p;
   }
 
@@ -190,7 +205,15 @@
       r.lista = item.lista;
       r.na_carteira = item.lista === "carteira" || !!reg;
       r.pilar = item.pilar;
-      r.posicao = r.na_carteira && !r.erro ? posicao(it, r.preco, reg) : null;
+      // cotação zerada ou ausente sem erro da fonte: o ativo fica marcado e
+      // sai de notas, rankings e sugestões (a nota calculada não vale nada)
+      if (!r.erro && !(Number(r.preco) > 0)) {
+        r.cotacao_quebrada = true;
+        r.score_bruto = r.score;
+        r.score = null;
+        r.veredito_curto = "cotação quebrada";
+      }
+      r.posicao = r.na_carteira && !r.erro && !r.cotacao_quebrada ? posicao(it, r.preco, reg) : null;
       if (!r.tipo_rotulo) r.tipo_rotulo = FC.CLASSE_ROTULO[item.classe] || item.classe;
       return r;
     });
@@ -257,7 +280,11 @@
       historico: hist,
       registros: base.historico || [],
       resumo: {
-        investido, atual, resultado: atualComCusto - investido,
+        // resultado e variação sobre o MESMO conjunto: as posições com custo
+        // conhecido (atual_com_custo − investido); "atual" soma todas
+        investido, atual, atual_com_custo: atualComCusto, resultado: atualComCusto - investido,
+        sem_custo: comPos.filter((a) => !a.posicao.custo).map((a) => a.ticker),
+        cotacao_quebrada: ativos.filter((a) => a.cotacao_quebrada).map((a) => a.ticker),
         // só as posições com preço médio conhecido entram na conta
         variacao: investido ? (atualComCusto / investido - 1) * 100 : null,
         renda_fixa: rf, agro: agro.valorRebanho + (agro.financeiro.caixa_agro || 0), caixa_proventos: cxSaldo,
@@ -273,5 +300,5 @@
     return dados;
   }
 
-  FC.carteira = { monta, posicao, consolidadoPorTicker, proventosPorMes, precoEm };
+  FC.carteira = { monta, posicao, consolidadoPorTicker, proventosPorMes, precoEm, precoDoLancamento };
 })();

@@ -121,6 +121,20 @@
     }
   }
 
+  // Tabela criada por migration que talvez ainda não esteja no banco de
+  // produção (o app vai ao ar antes): sem ela, volta lista vazia e o app
+  // segue como antes. Ver docs/decisoes.md (D-003).
+  const TABELA_AUSENTE = /PGRST205|42P01|does not exist|Could not find the table/i;
+  function tabelaAusente(e) { return !!e && (TABELA_AUSENTE.test(String(e.code || "")) || TABELA_AUSENTE.test(String(e.message || ""))); }
+  const ausentes = new Set();
+  async function opcional(tabela, ordem) {
+    if (ausentes.has(tabela)) return [];
+    try { return await tudo(tabela, ordem); } catch (e) {
+      if (tabelaAusente(e)) { ausentes.add(tabela); return []; }
+      throw e;
+    }
+  }
+
   const num = (v) => (v == null ? null : Number(v));
   function normAtivo(a) { return { ...a, quantidade: num(a.quantidade) || 0, preco_medio: num(a.preco_medio) }; }
   function normRF(r) { return { ...r, taxa: num(r.taxa), valor_aplicado: num(r.valor_aplicado) || 0, valor_atual: num(r.valor_atual) }; }
@@ -151,6 +165,10 @@
                 pesagens: pesagens.map((p) => ({ ...p, peso_medio_kg: num(p.peso_medio_kg), cabecas: Number(p.cabecas) })) },
       };
     },
+
+    opcional, tabelaAusente,
+    // a tabela existe no banco? (false só depois de uma leitura que a achou ausente)
+    temTabela(tabela) { return !ausentes.has(tabela); },
 
     // genéricos
     async inserir(tabela, linha) { return checa(await sb.from(tabela).insert(linha).select().single()); },

@@ -1,5 +1,5 @@
 /* GERADO por scripts/gera-nucleo-mcp.js — não edite à mão.
- * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas.js, modelo/salario.js, modelo/retrospectiva.js. */
+ * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas.js, modelo/salario.js, modelo/auditoria.js, modelo/retrospectiva.js. */
 /* eslint-disable */
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
@@ -1451,6 +1451,20 @@ FC.config = {
     }
   }
 
+  // Tabela criada por migration que talvez ainda não esteja no banco de
+  // produção (o app vai ao ar antes): sem ela, volta lista vazia e o app
+  // segue como antes. Ver docs/decisoes.md (D-003).
+  const TABELA_AUSENTE = /PGRST205|42P01|does not exist|Could not find the table/i;
+  function tabelaAusente(e) { return !!e && (TABELA_AUSENTE.test(String(e.code || "")) || TABELA_AUSENTE.test(String(e.message || ""))); }
+  const ausentes = new Set();
+  async function opcional(tabela, ordem) {
+    if (ausentes.has(tabela)) return [];
+    try { return await tudo(tabela, ordem); } catch (e) {
+      if (tabelaAusente(e)) { ausentes.add(tabela); return []; }
+      throw e;
+    }
+  }
+
   const num = (v) => (v == null ? null : Number(v));
   function normAtivo(a) { return { ...a, quantidade: num(a.quantidade) || 0, preco_medio: num(a.preco_medio) }; }
   function normRF(r) { return { ...r, taxa: num(r.taxa), valor_aplicado: num(r.valor_aplicado) || 0, valor_atual: num(r.valor_atual) }; }
@@ -1481,6 +1495,10 @@ FC.config = {
                 pesagens: pesagens.map((p) => ({ ...p, peso_medio_kg: num(p.peso_medio_kg), cabecas: Number(p.cabecas) })) },
       };
     },
+
+    opcional, tabelaAusente,
+    // a tabela existe no banco? (false só depois de uma leitura que a achou ausente)
+    temTabela(tabela) { return !ausentes.has(tabela); },
 
     // genéricos
     async inserir(tabela, linha) { return checa(await sb.from(tabela).insert(linha).select().single()); },
@@ -3144,19 +3162,28 @@ FC.config = {
     return ((lo + hi) / 2) * 100;
   }
 
-  // Modified Dietz: ganho ÷ capital médio ponderado pelo tempo que ficou aplicado
-  function dietz(fluxos, valorFinal, fim) {
+  // Modified Dietz: ganho ÷ capital médio ponderado pelo tempo que ficou aplicado.
+  // Quando o capital médio fica pequeno perto do que foi aplicado (vendeu
+  // quase tudo cedo, ou aportou na véspera), o quociente explode e o número
+  // perde o sentido: aí volta null com o motivo, em vez de um −97%.
+  const DIETZ_BASE_MINIMA = 0.1;   // capital médio ≥ 10% do total aplicado
+  function dietzDetalhe(fluxos, valorFinal, fim) {
     const fs = fluxos.filter((f) => Math.abs(f.valor) > 1e-9);
-    if (!fs.length) return null;
+    if (!fs.length) return { pct: null, motivo: "sem fluxos" };
     const ini = fs.reduce((m, f) => (f.data < m ? f.data : m), fs[0].data);
     const T = Math.max(1, D().dias(ini, fim));
     // aqui o fluxo entra com o sinal do bolso para a carteira: aporte +, saída −
     const entra = fs.map((f) => ({ data: f.data, v: -f.valor }));
     const liquido = entra.reduce((s, f) => s + f.v, 0);
+    const aplicado = entra.reduce((s, f) => s + Math.max(0, f.v), 0);
     const base = entra.reduce((s, f) => s + f.v * (D().dias(f.data, fim) / T), 0);
-    if (!(base > 1e-9)) return null;
-    return ((valorFinal - liquido) / base) * 100;
+    if (!(base > 1e-9)) return { pct: null, motivo: "capital médio nulo ou negativo no período" };
+    if (aplicado > 0 && base < aplicado * DIETZ_BASE_MINIMA) {
+      return { pct: null, motivo: "capital médio pequeno demais perto do aplicado (vendas ou aportes concentrados): o percentual não teria sentido" };
+    }
+    return { pct: ((valorFinal - liquido) / base) * 100, motivo: null, capital_medio: base };
   }
+  function dietz(fluxos, valorFinal, fim) { return dietzDetalhe(fluxos, valorFinal, fim).pct; }
 
   // retorno de um lote e o equivalente ao ano (só a partir de 30 dias: abaixo
   // disso, anualizar transforma ruído em número gigante)
@@ -3171,10 +3198,11 @@ FC.config = {
     const comFinal = fluxos.concat(valorFinal > 0 ? [{ data: hoje, valor: valorFinal }] : []);
     const inicio = fluxos.length ? fluxos.reduce((m, f) => (f.data < m ? f.data : m), fluxos[0].data) : hoje;
     const dias = D().dias(inicio, hoje);
+    const dz = dietzDetalhe(fluxos, valorFinal, hoje);
     return {
       aplicado, devolvido, valor_atual: valorFinal,
       ganho: valorFinal + devolvido - aplicado,
-      periodo_pct: dietz(fluxos, valorFinal, hoje),
+      periodo_pct: dz.pct, ...(dz.motivo ? { periodo_motivo: dz.motivo } : {}),
       // a TIR anual só aparece com 90 dias de história
       xirr: dias >= 90 ? xirr(comFinal) : null,
       desde: inicio, dias, ...extra,
@@ -3264,7 +3292,7 @@ FC.config = {
     }
     for (const a of aportes) {
       if (a.tipo !== "ativo" || a.ticker !== item.ticker || !a.data) continue;
-      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: Number(a.preco) });
+      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: FC.carteira.precoDoLancamento(a) });
     }
     return ev.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
   }
@@ -3619,7 +3647,7 @@ FC.config = {
     return out;
   }
 
-  FC.rentab = { crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
+  FC.rentab = { dietzDetalhe, crescimentoIndice, comparaIndices, preparaIndices, xirr, dietz, anualiza, avaliaTitulo, avaliaAtivo, carteira, serieDiaria, twr,
     lotesDoTitulo, valorTituloEm, rotuloTaxa, PADRAO_TAXA, ciclosDoRebanho };
 })();
 
@@ -3632,6 +3660,16 @@ FC.config = {
   const ok = FC.ok;
 
   // ---------------------------------------------------------------- aportes
+  // Preço por cota de um lançamento: o informado e, sem ele (extrato que só
+  // traz o total), o valor ÷ a quantidade. Os lançamentos são a fonte única
+  // do custo; rentabilidade e posição usam esta mesma conta.
+  function precoDoLancamento(a) {
+    const p = Number(a.preco), q = Math.abs(Number(a.quantidade)), v = Math.abs(Number(a.valor));
+    if (a.preco != null && a.preco !== "" && p > 0) return p;
+    if (q > 0 && v > 0) return v / q;
+    return null;
+  }
+
   // compras e vendas de cada ticker em ordem de data; a venda entra no
   // preço médio pelo custo das cotas que saíram, não pelo preço da venda
   function consolidadoPorTicker(aportes) {
@@ -3641,7 +3679,7 @@ FC.config = {
       const d = (fora[a.ticker] = fora[a.ticker] || { quantidade: 0, n: 0, eventos: [] });
       d.quantidade += a.quantidade;
       d.n += 1;
-      d.eventos.push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: a.preco });
+      d.eventos.push({ data: a.data || "", q: Number(a.quantidade) || 0, preco: precoDoLancamento(a) });
     }
     for (const d of Object.values(fora)) d.eventos.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
     return fora;
@@ -3681,12 +3719,17 @@ FC.config = {
     }
     const atual = q * preco;
     const completo = qCusto >= q - 1e-9;
+    const pm = qCusto ? custo / qCusto : null;
     const p = {
       quantidade: q, quantidade_base: qBase, quantidade_aportes: qAp, n_aportes: reg ? reg.n : 0,
       atual, custo: null, resultado: null, variacao: null,
-      preco_medio: qCusto ? custo / qCusto : null, custo_parcial: !!qCusto && !completo,
+      preco_medio: pm, custo_parcial: !!qCusto && !completo, custo_estimado: false,
     };
-    if (completo && custo) { p.custo = custo; p.resultado = atual - custo; p.variacao = (atual / custo - 1) * 100; }
+    // parte da posição sem custo conhecido: com preço médio, ele vale para a
+    // posição inteira (preço médio × quantidade) e o custo sai marcado como estimado
+    let c = completo ? custo : null;
+    if (!completo && pm) { c = pm * q; p.custo_estimado = true; }
+    if (c) { p.custo = c; p.resultado = atual - c; p.variacao = (atual / c - 1) * 100; }
     return p;
   }
 
@@ -3817,7 +3860,15 @@ FC.config = {
       r.lista = item.lista;
       r.na_carteira = item.lista === "carteira" || !!reg;
       r.pilar = item.pilar;
-      r.posicao = r.na_carteira && !r.erro ? posicao(it, r.preco, reg) : null;
+      // cotação zerada ou ausente sem erro da fonte: o ativo fica marcado e
+      // sai de notas, rankings e sugestões (a nota calculada não vale nada)
+      if (!r.erro && !(Number(r.preco) > 0)) {
+        r.cotacao_quebrada = true;
+        r.score_bruto = r.score;
+        r.score = null;
+        r.veredito_curto = "cotação quebrada";
+      }
+      r.posicao = r.na_carteira && !r.erro && !r.cotacao_quebrada ? posicao(it, r.preco, reg) : null;
       if (!r.tipo_rotulo) r.tipo_rotulo = FC.CLASSE_ROTULO[item.classe] || item.classe;
       return r;
     });
@@ -3884,7 +3935,11 @@ FC.config = {
       historico: hist,
       registros: base.historico || [],
       resumo: {
-        investido, atual, resultado: atualComCusto - investido,
+        // resultado e variação sobre o MESMO conjunto: as posições com custo
+        // conhecido (atual_com_custo − investido); "atual" soma todas
+        investido, atual, atual_com_custo: atualComCusto, resultado: atualComCusto - investido,
+        sem_custo: comPos.filter((a) => !a.posicao.custo).map((a) => a.ticker),
+        cotacao_quebrada: ativos.filter((a) => a.cotacao_quebrada).map((a) => a.ticker),
         // só as posições com preço médio conhecido entram na conta
         variacao: investido ? (atualComCusto / investido - 1) * 100 : null,
         renda_fixa: rf, agro: agro.valorRebanho + (agro.financeiro.caixa_agro || 0), caixa_proventos: cxSaldo,
@@ -3900,7 +3955,7 @@ FC.config = {
     return dados;
   }
 
-  FC.carteira = { monta, posicao, consolidadoPorTicker, proventosPorMes, precoEm };
+  FC.carteira = { monta, posicao, consolidadoPorTicker, proventosPorMes, precoEm, precoDoLancamento };
 })();
 
 
@@ -3918,7 +3973,7 @@ FC.config = {
 
   // ---------------------------------------------------------------- preferências
   function montaPrefs(brutas) {
-    return {
+    const p = {
       alocacao_alvo: { ...FC.PADRAO_ALOCACAO, ...(brutas.alocacao_alvo || {}) },
       premissas: FC.mescla(FC.PADRAO_PREMISSAS, brutas.premissas),
       // objetivos e dados dos títulos moram no mesmo jsonb, mas não são premissas da projeção
@@ -3930,6 +3985,14 @@ FC.config = {
       proventos: FC.mescla(FC.PADRAO_PROVENTOS, brutas.proventos),
       layout: brutas.layout || null,
     };
+    // proventos: o destino é a fonte; o booleano do plano sai dele
+    p.plano.destino_proventos = FC.salario.destinoProventos(p.plano, p.proventos);
+    p.plano.reinvestir_dividendos = FC.salario.reinvesteProventos(p.plano.destino_proventos, p.proventos);
+    // aporte mensal: com plano configurado, ele é a fonte e a premissa vira
+    // derivada (a projeção usa o plano; ver FC.projecao.projeta)
+    const comPlano = !!(p.plano.destinos && p.plano.destinos.length);
+    p.premissas.aporte_mensal_fonte = comPlano ? "plano" : "premissa";
+    return p;
   }
 
   // ---------------------------------------------------------------- mercado
@@ -5295,7 +5358,9 @@ FC.config = {
   function projeta(dados, prem, opcoes = {}) {
     // com o plano do Salário ligado, o aporte e a divisão vêm dele
     const pp = dados.plano_projecao;
-    const usandoPlano = !!(prem.usar_plano && pp && pp.aporte_mensal > 0);
+    // o plano é a fonte única do aporte: vale sempre que existir, salvo
+    // quando a pessoa desliga de propósito (usar_plano: false)
+    const usandoPlano = !!(prem.usar_plano !== false && pp && pp.aporte_mensal > 0);
     if (usandoPlano) prem = { ...prem, aporte_mensal: pp.aporte_mensal, distribuicao_aporte: "plano", _pesos_plano: pp.pesos };
     const hoje = opcoes.hoje || FC.datas.hoje();
     const m0 = dados.macro || {};
@@ -7293,14 +7358,36 @@ FC.config = {
     modo: "percentual",            // percentual da renda | valor fixo
     percentual: 30,
     valor: 1000,
-    reinvestir_dividendos: true,   // dividendos do mês entram no valor a aportar
+    reinvestir_dividendos: true,   // DERIVADO de destino_proventos (ver destinoProventos)
+    // para onde vão os proventos: "mesmo_ativo" (entram no aporte do mês),
+    // "caixa" (ficam guardados; com caixa de proventos ligado, o que sai dele
+    // para compras conta no mês) ou "pote:<id>" (vão para um pote)
+    destino_proventos: null,
     destinos: [],                  // [{tipo: pilar|ativo|renda_fixa, alvo, pct}]
   };
 
+  // destino dos proventos: o salvo vale; sem ele, sai do legado
+  // (reinvestir_dividendos + destino do caixa de proventos)
+  function destinoProventos(plano, proventos) {
+    const d = plano && plano.destino_proventos;
+    if (d === "mesmo_ativo" || d === "caixa" || (typeof d === "string" && /^pote:.+/.test(d))) return d;
+    if (proventos && proventos.destino === "caixa") return "caixa";
+    return plano && plano.reinvestir_dividendos === false ? "caixa" : "mesmo_ativo";
+  }
+  // o booleano antigo, agora só derivado do destino
+  function reinvesteProventos(destino, proventos) {
+    return destino === "mesmo_ativo" || (destino === "caixa" && !!proventos && proventos.destino === "caixa");
+  }
+
   const mesDe = (iso) => iso.slice(0, 7);
+  // o último mês em que um ganho fixo cai na conta: a data do último
+  // pagamento, se houver; senão o fim (o fim do contrato fica à parte, em
+  // data_fim_contrato, e serve ao proporcional)
+  function fimDosPagamentos(g) { return g.data_ultimo_pagamento || g.fim || null; }
   function valeNoMes(g, mes) {
     if (g.tipo === "avulso") return mesDe(g.inicio) === mes;
-    return mesDe(g.inicio) <= mes && (!g.fim || mesDe(g.fim) >= mes);
+    const fim = fimDosPagamentos(g);
+    return mesDe(g.inicio) <= mes && (!fim || mesDe(fim) >= mes);
   }
 
   function rendaDoMes(ganhos, mes) {
@@ -7501,7 +7588,102 @@ FC.config = {
     return saida.sort((x, y) => x.data.localeCompare(y.data));
   }
 
-  FC.salario = { streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+  FC.salario = { destinoProventos, reinvesteProventos, fimDosPagamentos, streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+})();
+
+
+/* ---- modelo/auditoria.js */
+/* Auditoria dos dados: as checagens de coerência que o Bullz roda sobre o
+ * retrato montado (FC.base.carrega). Só leitura. Cada achado diz o que está
+ * incoerente, onde e o que fazer. Lista vazia = nada a apontar.
+ *
+ * Checagens (Marco 1 do plano de evolução):
+ *   custo_nulo            posição com preço médio e sem custo
+ *   resultado_incoerente  resultado ≠ valor − custo sobre o mesmo conjunto
+ *   retorno_sem_sentido   retorno abaixo de −100% ou acima de 1000%
+ *   aplicado_divergente   aplicado da rentabilidade ≠ custo da posição (só compras)
+ *   cotacao_quebrada      preço zerado ou ausente sem erro da fonte
+ *   premissa_duplicada    premissa de aporte salva junto de um plano configurado
+ *   proventos_ambiguos    reinvestir_dividendos sem destino_proventos explícito
+ *   ganho_fim_divergente  fim do ganho diferente do fim do contrato, sem data do último pagamento
+ */
+(function () {
+  const FC = window.FC;
+  const fin = (v) => typeof v === "number" && Number.isFinite(v);
+  const TOL = 0.01;
+
+  function achado(tipo, onde, texto, extra = {}) { return { tipo, onde, texto, ...extra }; }
+
+  function verifica(estado) {
+    const saida = [];
+    const d = estado.dados || {}, base = estado.base || {}, brutas = base.prefsBrutas || {};
+    const ativos = d.ativos || [];
+
+    // posições
+    for (const a of ativos) {
+      if (a.cotacao_quebrada) {
+        saida.push(achado("cotacao_quebrada", a.ticker, `${a.ticker} está com cotação ${a.preco == null ? "ausente" : a.preco}: fora de notas, rankings e sugestões até a fonte voltar.`));
+      }
+      const p = a.posicao;
+      if (!p) continue;
+      if (p.preco_medio && p.custo == null) {
+        saida.push(achado("custo_nulo", a.ticker, `${a.ticker} tem preço médio e custo nulo.`));
+      }
+    }
+
+    // resumo de bolsa e cripto
+    const r = d.resumo;
+    if (r && fin(r.investido) && fin(r.atual_com_custo) && fin(r.resultado)) {
+      const esperado = r.atual_com_custo - r.investido;
+      if (Math.abs(esperado - r.resultado) > TOL) {
+        saida.push(achado("resultado_incoerente", "bolsa_e_cripto", `resultado ${r.resultado} ≠ valor ${r.atual_com_custo} − custo ${r.investido}.`));
+      }
+    }
+
+    // rentabilidade
+    const rt = d.rentab;
+    if (rt) {
+      const confere = (onde, x) => {
+        if (!x || !fin(x.periodo_pct)) return;
+        if (x.periodo_pct < -100 - TOL || x.periodo_pct > 1000) {
+          saida.push(achado("retorno_sem_sentido", onde, `retorno de ${x.periodo_pct.toFixed(1)}% em ${onde} não tem sentido: revise os lançamentos.`));
+        }
+      };
+      confere("total", rt.total);
+      for (const [k, v] of Object.entries(rt.classes || {})) confere("classe:" + k, v);
+      for (const x of rt.ativos || []) {
+        confere(x.ticker, x);
+        const a = ativos.find((y) => y.ticker === x.ticker);
+        const p = a && a.posicao;
+        const soCompras = !(x.realizados && x.realizados.length);
+        if (p && fin(p.custo) && !p.custo_estimado && fin(x.aplicado) && soCompras && Math.abs(x.aplicado - p.custo) > Math.max(TOL, p.custo * 0.001)) {
+          saida.push(achado("aplicado_divergente", x.ticker, `${x.ticker}: aplicado ${x.aplicado.toFixed(2)} na rentabilidade contra custo ${p.custo.toFixed(2)} na posição.`,
+            { aplicado: x.aplicado, custo: p.custo }));
+        }
+      }
+    }
+
+    // preferências
+    const plano = brutas.plano || {}, prem = brutas.premissas || {};
+    if (plano.destinos && plano.destinos.length && prem.aporte_mensal != null && !prem.aporte_mensal_obsoleta) {
+      saida.push(achado("premissa_duplicada", "preferencias.premissas.aporte_mensal",
+        `A premissa de aporte (${prem.aporte_mensal}) convive com o plano configurado. O plano é a fonte: a premissa só vale com o plano desligado na projeção.`));
+    }
+    if (plano.reinvestir_dividendos != null && !plano.destino_proventos) {
+      saida.push(achado("proventos_ambiguos", "preferencias.plano",
+        `reinvestir_dividendos está salvo sem destino_proventos; o destino derivado é "${FC.salario.destinoProventos(plano, brutas.proventos)}". Salve o plano para fixar.`));
+    }
+
+    // ganhos
+    for (const g of base.ganhos || []) {
+      if (g.tipo === "recorrente" && g.fim && g.data_fim_contrato && g.fim !== g.data_fim_contrato && !g.data_ultimo_pagamento) {
+        saida.push(achado("ganho_fim_divergente", g.nome, `${g.nome}: fim ${g.fim} e fim do contrato ${g.data_fim_contrato}. Informe a data do último pagamento.`));
+      }
+    }
+    return saida;
+  }
+
+  FC.auditoria = { verifica };
 })();
 
 
