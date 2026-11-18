@@ -76,6 +76,33 @@ const resumoPotes = (pts) => pts && ({ total: n2(pts.total), comprometido_com_ir
   potes: pts.potes.map(pote) });
 const MIGRATION = (n, t) => `A tabela ${t} ainda não existe no banco desta conta: aplique a migration ${n} (supabase/migrations/) e tente de novo.`;
 
+// ---------------------------------------------------------------- movimento interno
+const TIPOS_PONTA = ["ativo", "titulo_rf", "pote", "agro_lote"];
+const efeitoMov = (ef) => ({
+  origem: ef.origem, destino: ef.destino, bruto: n2(ef.bruto), custos: n2(ef.custos), liquido: n2(ef.liquido),
+  preco_medio_da_baixa: np(ef.preco_medio_da_baixa), resultado_realizado: n2(ef.resultado_realizado),
+  patrimonio_antes: n2(ef.patrimonio_antes), patrimonio_depois: n2(ef.patrimonio_depois),
+  alocacao_antes_pct: enxuga(ef.alocacao_antes_pct), alocacao_depois_pct: enxuga(ef.alocacao_depois_pct),
+  ordem_rf_acoes_cripto: { respeitada_antes: ef.ordem.respeitada_antes, respeitada_depois: ef.ordem.respeitada_depois, efeito: ef.ordem.efeito,
+    antes: enxuga(ef.ordem.antes), depois: enxuga(ef.ordem.depois) },
+  como_ler: "Não é aporte nem resgate: o Salário e a TIR total ignoram. A origem realiza resultado pelo preço médio; o destino entra com custo = líquido.",
+});
+function entradaMov(z, { data, positivo, naoNegativo, texto }) {
+  return {
+    data: data.optional().describe("AAAA-MM-DD (padrão: hoje)"),
+    origem_tipo: z.enum(TIPOS_PONTA), origem_id: texto(80).min(1).describe("ativo: ticker · titulo_rf: nome ou id · pote: tipo, nome ou id"),
+    origem_quantidade: positivo.describe("ativo: cotas · titulo_rf e pote: valor em reais"), origem_preco: positivo.optional().describe("ativo: preço da venda (padrão: o de agora)"),
+    destino_tipo: z.enum(["ativo", "titulo_rf", "pote"]), destino_id: texto(80).min(1),
+    destino_quantidade: positivo.optional().describe("ativo: cotas compradas"), destino_preco: positivo.optional().describe("ativo: preço da compra"),
+    destino_classe: z.enum(CLASSES).optional().describe("só para ativo de destino ainda não cadastrado"),
+    custos: z.object({ taxa: naoNegativo.optional(), spread: naoNegativo.optional(), saque: naoNegativo.optional(), impostos: naoNegativo.optional() }).strict().optional(),
+    observacao: texto(160).optional(),
+  };
+}
+function planejaMov(FC, e, a) {
+  try { return FC.movimentos.planeja(e, a); } catch (x) { throw new ErroMcp(x.message); }
+}
+
 // cria os potes padrão de quem ainda não tem nenhum (conta nova)
 async function garantePotes(ctx, e) {
   const { FC } = ctx;
@@ -382,6 +409,17 @@ export function ferramentas(z) {
       },
     },
     {
+      nome: "simular_realocacao",
+      titulo: "Simular uma realocação",
+      descricao: "Mostra o efeito de trocar um ativo por outro (ou por um título, ou mandar para um pote) sem gravar nada: alocação antes e depois, se a ordem RF › Ações › Cripto melhora ou piora, o resultado realizado na origem e o custo do destino.",
+      entrada: () => entradaMov(z, { data, positivo, naoNegativo, texto }),
+      async executa(ctx, a) {
+        const e = await carrega(ctx, { comMercado: true, comProventos: true });
+        const p = planejaMov(ctx.FC, e, a);
+        return { simulado: true, ...efeitoMov(p.efeito), ...avisoMercado(e) };
+      },
+    },
+    {
       nome: "auditar_dados",
       titulo: "Auditar os dados",
       descricao: "Roda as checagens de coerência da conta (custo nulo, resultado que não fecha, retorno sem sentido, aplicado divergente, cotação quebrada, premissa de aporte duplicada, proventos ambíguos, fim de ganho divergente) e devolve as inconsistências encontradas. Só leitura. Lista vazia = nada a apontar.",
@@ -642,6 +680,30 @@ export function ferramentas(z) {
         for (const l of t.linhas) await grava(() => FC.db.inserir("potes_movimentos", l));
         await audita(ctx, "mcp_potes", { de: t.origem.id, para: t.destino.id, valor: t.valor, transferencia_id: t.linhas[0].transferencia_id });
         return { ok: true, ...efeito };
+      },
+    },
+    {
+      nome: "registrar_movimento_interno",
+      titulo: "Registrar um movimento interno (troca sem dinheiro novo)",
+      descricao: "Troca um ativo por outro sem dinheiro novo: BNB → ITUB4, cripto → CDB, saldo de pote → ação. Grava a baixa da origem (com resultado realizado pelo preço médio) e a entrada no destino com custo = valor líquido (bruto − custos), ligados pelo mesmo movimento. Não conta como aporte no Salário nem na TIR total. Use `simular: true` para ver o efeito antes; confirme com a pessoa antes de gravar.",
+      entrada: () => ({ ...entradaMov(z, { data, positivo, naoNegativo, texto }), simular: z.boolean().default(false).describe("true: mostra o efeito e não grava") }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: true, comProventos: true });
+        const p = planejaMov(FC, e, a);
+        if (a.simular) return { simulado: true, ...efeitoMov(p.efeito) };
+        if (!FC.db.temTabela("movimentos_internos")) throw new ErroMcp(MIGRATION("0003", "movimentos_internos"));
+        if (p.linhas.some((l) => l.cadastrar) && !a.destino_classe) throw new ErroMcp(`${a.destino_id} ainda não está cadastrado: informe destino_classe (${CLASSES.join(", ")}).`);
+        await grava(() => FC.db.inserir("movimentos_internos", p.registro));
+        for (const l of p.linhas) {
+          if (l.cadastrar) {
+            await grava(() => FC.db.inserir("ativos", { ticker: a.destino_id, classe: a.destino_classe, pilar: PILAR_PADRAO[a.destino_classe], lista: "carteira", quantidade: 0 }));
+          }
+          await grava(() => FC.db.inserir(l.tabela, l.linha));
+        }
+        await audita(ctx, "mcp_movimento_interno", { id: p.registro.id, origem: p.efeito.origem, destino: p.efeito.destino, liquido: p.efeito.liquido });
+        return { ok: true, movimento_id: p.registro.id, ...efeitoMov(p.efeito) };
       },
     },
     {

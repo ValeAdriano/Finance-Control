@@ -7,6 +7,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 1. `supabase/migrations/0001_dados_m1.sql` (colunas de ganhos e `privado.politicas_padrao`)
 2. backfill opcional: `supabase/backfills/0001_preco_dos_lancamentos.sql`
 3. `supabase/migrations/0002_potes.sql` (potes, potes_movimentos, renda_fixa.pote_id, seed)
+4. `supabase/migrations/0003_movimentos_internos.sql`
 
 ## Edge Functions a publicar
 
@@ -58,3 +59,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0002_potes.sql`.
 
 **Pendências**: a tela Potes ainda não está no menu (abre por `/potes` e pelos alertas); entra na navegação no M14 junto com o checklist.
+
+## M3 · Movimento interno (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/movimentos.js`: `planeja` monta a baixa da origem (ativo, título, pote, lote do agro) e a entrada no destino (ativo, título, pote) com o mesmo id; resultado realizado pelo preço médio; destino com custo = líquido; alocação antes e depois e efeito na ordem RF › Ações › Cripto.
+- Rentabilidade: fluxos internos fora do total, dentro do ativo e da classe (D-013). Salário: movimento interno não é aporte.
+- MCP: `registrar_movimento_interno` (com `simular`) e `simular_realocacao`.
+- Testes: `testes/movimentos-m3.test.js` (5), incluindo os dois critérios de aceite.
+
+**Migrations**: `0003_movimentos_internos.sql`.
+
+**Pendências**: sem tela própria no app ainda (pelo MCP). A troca de ativo entra na tela de aportes no M14, junto do checklist.

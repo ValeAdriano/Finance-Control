@@ -67,6 +67,7 @@ export function carregaNucleo(): FCTipo {
   require("../../nucleo/modelo/dividendos.js");
   require("../../nucleo/modelo/caixa-proventos.js");
   require("../../nucleo/modelo/potes.js");
+  require("../../nucleo/modelo/movimentos.js");
   require("../../nucleo/modelo/desempenho.js");
   require("../../nucleo/modelo/impostos.js");
   require("../../nucleo/modelo/alertas.js");

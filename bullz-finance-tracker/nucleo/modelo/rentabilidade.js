@@ -192,7 +192,8 @@
       // os de extrato importado já estão no saldo inicial
       if (a.tipo !== "caixa" || a.historico || a.origem || a.titulo !== titulo.nome) continue;
       lotes.push({ id: a.id, origem: a.valor < 0 ? "resgate" : "aporte", data: a.data, valor: Number(a.valor),
-        indexador: a.indexador || ind, taxa: a.taxa != null ? Number(a.taxa) : taxa, proprio: !!(a.indexador || a.taxa != null) });
+        indexador: a.indexador || ind, taxa: a.taxa != null ? Number(a.taxa) : taxa, proprio: !!(a.indexador || a.taxa != null),
+        interno: !!a.movimento_interno_id });
     }
     lotes.sort((a, b) => a.data.localeCompare(b.data));
     // valor atual informado à mão: vale na data dele; o que entrou depois
@@ -262,7 +263,8 @@
     }
     for (const a of aportes) {
       if (a.tipo !== "ativo" || a.ticker !== item.ticker || !a.data) continue;
-      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: FC.carteira.precoDoLancamento(a) });
+      ev.push({ id: a.id, origem: a.quantidade < 0 ? "venda" : "compra", data: a.data, q: Number(a.quantidade), preco: FC.carteira.precoDoLancamento(a),
+        interno: !!a.movimento_interno_id });
     }
     return ev.sort((a, b) => a.data.localeCompare(b.data) || (a.q < 0) - (b.q < 0));
   }
@@ -273,11 +275,11 @@
     for (const e of ev) {
       if (e.q > 0) {
         abertos.push({ ...e, q_rest: e.q });
-        if (e.preco != null) fluxos.push({ data: e.data, valor: -e.q * e.preco });
+        if (e.preco != null) fluxos.push({ data: e.data, valor: -e.q * e.preco, ...(e.interno ? { interno: true } : {}) });
       } else {
         // venda: consome os lotes mais antigos (PEPS)
         let falta = -e.q;
-        fluxos.push({ data: e.data, valor: falta * e.preco });
+        fluxos.push({ data: e.data, valor: falta * e.preco, ...(e.interno ? { interno: true } : {}) });
         for (const l of abertos) {
           if (falta <= 1e-12) break;
           const usa = Math.min(l.q_rest, falta);
@@ -348,11 +350,18 @@
       for (const e of cx.entradas) if (e.fluxo && medidos.has(e.ticker)) fCx.push({ data: e.data, valor: -e.valor });
       for (const s of cx.saidas) if (s.usado > 0) fCx.push({ data: s.data, valor: s.usado });
     }
+    // movimentos internos (Marco 3) não são dinheiro novo nem devolvido: ficam
+    // fora do total (entram no resultado do ativo e da classe). Dinheiro que
+    // entrou de fora num pote é aporte; o saldo dos potes fora de títulos
+    // entra no valor final.
+    const pts = dados.potes;
+    const fPotes = pts ? (base.potesMovs || []).filter((m) => !m.movimento_interno_id && !m.transferencia_id && Math.abs(Number(m.valor)) > 1e-9)
+      .map((m) => ({ data: m.data, valor: -Number(m.valor) })) : [];
     const fl = [
       ...ativos.filter((a) => a.aplicado != null).flatMap((a) => a.fluxos),
-      ...titulos.flatMap((t) => t.lotes.map((l) => ({ data: l.data, valor: -l.valor }))),
-      ...fAgro,
-    ].map((f) => ({ ...f }));
+      ...titulos.flatMap((t) => t.lotes.map((l) => ({ data: l.data, valor: -l.valor, ...(l.interno ? { interno: true } : {}) }))),
+      ...fAgro, ...fPotes,
+    ].filter((f) => !f.interno).map((f) => ({ ...f }));
     // o ajuste abate o fluxo do mesmo dia (a compra, o provento) em vez de
     // virar um resgate ou aporte à parte; sem par, entra sozinho
     for (const a of fCx) {
@@ -360,7 +369,7 @@
       if (par) par.valor += a.valor; else fl.push(a);
     }
     const final = ativos.filter((a) => a.aplicado != null).reduce((s, a) => s + a.valor_atual, 0)
-      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0) + (cx ? cx.saldo : 0);
+      + titulos.reduce((s, t) => s + t.valor_atual, 0) + (agro ? valorAgroHoje : 0) + (cx ? cx.saldo : 0) + (pts ? pts.externo : 0);
     return { ativos, titulos, classes, total: fl.length ? resumoFluxos(fl, final, hoje) : null,
       sem_custo: ativos.filter((a) => a.sem_custo).map((a) => a.ticker),
       sem_preco: ativos.filter((a) => a.sem_preco && !a.sem_custo).map((a) => a.ticker) };

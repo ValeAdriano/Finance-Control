@@ -183,7 +183,7 @@ test("MCP · renda fixa, rentabilidade, dividendos, agro, salário, histórico e
 
 test("MCP · nenhuma resposta leva user_id nem número com cauda de ponto flutuante", async () => {
   const { chama, lista } = await requisicao();
-  const args = { detalhar_ativo: { ticker: "ITSA4" } };
+  const args = { detalhar_ativo: { ticker: "ITSA4" }, ...require("./mcp-escritas.js").LEITURAS };
   for (const f of lista.filter((x) => !x.escreve)) {
     const txt = JSON.stringify(await chama(f.nome, args[f.nome] || {}));
     assert.ok(!txt.includes("user_id"), `${f.nome} devolveu user_id`);

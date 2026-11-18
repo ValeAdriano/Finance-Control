@@ -42,3 +42,9 @@ Um pote soma os títulos com o `pote_id` dele (título sem pote = livre), o caix
 
 ## D-012 · Conta sem potes (M2)
 Conta nova não ganha potes no cadastro: a tela Potes oferece "Criar os potes" e o primeiro `mover_entre_potes` cria os padrões. Sem a tabela no banco, a tela explica e o MCP responde com a migration a aplicar.
+
+## D-013 · Movimento interno na rentabilidade (M3)
+Os lançamentos gerados por um movimento interno carregam `movimento_interno_id`. Os fluxos deles ficam marcados `interno` e saem do total da carteira (aplicado, devolvido, Dietz e TIR), mas continuam no resultado de cada ativo e de cada classe. O saldo dos potes fora de títulos entra no valor final do total; dinheiro que entra num pote sem movimento interno e sem transferência conta como aporte. Os custos do movimento (taxa, spread, saque, impostos) reduzem o líquido do destino, por isso aparecem como perda no total.
+
+## D-014 · Preço padrão da origem (M3)
+Sem `origem_preco`, a baixa de um ativo usa o preço de agora. A baixa de um título realiza o rendimento proporcional ao valor que sai. Destino de ativo sem quantidade nem preço usa o preço de agora para calcular as cotas.

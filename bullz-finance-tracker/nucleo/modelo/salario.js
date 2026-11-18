@@ -80,7 +80,8 @@
 
   // quanto já entrou em um destino dentro do mês
   function aportadoNoMes(d, base, mes) {
-    const noMes = (x) => x.data && mesDe(x.data) === mes;
+    // movimento interno (Marco 3) troca um ativo por outro: não é aporte
+    const noMes = (x) => x.data && mesDe(x.data) === mes && !x.movimento_interno_id;
     const ap = base.aportes.filter(noMes);
     if (d.tipo === "ativo") return FC.soma(ap.filter((a) => a.tipo === "ativo" && a.ticker === d.alvo), (a) => a.valor);
     if (d.tipo === "renda_fixa") return FC.soma(ap.filter((a) => a.tipo === "caixa" && !a.historico && a.titulo === d.alvo), (a) => a.valor);
@@ -112,7 +113,7 @@
   // (a parte de uma compra paga com o caixa de proventos não é dinheiro novo)
   function investidoNoMes(base, mes) {
     const doCaixa = (a) => (FC.caixaProventos ? FC.caixaProventos.usado(base, a) : 0);
-    return FC.soma(base.aportes.filter((a) => a.data && mesDe(a.data) === mes && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor - doCaixa(a))
+    return FC.soma(base.aportes.filter((a) => a.data && mesDe(a.data) === mes && !a.movimento_interno_id && (a.tipo === "ativo" || (a.tipo === "caixa" && !a.historico))), (a) => a.valor - doCaixa(a))
       + aporteAgroNoMes(base, mes);
   }
 
