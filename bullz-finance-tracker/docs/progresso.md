@@ -22,7 +22,13 @@ Os 16 marcos (M0 a M15) foram feitos, um commit por marco na `main`. Verificaç�
 - D-026 e D-027: a home e o onboarding não prometem conexão por chave com a Binance nem exportação em CSV, porque elas não existem. Se quiser, são as próximas funcionalidades.
 - Telas que ficaram só no MCP: troca de ativo, reatribuir aporte a outro destino do plano, criar alerta no detalhe do ativo, campos de PJ e proporcional no formulário de ganho.
 
-## Migrations pendentes de produção (aplicar nesta ordem)
+## Migrations em produção
+
+**Aplicadas em 2026-11-18** no projeto Finance-Control (`ahbftafpbailgmjughsq`), a pedido do Adriano, uma por uma e na ordem (0001 a 0011), pelo conector do Supabase. Conferido depois: 13 tabelas novas com RLS e as 6 políticas padrão, `parametros_fiscais` com 16 linhas, agendamentos `fc-fecha-planos` e `fc-avalia-alertas` criados, 5 potes por conta (14 contas). Os avisos de segurança do Supabase que restaram são anteriores ao plano (funções `security definer` de admin e MCP, tabelas internas sem política, proteção de senha vazada no Auth).
+
+Os backfills opcionais **não** foram rodados. A lista abaixo fica como registro da ordem.
+
+### Ordem das migrations
 
 1. `supabase/migrations/0001_dados_m1.sql` (colunas de ganhos e `privado.politicas_padrao`)
 2. backfill opcional: `supabase/backfills/0001_preco_dos_lancamentos.sql`
