@@ -20,3 +20,4 @@ Object.assign(module.exports, {
 });
 module.exports.LEITURAS.detalhar_plano_mensal = null;   // precisa de plano salvo: coberto em testes/plano-mensal-m8.test.js
 Object.assign(module.exports, { criar_alerta_preco: { ticker: "BTC", condicao: "empate" }, criar_revisao: { ticker: "BTC", data: "2027-03-01", pergunta: "ainda faz sentido?" } });
+module.exports.LEITURAS.apurar_ir = { ano: 2026 };

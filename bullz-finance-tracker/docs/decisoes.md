@@ -101,3 +101,13 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Canal: o Bullz não tem e-mail nem push. A entrega é in-app: os alertas que disparam com a cotação de agora aparecem na lista de alertas do Início (e em `resumo_patrimonio.alertas`); os disparos do agendamento vão para a tabela `notificacoes`.
 - Agendamento `fc-avalia-alertas` às 21h40 UTC (18h40 de Brasília), meia hora depois do registro diário das 18h10, que grava o preço e o custo de cada ativo em `patrimonio_historico.ativos`. A função `privado.avalia_alertas_preco()` usa essa foto e dispara cada alerta no máximo uma vez a cada 20 horas.
 - Revisões aparecem a partir da data até `feita = true`.
+
+## D-023 · Módulo de IR (M10)
+- Motor novo `nucleo/modelo/ir.js`, só com parâmetros de `parametros_fiscais` por vigência. A tela de IRPF existente (`FC.impostos.irpf`) segue para bens e rendimentos; o relatório anual junta os dois.
+- Antes da migration 0004 existir no banco, valem os números que o app já usava, com `parametros_embutidos: true` na resposta. Motivo: o push vai ao ar antes das migrations e a tela de IRPF não pode zerar.
+- Day trade: venda e compra do mesmo ativo no mesmo dia; a parte casada usa o preço médio das compras do dia. O resto da venda sai pelo preço médio da posição.
+- Compensação de prejuízo por natureza: comum (ações + ETF), day trade e FII. Cripto não compensa. Ações isentas no mês: o ganho não entra, a perda entra.
+- DARF abaixo de `darf_valor_minimo` acumula para o mês seguinte. Vencimento: último dia útil do mês seguinte.
+- Exterior (Lei 14.754/2023) fica listado à parte (`exterior`), fora do DARF mensal.
+- IR rural do ano: soma das vendas do agro do ano, por presunção (padrão) ou livro-caixa (receita − compras − custos do ano).
+- O módulo `irpf` já era ligado por padrão em `preferencias.modulos` (`FC.resolveModulos`); não precisou mudar.

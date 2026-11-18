@@ -16,6 +16,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 10. `supabase/migrations/0008_planos_mensais.sql` (planos, log, colunas em aportes, agendamento `fc-fecha-planos`)
 11. backfill: `reconstruir_planos_mensais` com `["2026-10", "2026-11"]` pelo MCP (simule antes)
 12. `supabase/migrations/0009_alertas.sql` (alertas_preco, revisoes, notificacoes, agendamento `fc-avalia-alertas`)
+13. `supabase/migrations/0010_parametros_ir.sql` (seed dos parâmetros de IR da renda variável)
 
 ## Edge Functions a publicar
 
@@ -157,3 +158,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0009_alertas.sql`.
 
 **Pendências**: tela para criar alerta no detalhe do ativo (hoje pelo MCP e pelo onboarding do M14).
+
+## M10 · Módulo de IR (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/ir.js`: vendas pelo preço médio com day trade, apuração mensal com isenções, alíquotas e compensação de prejuízo por natureza, DARF (valor, código, vencimento, mínimo acumulado), IR rural do ano e relatório anual (bens, rendimentos, renda variável, rural). Tudo `estimativa: true` com `parametros_usados` (D-023).
+- Seed dos parâmetros em `0010_parametros_ir.sql`, documentado em `docs/parametros-fiscais.md`.
+- MCP: `apurar_ir` (ano, `relatorio`).
+- Testes: `testes/ir-m10.test.js` (5), com parâmetros de fixture; trocar o parâmetro muda o cálculo; vigência respeitada.
+
+**Migrations**: `0010_parametros_ir.sql`.
+
+**Pendências**: a tela de IRPF ainda mostra a apuração antiga (`FC.impostos`); trocar para `FC.ir` quando a migration estiver aplicada em produção.

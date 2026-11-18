@@ -588,6 +588,22 @@ export function ferramentas(z) {
       },
     },
     {
+      nome: "apurar_ir",
+      titulo: "IR estimado (renda variável, DARF, rural e relatório anual)",
+      descricao: "Estima o imposto das vendas de ações, ETFs, FIIs e cripto mês a mês (preço médio, isenções, day trade, compensação de prejuízo), monta os DARFs (valor, código, vencimento), consolida o IR rural do agro no ano e, com `relatorio: true`, o rascunho anual para a declaração (bens em 31/12, rendimentos isentos e tributáveis, resultado rural). Alíquotas e isenções vêm de parametros_fiscais pela vigência. É estimativa: a lista dos parâmetros usados vem junto.",
+      entrada: () => ({ ano: z.number().int().min(2000).max(2100).optional().describe("padrão: o ano atual"), relatorio: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: !!a.relatorio, comProventos: !!a.relatorio });
+        const ano = a.ano || Number(FC.datas.hoje().slice(0, 4));
+        const tem = FC.db.temTabela("parametros_fiscais");
+        if (a.relatorio) return enxuga(FC.ir.relatorio(e, ano, { temTabela: tem }), 200);
+        const rv = FC.ir.apura(e.base, { ano, temTabela: tem });
+        return enxuga({ ...rv, rural: FC.ir.rural(e.base, e.prefs, ano),
+          como_ler: "Estimativa pelo preço médio. Confira com as notas e o informe da corretora antes de pagar ou declarar." }, 200);
+      },
+    },
+    {
       nome: "auditar_dados",
       titulo: "Auditar os dados",
       descricao: "Roda as checagens de coerência da conta (custo nulo, resultado que não fecha, retorno sem sentido, aplicado divergente, cotação quebrada, premissa de aporte duplicada, proventos ambíguos, fim de ganho divergente) e devolve as inconsistências encontradas. Só leitura. Lista vazia = nada a apontar.",
