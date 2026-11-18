@@ -8,7 +8,7 @@
  *
  * Sem imports de plataforma: o `z` (zod) vem de quem chama, para o mesmo
  * arquivo rodar na Edge Function (Deno) e nos testes (Node). */
-import { CLASSES, PILARES, LISTAS, TIPOS_RF, INDEXADORES, CATEGORIAS_GANHO, TIPOS_GANHO, REGRAS_DIA, TIPOS_MOV,
+import { CLASSES, PILARES, LISTAS, TIPOS_RF, INDEXADORES, CATEGORIAS_GANHO, TIPOS_GANHO, REGRAS_DIA, TIPOS_MOV, REGIMES_PJ, CATEGORIAS_DESPESA,
   CATEGORIAS_GADO, CATEGORIAS_CUSTO, TABELAS, pecas, camposPorTabela } from "./esquemas.mjs";
 
 /** erro que vai para a IA como texto, sem pilha */
@@ -97,6 +97,7 @@ function entradaMov(z, { data, positivo, naoNegativo, texto }) {
     destino_classe: z.enum(CLASSES).optional().describe("só para ativo de destino ainda não cadastrado"),
     custos: z.object({ taxa: naoNegativo.optional(), spread: naoNegativo.optional(), saque: naoNegativo.optional(), impostos: naoNegativo.optional() }).strict().optional(),
     observacao: texto(160).optional(),
+    parcelamento_id: z.string().uuid().optional().describe("executa a parcela pendente deste parcelamento (salario_e_plano.parcelas_pendentes)"),
   };
 }
 function planejaMov(FC, e, a) {
@@ -359,12 +360,23 @@ export function ferramentas(z) {
         const e = await carrega(ctx, { comMercado: false });
         const mes = args.mes || FC.datas.hoje().slice(0, 7);
         const plano = FC.salario.planoDoMes({ plano: e.prefs.plano, ganhos: e.base.ganhos, base: e.base, mes });
+        const fs = plano.fixo_mais_sobra;
+        const custo = FC.rendaMes.custoDeVida(e.base.despesas || [], mes, FC.objetivos(e.prefs).custo_vida_mensal);
+        const { itens: itensRenda, ...restoRenda } = plano.renda;
         return {
-          mes, renda: enxuga(plano.renda), plano_configurado: enxuga(e.prefs.plano),
-          plano_do_mes: { a_investir: n2(plano.total), ja_aportado: n2(plano.aportado), falta: n2(plano.falta), sobra_da_renda: n2(plano.sobra_renda), destinos: enxuga(plano.destinos) },
+          mes, renda: enxuga({ ...restoRenda, itens: itensRenda.map((g) => ({ nome: g.nome, categoria: g.categoria, valor: g.valor, valor_no_mes: g.valor_mes,
+            ...(g.origem_valor ? { como: g.origem_valor } : {}), ...(g.imposto ? { imposto: g.imposto.valor, imposto_origem: g.imposto.origem || g.imposto.motivo } : {}) })) }),
+          plano_configurado: enxuga(e.prefs.plano),
+          plano_do_mes: { a_investir: n2(plano.total), ja_aportado: n2(plano.aportado), falta: n2(plano.falta), sobra_da_renda: n2(plano.sobra_renda), destinos: enxuga(plano.destinos),
+            ...(fs ? { fixo: n2(fs.valor_fixo), sobra_apurada: n2(fs.sobra), impostos: n2(fs.impostos), despesas: n2(fs.despesas), despesas_origem: fs.despesas_origem,
+              apurado_no_fechamento: fs.apurado, falta_para_o_fixo: n2(fs.falta_para_o_fixo) } : {}) },
+          parcelas_pendentes: plano.parcelas_pendentes.map((p) => ({ ...enxuga(p), como_executar: "registrar_movimento_interno com origem pote e parcelamento_id" })),
+          despesas_do_mes: n2(FC.rendaMes.despesasDoMes(e.base.despesas || [], mes).total), custo_de_vida: { valor: n2(custo.valor), origem: custo.origem },
           ganhos: e.base.ganhos.map((g) => ({ id: g.id, nome: g.nome, categoria: g.categoria, tipo: g.tipo, valor: n2(g.valor), inicio: g.inicio, fim: g.fim || null,
             data_fim_contrato: g.data_fim_contrato || null, data_ultimo_pagamento: g.data_ultimo_pagamento || null,
-            dia_regra: g.dia_regra || null, dia_numero: g.dia_numero ?? null, observacao: g.observacao || "" })),
+            dia_regra: g.dia_regra || null, dia_numero: g.dia_numero ?? null, observacao: g.observacao || "",
+            ...(g.categoria === "pj" ? { regime: g.regime || null, imposto_fixo_mensal: n2(g.imposto_fixo_mensal), imposto_pct: n2(g.imposto_pct), sem_13_ferias_fgts: g.sem_13_ferias_fgts ?? true } : {}),
+            ...(g.proporcional ? { proporcional: true } : {}), ...(g.pagamento_mes_seguinte ? { pagamento_mes_seguinte: true } : {}) })),
         };
       },
     },
@@ -566,7 +578,11 @@ export function ferramentas(z) {
         valor: positivo.optional(), inicio: dataOpc, fim: data.nullable().optional(), observacao: texto(160).optional(),
         dia_regra: z.enum(REGRAS_DIA).nullable().optional(), dia_numero: z.number().int().min(1).max(31).nullable().optional(),
         data_fim_contrato: data.nullable().optional().describe("recorrente: quando o contrato termina (pode ser depois do último pagamento)"),
-        data_ultimo_pagamento: data.nullable().optional().describe("recorrente: a data do último pagamento; vale no lugar de `fim` para a renda do mês") }),
+        data_ultimo_pagamento: data.nullable().optional().describe("recorrente: a data do último pagamento; vale no lugar de `fim` para a renda do mês"),
+        regime: z.enum(REGIMES_PJ).optional().describe("PJ: mei, simples ou outro"), imposto_fixo_mensal: naoNegativo.nullable().optional().describe("PJ: DAS ou imposto fixo por mês"),
+        imposto_pct: z.number().min(0).max(100).nullable().optional().describe("PJ: % sobre o faturamento"), sem_13_ferias_fgts: z.boolean().optional().describe("PJ: sem 13º, férias e FGTS (padrão: true)"),
+        proporcional: z.boolean().optional().describe("paga pelos dias trabalhados quando começa ou termina no meio do mês"),
+        pagamento_mes_seguinte: z.boolean().optional().describe("o trabalho de um mês cai na conta no mês seguinte") }),
       async executa(ctx, a) {
         const { FC } = ctx;
         exigeEscrita(ctx);
@@ -584,7 +600,8 @@ export function ferramentas(z) {
             dia_numero: a.tipo === "recorrente" ? a.dia_numero ?? null : null,
             // só manda as colunas novas quando informadas (o banco pode não ter a migration 0001)
             ...(a.tipo === "recorrente" && a.data_fim_contrato ? { data_fim_contrato: a.data_fim_contrato } : {}),
-            ...(a.tipo === "recorrente" && a.data_ultimo_pagamento ? { data_ultimo_pagamento: a.data_ultimo_pagamento } : {}) }));
+            ...(a.tipo === "recorrente" && a.data_ultimo_pagamento ? { data_ultimo_pagamento: a.data_ultimo_pagamento } : {}),
+            ...Object.fromEntries(["regime", "imposto_fixo_mensal", "imposto_pct", "sem_13_ferias_fgts", "proporcional", "pagamento_mes_seguinte"].filter((k) => a[k] != null).map((k) => [k, a[k]])) }));
         }
         await audita(ctx, id ? "mcp_edicao" : "mcp_cadastro", { tabela: "ganhos", id: salvo.id, nome: salvo.nome });
         return { ok: true, criado: !id, tabela: "ganhos", registro: enxuga(sem(salvo)) };
@@ -801,7 +818,7 @@ export function ferramentas(z) {
         if (a.simular) return { simulado: true, ...efeitoMov(p.efeito) };
         if (!FC.db.temTabela("movimentos_internos")) throw new ErroMcp(MIGRATION("0003", "movimentos_internos"));
         if (p.linhas.some((l) => l.cadastrar) && !a.destino_classe) throw new ErroMcp(`${a.destino_id} ainda não está cadastrado: informe destino_classe (${CLASSES.join(", ")}).`);
-        await grava(() => FC.db.inserir("movimentos_internos", p.registro));
+        await grava(() => FC.db.inserir("movimentos_internos", { ...p.registro, ...(a.parcelamento_id ? { parcelamento_id: a.parcelamento_id } : {}) }));
         for (const l of p.linhas) {
           if (l.cadastrar) {
             await grava(() => FC.db.inserir("ativos", { ticker: a.destino_id, classe: a.destino_classe, pilar: PILAR_PADRAO[a.destino_classe], lista: "carteira", quantidade: 0 }));
@@ -810,6 +827,50 @@ export function ferramentas(z) {
         }
         await audita(ctx, "mcp_movimento_interno", { id: p.registro.id, origem: p.efeito.origem, destino: p.efeito.destino, liquido: p.efeito.liquido });
         return { ok: true, movimento_id: p.registro.id, ...efeitoMov(p.efeito) };
+      },
+    },
+    {
+      nome: "registrar_despesa",
+      titulo: "Registrar uma despesa",
+      descricao: "Lança uma despesa do mês (moradia, alimentação, transporte…). `recorrente: true` repete todo mês a partir da data (até `fim`). O custo de vida do Bullz é a média dos últimos 3 meses de despesas. `simular: true` mostra o efeito sem gravar.",
+      entrada: () => ({ data: dataOpc, categoria: z.enum(CATEGORIAS_DESPESA), valor: positivo, descricao: texto(160).optional(),
+        recorrente: z.boolean().default(false), fim: data.optional(), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const dia = a.data || FC.datas.hoje(), mes = dia.slice(0, 7);
+        const linha = { data: dia, categoria: a.categoria, valor: a.valor, descricao: a.descricao || "", recorrente: a.recorrente, ...(a.fim ? { fim: a.fim } : {}) };
+        const antes = FC.rendaMes.despesasDoMes(e.base.despesas || [], mes).total;
+        const efeito = { mes, despesas_do_mes_antes: n2(antes), despesas_do_mes_depois: n2(antes + a.valor) };
+        if (a.simular) return { simulado: true, registro: linha, ...efeito };
+        if (!FC.db.temTabela("despesas")) throw new ErroMcp(MIGRATION("0005", "despesas"));
+        const salvo = await grava(() => FC.db.inserir("despesas", linha));
+        await audita(ctx, "mcp_lancamento", { tabela: "despesas", id: salvo.id, valor: a.valor, data: dia });
+        return { ok: true, tabela: "despesas", registro: enxuga(sem(salvo)), ...efeito };
+      },
+    },
+    {
+      nome: "registrar_parcelamento",
+      titulo: "Programar um aporte parcelado",
+      descricao: "Divide um valor em N parcelas mensais que saem de um pote para um destino (ativo, título ou pote). Cada mês aparece uma parcela pendente em salario_e_plano; executar a parcela é um movimento interno (não é aporte novo). `inicio` é o mês da 1ª parcela. `simular: true` não grava.",
+      entrada: () => ({ descricao: texto(160).optional(), valor_total: positivo, n_parcelas: z.number().int().min(1).max(120), inicio: data,
+        destino_tipo: z.enum(["ativo", "titulo_rf", "pote"]), destino_id: texto(80).min(1), pote: texto(80).min(1).describe("pote de onde sai (tipo, nome ou id)"),
+        simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const pts = e.dados.potes;
+        const pote = pts && pts.potes.find((p) => p.id === a.pote || p.tipo === a.pote || String(p.nome).toLowerCase() === a.pote.toLowerCase());
+        if (!pote) throw new ErroMcp(`Pote "${a.pote}" não encontrado.`);
+        const linha = { descricao: a.descricao || "", valor_total: a.valor_total, n_parcelas: a.n_parcelas, inicio: a.inicio, destino_tipo: a.destino_tipo, destino_id: a.destino_id, pote_id: pote.id };
+        const efeito = { parcela: n2(a.valor_total / a.n_parcelas), de: pote.nome, para: a.destino_id, primeira: a.inicio.slice(0, 7) };
+        if (a.simular) return { simulado: true, registro: linha, ...efeito };
+        if (!FC.db.temTabela("parcelamentos")) throw new ErroMcp(MIGRATION("0005", "parcelamentos"));
+        const salvo = await grava(() => FC.db.inserir("parcelamentos", linha));
+        await audita(ctx, "mcp_cadastro", { tabela: "parcelamentos", id: salvo.id });
+        return { ok: true, tabela: "parcelamentos", registro: enxuga(sem(salvo)), ...efeito };
       },
     },
     {

@@ -123,7 +123,8 @@ function opcoesAlvo(tipo: string, sel: string | null) {
 function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: number; ganhos: any[] }) {
   const t = useTema();
   const { estreito } = useMedidas();
-  const [modo, setModo] = useState(plano.modo === "valor" ? "valor" : "percentual");
+  const [modo, setModo] = useState(plano.modo === "valor" || plano.modo === "fixo_mais_sobra" ? plano.modo : "percentual");
+  const [fixo, setFixo] = useState(String(plano.valor_fixo ?? "").replace(".", ","));
   const [pct, setPct] = useState(String(plano.percentual ?? ""));
   const [val, setVal] = useState(String(plano.valor ?? "").replace(".", ","));
   const [reinv, setReinv] = useState(!!plano.reinvestir_dividendos);
@@ -136,7 +137,7 @@ function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: numb
     const destinos = dest.map((d) => ({ tipo: d.tipo, alvo: d.alvo || opcoesAlvo(d.tipo, null)[0]?.v, pct: FC.lerNum(String(d.pct)) || 0 })).filter((d) => d.alvo && d.pct > 0);
     const s = FC.soma(destinos, (d: any) => d.pct);
     if (destinos.length && Math.abs(s - 100) > 0.5) { ui.aviso(`Os destinos somam ${FC.fmt.num(s, 0)}% — ajuste para 100%.`, "erro"); return; }
-    const novo = { modo, percentual: pctN, valor: FC.lerNum(val) || 0, reinvestir_dividendos: reinv, destinos,
+    const novo = { modo, percentual: pctN, valor: FC.lerNum(val) || 0, valor_fixo: FC.lerNum(fixo) || 0, reinvestir_dividendos: reinv, destinos,
       // o destino é a fonte; o booleano é derivado (FC.salario.destinoProventos)
       destino_proventos: reinv ? (FC.estado?.prefs?.proventos?.destino === "caixa" ? "caixa" : "mesmo_ativo") : "caixa" };
     try { await FC.db.gravaPrefs({ plano: novo }); await depoisDeMudar("Plano salvo — as projeções já usam ele"); } catch (err) { ui.erro(err); }
@@ -145,10 +146,13 @@ function CartaoPlano({ plano, rendaFixa, ganhos }: { plano: any; rendaFixa: numb
     <Cartao>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: t.espaco.e3, marginBottom: t.espaco.e3 }}>
         <T v="h3">Seu plano</T>
-        <Segmentado valor={modo} aoMudar={setModo} rotuloA11y="Modo do plano" opcoes={[{ v: "percentual", rotulo: "% da renda" }, { v: "valor", rotulo: "Valor fixo" }]} />
+        <Segmentado valor={modo} aoMudar={setModo} rotuloA11y="Modo do plano" opcoes={[{ v: "percentual", rotulo: "% da renda" }, { v: "valor", rotulo: "Valor fixo" }, { v: "fixo_mais_sobra", rotulo: "Fixo + sobra" }]} />
       </View>
       <LinhaCampos>
-        {modo === "valor"
+        {modo === "fixo_mais_sobra"
+          ? <Campo rotulo="Fixo por mês (R$)" dica="Mais a sobra: renda − impostos − despesas − fixo, apurada no fechamento do mês.">
+              <Entrada valor={fixo} aoMudar={setFixo} decimal accessibilityLabel="Valor fixo por mês" /></Campo>
+          : modo === "valor"
           ? <Campo rotulo="Investir por mês (R$)"><Entrada valor={val} aoMudar={setVal} decimal accessibilityLabel="Investir por mês" /></Campo>
           : <Campo rotulo="Investir (% da renda do mês)" dica={r.total ? `= ${FC.fmt.brlTexto((r.total * pctN) / 100)} este mês` : undefined}>
               <Entrada valor={pct} aoMudar={setPct} decimal accessibilityLabel="Percentual da renda" /></Campo>}

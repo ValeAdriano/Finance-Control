@@ -31,6 +31,7 @@ module.exports = [
   "modelo/impostos.js",
   "modelo/alertas.js",
   "modelo/salario.js",
+  "modelo/renda-mes.js",
   "modelo/auditoria.js",
   "modelo/retrospectiva.js",
 ];

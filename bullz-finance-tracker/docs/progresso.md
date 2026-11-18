@@ -10,6 +10,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 4. `supabase/migrations/0003_movimentos_internos.sql`
 5. `supabase/migrations/0004_agro_lotes.sql` (parametros_fiscais com seed, agro_lotes, colunas de troca e lote)
 6. backfill opcional: `node scripts/backfill-lotes.js` (simula) e `--grava`
+7. `supabase/migrations/0005_renda_pj.sql` (ganhos PJ, despesas, parcelamentos, parâmetros de DAS e Simples)
 
 ## Edge Functions a publicar
 
@@ -88,3 +89,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0004_agro_lotes.sql`.
 
 **Pendências**: a tela do agro ainda mostra a troca como duas linhas e não tem a visão por lote; a visão por lote entra nas capturas do M11 por uma seção simples na tela do agro (a fazer lá).
+
+## M5 · Renda PJ e plano "fixo + sobra" (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/renda-mes.js`: valor do ganho no mês (proporcional e pagamento no mês seguinte), imposto do PJ, despesas do mês, custo de vida (média de 3 meses), fixo + sobra e parcelas pendentes (D-018).
+- Salário: `rendaDoMes` com proporcional e impostos; modo `fixo_mais_sobra` em meta, plano do mês e projeção; parcelas pendentes no plano. Tela de Salário com o modo novo.
+- MCP: `salario_e_plano` com fixo, sobra apurada, impostos, despesas, custo de vida e parcelas; `registrar_despesa` e `registrar_parcelamento` (com `simular`); `salvar_ganho` com regime, impostos, proporcional e pagamento no mês seguinte; `registrar_movimento_interno.parcelamento_id`.
+- Testes: `testes/renda-m5.test.js` (5), com os dois critérios de aceite.
+
+**Migrations**: `0005_renda_pj.sql`.
+
+**Pendências**: o formulário de ganho do app ainda não tem os campos de PJ e proporcional (dá pelo MCP); a tela de despesas fica para o onboarding (M14), que pede custo de vida e despesas.

@@ -62,3 +62,11 @@ A troca é uma linha `tipo = 'troca'` em `agro_movimentos`. Na leitura, `FC.lote
 
 ## D-017 · Venda do agro com destino (M4)
 Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o pote), a venda em `agro_movimentos` com `movimento_interno_id` (o saque dela sai do total da carteira), o depósito do líquido no pote e, com `reservar_ir`, uma transferência do IR estimado para o pote IR a pagar. O Funrural retido entra em `despesas` da venda. A alíquota de IR é `preferencias.agro.ir_aliquota` ou o parâmetro `ir_rural_aliquota_padrao`; o modo é `preferencias.agro.ir_modo` (`presuncao`, padrão, ou `livro_caixa`).
+
+## D-018 · Renda do mês (M5)
+- O `valor` de um ganho PJ é o faturamento bruto; o imposto sai à parte: `imposto_fixo_mensal` do ganho, senão `imposto_pct`, senão o parâmetro do regime (`das_mei_servicos` para MEI, `simples_aliquota_inicial` para Simples). Sem parâmetro, o imposto fica `null` e o ganho aparece em `impostos_sem_parametro`.
+- Proporcional só com `proporcional: true` (ganhos antigos não mudam). A fração é dias cobertos ÷ dias do mês da competência, entre `inicio` e `data_fim_contrato`.
+- `pagamento_mes_seguinte: true` desloca a competência um mês para trás: o estágio de novembro cai em dezembro.
+- Total a investir no fixo + sobra = renda − impostos − despesas (nunca negativo); `sobra` = total − fixo e pode ser negativa (aí `falta_para_o_fixo` diz quanto). Mês fechado usa as despesas reais; mês corrente ou futuro usa o maior entre o lançado e o custo de vida previsto.
+- Custo de vida = média dos 3 meses anteriores que têm despesa; sem nenhum, `objetivos.custo_vida_mensal`.
+- Parcela executada = movimento interno com `parcelamento_id`; as pendentes são as parcelas até o mês, menos as executadas, na ordem.

@@ -14,7 +14,8 @@
   };
 
   FC.PADRAO_PLANO = {
-    modo: "percentual",            // percentual da renda | valor fixo
+    modo: "percentual",            // percentual da renda | valor fixo | fixo_mais_sobra
+    valor_fixo: 0,                 // fixo_mais_sobra: a parte combinada (o resto da sobra vai junto)
     percentual: 30,
     valor: 1000,
     reinvestir_dividendos: true,   // DERIVADO de destino_proventos (ver destinoProventos)
@@ -49,10 +50,9 @@
     return mesDe(g.inicio) <= mes && (!fim || mesDe(fim) >= mes);
   }
 
-  function rendaDoMes(ganhos, mes) {
-    const itens = ganhos.filter((g) => valeNoMes(g, mes));
-    return { mes, total: FC.soma(itens, (g) => g.valor), fixa: FC.soma(itens.filter((g) => g.tipo === "recorrente"), (g) => g.valor),
-      avulsa: FC.soma(itens.filter((g) => g.tipo === "avulso"), (g) => g.valor), itens };
+  // a renda do mês (com proporcional e impostos do PJ) mora em FC.rendaMes (Marco 5)
+  function rendaDoMes(ganhos, mes, parametros) {
+    return FC.rendaMes.rendaDoMes(ganhos, mes, parametros || (FC.estado && FC.estado.base && FC.estado.base.parametros) || []);
   }
 
   function mesesAte(mes, n) {
@@ -118,10 +118,26 @@
   }
 
   // a meta de aporte de um mês: o valor base do plano (sem dividendos)
-  function metaDoMes(plano, ganhos, mes) {
+  function metaDoMes(plano, ganhos, mes, base) {
     if (!plano) return 0;
     if (plano.modo === "valor") return Number(plano.valor) || 0;
+    if (plano.modo === "fixo_mais_sobra") return fixoMaisSobraDoMes(plano, ganhos, base, mes).total;
     return (rendaDoMes(ganhos, mes).total * (Number(plano.percentual) || 0)) / 100;
+  }
+
+  // fixo + sobra de um mês: despesas reais no mês fechado; no mês corrente
+  // ou futuro, o custo de vida previsto (média de 3 meses ou a premissa)
+  function fixoMaisSobraDoMes(plano, ganhos, base, mes, custoPremissa) {
+    const R = FC.rendaMes;
+    const renda = rendaDoMes(ganhos, mes, base && base.parametros);
+    const desp = base ? R.despesasDoMes(base.despesas || [], mes) : { total: 0, itens: [] };
+    const atual = FC.datas.hoje().slice(0, 7);
+    const premissa = custoPremissa != null ? custoPremissa : FC.objetivos && FC.estado && FC.estado.prefs ? FC.objetivos(FC.estado.prefs).custo_vida_mensal : null;
+    const previsto = R.custoDeVida(base ? base.despesas || [] : [], mes, premissa);
+    const fechado = mes < atual && desp.itens.length;
+    const despesas = fechado ? desp.total : Math.max(desp.total, previsto.valor || 0);
+    return { ...R.fixoMaisSobra({ renda: renda.total, impostos: renda.impostos, despesas, valorFixo: plano.valor_fixo }),
+      despesas_origem: fechado ? "despesas do mês" : previsto.origem, apurado: !!fechado, renda_detalhe: renda };
   }
 
   // ---------------------------------------------------------------- sequência
@@ -135,7 +151,7 @@
     const primeiro = datas.length ? mesDe(datas[0]) : atualMes;
     const anterior = (m) => { const [a, n] = m.split("-").map(Number); return n === 1 ? `${a - 1}-12` : `${a}-${String(n - 1).padStart(2, "0")}`; };
     const estadoDe = (mes) => {
-      const meta = metaDoMes(plano, ganhos, mes), investido = investidoNoMes(base, mes);
+      const meta = metaDoMes(plano, ganhos, mes, base), investido = investidoNoMes(base, mes);
       const batido = meta > 0 && investido >= meta - 0.5;
       const estado = meta <= 0 ? "sem_meta" : batido ? "batido" : mes === atualMes ? "andamento" : "abaixo";
       return { mes, meta, investido, pct: meta > 0 ? Math.min(100, (investido / meta) * 100) : 0, batido, estado };
@@ -160,9 +176,12 @@
   }
 
   // ---------------------------------------------------------------- plano do mês
-  function planoDoMes({ plano, ganhos, base, mes, dividendosDoMes = 0 }) {
-    const renda = rendaDoMes(ganhos, mes);
-    const valorBase = plano.modo === "valor" ? Number(plano.valor) || 0 : (renda.total * (Number(plano.percentual) || 0)) / 100;
+  function planoDoMes({ plano, ganhos, base, mes, dividendosDoMes = 0, custoPremissa }) {
+    const renda = rendaDoMes(ganhos, mes, base && base.parametros);
+    const fs = plano.modo === "fixo_mais_sobra" ? fixoMaisSobraDoMes(plano, ganhos, base, mes, custoPremissa) : null;
+    const valorBase = fs ? fs.total : plano.modo === "valor" ? Number(plano.valor) || 0 : (renda.total * (Number(plano.percentual) || 0)) / 100;
+    // parcelas de aporte programado (Marco 5): saem de um pote, não são aporte novo
+    const parcelas = base && FC.rendaMes ? FC.rendaMes.parcelasDoMes(base.parcelamentos || [], base.movimentosInternos || [], mes) : [];
     const div = plano.reinvestir_dividendos ? dividendosDoMes : 0;
     const total = valorBase + div;
     const somaPct = FC.soma(plano.destinos, (d) => d.pct) || 0;
@@ -183,7 +202,7 @@
     const aportadoTotal = FC.soma(destinos, (d) => Math.min(d.valor, d.aportado));
     return { mes, renda, valor_base: valorBase, dividendos: div, total, destinos, soma_pct: somaPct,
       aportado: aportadoTotal, investido: investidoNoMes(base, mes), falta: FC.soma(destinos, (d) => d.falta),
-      sobra_renda: renda.total - valorBase };
+      sobra_renda: renda.total - valorBase, fixo_mais_sobra: fs, parcelas_pendentes: parcelas };
   }
 
   // proventos pagos no mês (os que o plano reinveste): pelos proventos
@@ -206,7 +225,9 @@
     const mes = FC.datas.hoje().slice(0, 7);
     const renda = rendaDoMes(ganhos, mes);
     // avulsos distorcem um mês só: a projeção usa a renda fixa
-    const aporte = plano.modo === "valor" ? Number(plano.valor) || 0 : (renda.fixa * (Number(plano.percentual) || 0)) / 100;
+    const aporte = plano.modo === "valor" ? Number(plano.valor) || 0
+      : plano.modo === "fixo_mais_sobra" ? fixoMaisSobraDoMes(plano, ganhos, base, mes).total
+      : (renda.fixa * (Number(plano.percentual) || 0)) / 100;
     const pesos = {};
     const somaPct = FC.soma(plano.destinos, (d) => d.pct) || 1;
     for (const d of plano.destinos) {
@@ -248,5 +269,5 @@
     return saida.sort((x, y) => x.data.localeCompare(y.data));
   }
 
-  FC.salario = { destinoProventos, reinvesteProventos, fimDosPagamentos, streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
+  FC.salario = { fixoMaisSobraDoMes, destinoProventos, reinvesteProventos, fimDosPagamentos, streak, investidoNoMes, aporteAgroNoMes, metaDoMes, dataRecebimento, descreveRegra, proximos, REGRAS_DIA, rendaDoMes, mesesAte, planoDoMes, dividendosDoMes, paraProjecao, aportadoNoMes, rotuloDestino, pilarDoDestino, valeNoMes };
 })();

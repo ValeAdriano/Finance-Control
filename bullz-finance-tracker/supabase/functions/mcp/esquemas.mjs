@@ -12,7 +12,9 @@ export const PILARES = ["acoes", "real_estate", "alternativos", "caixa"];
 export const LISTAS = ["carteira", "watchlist"];
 export const TIPOS_RF = ["cdi", "selic", "ipca", "prefixado"];
 export const INDEXADORES = ["cdi", "selic", "ipca", "prefixado"];
-export const CATEGORIAS_GANHO = ["salario", "extra", "bonus", "decimo_terceiro", "ferias", "aluguel", "pro_labore", "outros"];
+export const CATEGORIAS_GANHO = ["salario", "extra", "bonus", "decimo_terceiro", "ferias", "aluguel", "pro_labore", "outros", "pj"];
+export const REGIMES_PJ = ["mei", "simples", "outro"];
+export const CATEGORIAS_DESPESA = ["moradia", "alimentacao", "transporte", "saude", "educacao", "lazer", "contas", "impostos", "outros"];
 export const TIPOS_GANHO = ["recorrente", "avulso"];
 export const REGRAS_DIA = ["dia_fixo", "dia_util", "ultimo_dia_util"];
 export const TIPOS_MOV = ["compra", "venda", "nascimento", "morte", "entrada", "saida", "reclassificacao", "troca"];
@@ -20,7 +22,7 @@ export const CATEGORIAS_GADO = ["bezerro", "bezerra", "garrote", "novilha", "boi
 export const CATEGORIAS_CUSTO = ["nutricao", "sanidade", "mao_de_obra", "arrendamento", "frete", "maquinas", "impostos", "outros"];
 
 /** tabelas que `editar_registro` e `apagar_registro` alcançam (e mais nenhuma) */
-export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes"];
+export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes", "despesas", "parcelamentos"];
 
 export function dataValida(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -69,6 +71,8 @@ export function camposPorTabela(z) {
       inicio: data.describe("avulso: a data do recebimento"), fim: data.nullable(), observacao: texto(160),
       dia_regra: z.enum(REGRAS_DIA).nullable(), dia_numero: z.number().int().min(1).max(31).nullable(),
       data_fim_contrato: data.nullable(), data_ultimo_pagamento: data.nullable(),
+      regime: z.enum(REGIMES_PJ).nullable(), imposto_fixo_mensal: naoNegativo.nullable(), imposto_pct: z.number().min(0).max(100).nullable(),
+      sem_13_ferias_fgts: z.boolean().nullable(), proporcional: z.boolean(), pagamento_mes_seguinte: z.boolean(),
     },
     agro_movimentos: {
       data, tipo: z.enum(TIPOS_MOV), categoria: gado, categoria_destino: gado.nullable(),
@@ -83,6 +87,13 @@ export function camposPorTabela(z) {
     agro_custos: {
       data, categoria: z.enum(CATEGORIAS_CUSTO), descricao: texto(160), valor: positivo,
       fazenda: texto(80).nullable(), lote: texto(80).nullable(), lote_id: z.string().uuid().nullable(),
+    },
+    despesas: {
+      data, categoria: z.enum(CATEGORIAS_DESPESA), descricao: texto(160), valor: positivo, recorrente: z.boolean(), fim: data.nullable(),
+    },
+    parcelamentos: {
+      descricao: texto(160), valor_total: positivo, n_parcelas: z.number().int().min(1).max(120), inicio: data,
+      destino_tipo: z.enum(["ativo", "titulo_rf", "pote"]), destino_id: texto(80).min(1), pote_id: z.string().uuid().nullable(),
     },
     agro_lotes: {
       nome: texto(80).min(1), valor_estimado_cabeca: naoNegativo.nullable(), data_estimativa: data.nullable(),
