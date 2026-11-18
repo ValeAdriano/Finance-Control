@@ -191,3 +191,14 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 - Testes: `testes/tour-m12.test.js` (2): duração, ordem, arquivos gerados, `.vtt` igual à configuração e limite de 8 MB.
 
 **Correção**: o commit do M11 foi feito com o lint quebrando (o bundle de `.capturas-build/` entrou no lint, e o `grep` no fim do pipe escondeu o erro). Corrigido no commit seguinte (`db3bb6f`). Dali em diante a verificação roda com `pipefail`.
+
+## M13 · Home pública (2026-11-18)
+
+**Feito**
+- `content/home.pt-BR.ts` (copy) e `scripts/gera-home.mjs` (HTML estático no build): navegação, hero com mockups de celular e desktop, tour com os 7 capítulos clicáveis, colagem de telas com parallax leve, faixa "Conecta com", quatro pilares nas cores do app, sete blocos alternados (o do MCP com uma conversa de exemplo), "E não é só isso", três promessas, perguntas, CTA e rodapé (D-026).
+- `prefers-reduced-motion` para os vídeos, a faixa, o loop do celular e a colagem. Vídeos com `muted`, `playsinline`, `preload="none"` e poster.
+- `vercel.json`: `buildCommand: npm run build`, rewrite para `/app`. `public/robots.txt` e `public/og-home.png`.
+- e2e: `npm run e2e` (`testes/e2e/home.e2e.mjs`, 5 casos) contra o build servido como na Vercel, com a CSP: `/` carrega deslogado sem erro, capítulos pulam para o tempo certo, Entrar leva ao login, logado vai para o app, link antigo `/#/ativos` vai para `/ativos`. 5 de 5.
+- Lighthouse celular: 100/100/100/100 (`docs/lighthouse-home.md`).
+
+**Pendências**: conferir na Vercel, depois do deploy, que `/` é a home e as rotas do app continuam abrindo (só testado com o servidor local que imita a Vercel).

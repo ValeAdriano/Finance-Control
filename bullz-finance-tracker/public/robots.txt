@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /$
+Disallow: /inicio
+Disallow: /ativos
+Disallow: /oauth/

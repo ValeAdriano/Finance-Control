@@ -17,12 +17,13 @@
     "gera:mcp": "node scripts/gera-nucleo-mcp.js",
     "apk": "sh scripts/gera-apk.sh",
     "typecheck": "tsc --noEmit",
-    "build": "expo export -p web",
+    "build": "expo export -p web && node scripts/gera-home.mjs dist",
     "verifica": "npm run lint && npm run typecheck && npm test && npm run build",
     "teste:banco": "MIGRATIONS_PG=\"${MIGRATIONS_PG:--h 127.0.0.1 -p 54399 -U postgres}\" node testes/migrations-sql.test.js",
     "seed:demo": "node scripts/seed-demo.js",
     "capturas": "node scripts/capturas.mjs",
-    "video:render": "node scripts/video-tour.mjs"
+    "video:render": "node scripts/video-tour.mjs",
+    "e2e": "node testes/e2e/home.e2e.mjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",

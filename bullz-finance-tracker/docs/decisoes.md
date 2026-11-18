@@ -123,3 +123,14 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Capítulos, tempos e legendas: só em `content/tour.ts` (lido pelo vídeo, pelo `.vtt` e pela home).
 - Os arquivos ficam em `public/video/` (1,7 MB no total, longe do limite de 8 MB), servidos pela Vercel; o Storage do Supabase não foi necessário.
 - Sem áudio.
+
+## D-026 · Home pública (M13)
+- O app é Expo/RN Web, sem Server Components. A home é **HTML estático gerado no build** (`scripts/gera-home.mjs`, a partir de `content/home.pt-BR.ts` e `content/tour.ts`): o `npm run build` faz o `expo export` e depois move o app para `dist/app.html` e grava a home em `dist/index.html`. No `vercel.json`, `buildCommand` virou `npm run build` e o rewrite de tudo foi de `/` para `/app`. A Vercel serve o arquivo primeiro: `/` é a home; `/inicio` e as outras rotas caem no app.
+- Sem script inline (a CSP proíbe): `/home-sessao.js` (síncrono, ~300 bytes) manda quem já tem sessão (`localStorage["fc-sessao"]`) para `/inicio` e os links antigos `/#/rota` para `/rota`; `/home.js` cuida dos capítulos, dos vídeos e da colagem.
+- Sem fotografia de paisagem: não há banco de imagens licenciado no projeto e não quis puxar foto de terceiros. O "céu noturno sobre o campo" é um degradê em CSS com o brilho do horizonte na cor do agro. O "vídeo de fundo" do hero é o próprio tour, no mockup de desktop, mudo e em loop, tocando só quando aparece; no celular, a captura da Início rola devagar.
+- "Conecta com": só o que o Bullz usa hoje (B3, Binance, C6, PicPay por extrato; Banco Central, CVM, Fundamentus, CoinGecko como fontes). Rico e brapi, citados no plano, não são usados; ficaram fora. Só nomes, sem logos.
+- A copy evita prometer o que não existe: não há chave de API da Binance (os extratos entram por arquivo) e o backup é em JSON (não há CSV). As promessas foram escritas assim.
+- `robots.txt` libera só a home.
+- Imagem Open Graph (`public/og-home.png`, 1200×630) gerada uma vez com o ffmpeg a partir da captura da Início; fica no git porque o build da Vercel não tem ffmpeg.
+- O gerador lê os `.ts` transpilando com o TypeScript do projeto (`scripts/le-ts.mjs`), para não depender da versão do Node da Vercel.
+- **Conferir depois do deploy**: que `/` mostra a home e `/inicio` abre o app. O comportamento foi testado com um servidor local que imita a Vercel, não na Vercel.
