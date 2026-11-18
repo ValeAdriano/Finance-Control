@@ -15,7 +15,10 @@
     "gera:icone-app": "node scripts/gera-icones-app.js",
     "gera:palco": "node scripts/gera-palco.js",
     "gera:mcp": "node scripts/gera-nucleo-mcp.js",
-    "apk": "sh scripts/gera-apk.sh"
+    "apk": "sh scripts/gera-apk.sh",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export -p web",
+    "verifica": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
