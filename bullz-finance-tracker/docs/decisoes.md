@@ -117,3 +117,9 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - No modo demo a conta já tem 2FA, tour visto e telemetria respondida, para nada cobrir as telas.
 - Capturas: build web com `EXPO_PUBLIC_FIXTURE=demo` em `.capturas-build/` (fora do git), servido localmente, fotografado pelo Playwright do ambiente (1440 e 390 px, claro e escuro) e convertido para WebP pelo ffmpeg. O script falha com qualquer erro de console. O Playwright não entrou nas dependências do app: quem roda as capturas instala à parte (`docs/conteudo.md`).
 - As telas que faltavam para mostrar as funcionalidades novas entraram como seções: "Mês a mês" em Projeções, "Por lote" no Agro, "A ordem certa" no Salário e a tela `/alertas`.
+
+## D-025 · Vídeo do tour (M12)
+- O plano pedia para reaproveitar a ferramenta atual. A que existe (`nucleo/promo/promo.js` no palco) desenha um celular à mão no canvas e grava em tempo real pelo MediaRecorder do navegador. O item 4 do M12 proíbe mockup desenhado à mão, e a gravação em tempo real não é reprodutível. Por isso o tour é gravado das telas reais com a conta demo: o Playwright rola cada seção e salva quadro a quadro (20 fps, 1280×720, tema escuro), com o título do capítulo e a legenda escritos na própria página. O ffmpeg monta `tour.mp4` (H.264), `tour.webm` (VP9) e `tour-poster.webp`; o `tour.vtt` sai do mesmo texto. Remotion não foi necessário.
+- Capítulos, tempos e legendas: só em `content/tour.ts` (lido pelo vídeo, pelo `.vtt` e pela home).
+- Os arquivos ficam em `public/video/` (1,7 MB no total, longe do limite de 8 MB), servidos pela Vercel; o Storage do Supabase não foi necessário.
+- Sem áudio.

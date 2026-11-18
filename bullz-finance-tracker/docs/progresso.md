@@ -182,3 +182,12 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 - Testes: `testes/demo-m11.test.js` (3): seed duas vezes sem duplicar, nenhum valor da conta real, a demo exercita tudo e passa em `auditar_dados`.
 
 **Pendências**: o seed não foi rodado contra um Supabase de dev (não há um neste ambiente); a simulação e o teste com o banco em memória cobrem a idempotência.
+
+## M12 · Vídeo do tour (2026-11-18)
+
+**Feito**
+- `content/tour.ts`: 7 capítulos (0, 5, 11, 17, 23, 29 e 35 s; 41 s no total) com título, legenda, tela e seção.
+- `npm run video:render` (`scripts/video-tour.mjs`): build com a conta demo, gravação quadro a quadro das telas reais, legenda embutida, `tour.mp4`, `tour.webm`, `tour-poster.webp` e `tour.vtt` em `public/video/` (1,68 MB) (D-025).
+- Testes: `testes/tour-m12.test.js` (2): duração, ordem, arquivos gerados, `.vtt` igual à configuração e limite de 8 MB.
+
+**Correção**: o commit do M11 foi feito com o lint quebrando (o bundle de `.capturas-build/` entrou no lint, e o `grep` no fim do pipe escondeu o erro). Corrigido no commit seguinte (`db3bb6f`). Dali em diante a verificação roda com `pipefail`.

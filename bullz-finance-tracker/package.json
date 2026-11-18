@@ -21,7 +21,8 @@
     "verifica": "npm run lint && npm run typecheck && npm test && npm run build",
     "teste:banco": "MIGRATIONS_PG=\"${MIGRATIONS_PG:--h 127.0.0.1 -p 54399 -U postgres}\" node testes/migrations-sql.test.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "capturas": "node scripts/capturas.mjs"
+    "capturas": "node scripts/capturas.mjs",
+    "video:render": "node scripts/video-tour.mjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
