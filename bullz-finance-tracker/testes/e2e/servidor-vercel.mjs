@@ -8,7 +8,7 @@ import path from "node:path";
 const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml",
   ".ico": "image/x-icon", ".json": "application/json", ".webmanifest": "application/manifest+json", ".mp4": "video/mp4", ".webm": "video/webm", ".vtt": "text/vtt", ".ttf": "font/ttf" };
 
-export async function sobe(dist, vercelJson) {
+export async function sobe(dist, vercelJson, { rewritePara } = {}) {
   const cfg = JSON.parse(fs.readFileSync(vercelJson, "utf8"));
   const acha = (url) => {
     const p = path.join(dist, decodeURIComponent(url));
@@ -29,7 +29,7 @@ export async function sobe(dist, vercelJson) {
   const srv = http.createServer((req, res) => {
     const url = (req.url || "/").split("?")[0];
     let arq = acha(url);
-    if (!arq) for (const r of cfg.rewrites || []) { if (new RegExp("^" + r.source.replace(/\(\.\*\)/g, ".*") + "$").test(url)) { arq = acha(r.destination); break; } }
+    if (!arq) for (const r of cfg.rewrites || []) { if (new RegExp("^" + r.source.replace(/\(\.\*\)/g, ".*") + "$").test(url)) { arq = acha(rewritePara || r.destination); break; } }
     if (!arq) { res.writeHead(404); res.end("404"); return; }
     const tam = fs.statSync(arq).size, tipo = TIPOS[path.extname(arq)] || "application/octet-stream";
     const h = { "Content-Type": tipo, ...cabecalhos(url) };

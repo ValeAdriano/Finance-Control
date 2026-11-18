@@ -189,6 +189,10 @@
     },
 
     opcional, tabelaAusente,
+    // progresso do onboarding (Marco 14): uma linha por conta
+    async salvaOnboarding(linha) {
+      return checa(await sb.from("onboarding_estado").upsert({ user_id: FC.auth.usuario.id, ...linha }, { onConflict: "user_id" }).select().single());
+    },
     // a tabela existe no banco? (false só depois de uma leitura que a achou ausente)
     temTabela(tabela) { return !ausentes.has(tabela); },
 

@@ -17,6 +17,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 11. backfill: `reconstruir_planos_mensais` com `["2026-10", "2026-11"]` pelo MCP (simule antes)
 12. `supabase/migrations/0009_alertas.sql` (alertas_preco, revisoes, notificacoes, agendamento `fc-avalia-alertas`)
 13. `supabase/migrations/0010_parametros_ir.sql` (seed dos parâmetros de IR da renda variável)
+14. `supabase/migrations/0011_onboarding_estado.sql`
 
 ## Edge Functions a publicar
 
@@ -202,3 +203,14 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 - Lighthouse celular: 100/100/100/100 (`docs/lighthouse-home.md`).
 
 **Pendências**: conferir na Vercel, depois do deploy, que `/` é a home e as rotas do app continuam abrindo (só testado com o servidor local que imita a Vercel).
+
+## M14 · Onboarding atualizado (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/configuracao.js`: os 9 passos, estado (passo atual, feitos, pulados, dispensados), conta nova × existente, checklist que olha o dado, reserva sugerida maior com PJ, persistência em `onboarding_estado` com reserva local (D-027).
+- `/configurar` (`src/telas/configurar.tsx`): boas-vindas com o vídeo do tour, perfil, renda (salário, PJ com regime e DAS, outra renda, datas), custo de vida e reserva (cria os potes), como dividir (hierarquia com prévia ou metas fixas), conectar contas (guia dos extratos), agro (tem pecuária, peso, custos no preço), primeiro plano do mês (rascunho com a origem dos números, ativar ou deixar), alertas de empate. Cada passo grava e pode ser pulado; "Sair e continuar depois" retoma no mesmo passo.
+- Início: cartão "Complete a configuração" com os passos pulados (conta nova) ou as novidades (conta existente), com "Configurar" e "Dispensar".
+- Testes: `testes/configuracao-m14.test.js` (2) e `testes/e2e/onboarding.e2e.mjs` (3 de 3): conta nova termina com potes, plano em rascunho e modo de alocação salvos; sair no passo 4 e voltar retoma no 4; conta existente vê só o checklist. O e2e pegou um bug (o modo começava em metas fixas), corrigido.
+- `testes/migrations-sql.test.js` cobre as 13 tabelas novas (103 casos).
+
+**Migrations**: `0011_onboarding_estado.sql`.

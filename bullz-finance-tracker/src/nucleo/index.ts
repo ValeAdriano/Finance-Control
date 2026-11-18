@@ -79,6 +79,7 @@ export function carregaNucleo(): FCTipo {
   require("../../nucleo/modelo/hierarquia.js");
   require("../../nucleo/modelo/projecao-mensal.js");
   require("../../nucleo/modelo/plano-mensal.js");
+  require("../../nucleo/modelo/configuracao.js");
   require("../../nucleo/modelo/auditoria.js");
   require("../../nucleo/modelo/retrospectiva.js");
   // só pela lógica pura: FC.promo (montaDados, CENAS, TOTAL) e FC.admin

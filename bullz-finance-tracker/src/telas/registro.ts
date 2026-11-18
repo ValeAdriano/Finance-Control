@@ -9,6 +9,8 @@ import "../estado/uso";
 import { Platform } from "react-native";
 import { aoEntrar } from "../estado/app";
 import FC from "../nucleo";
+import { router } from "expo-router";
+import { estadoConfiguracao } from "./configurar";
 
 // quem chegou para autorizar um assistente de IA (/oauth/consent) veio fazer
 // só isso: nada de questionário, apresentação ou pedido de coleta por cima
@@ -17,6 +19,13 @@ const veioAutorizar = () => Platform.OS === "web" && typeof window !== "undefine
 aoEntrar.push(async () => {
   FC.uso.inicia();
   if (veioAutorizar()) return;
+  // configuração do primeiro acesso (Marco 14): conta nova vai para ela e o
+  // resto (questionário, tour) espera; conta que já existia vê só o checklist
+  try {
+    const est = await estadoConfiguracao(true);
+    await FC.configuracao.salva(est);
+    if (FC.configuracao.precisaOnboarding(est)) { router.replace("/configurar" as any); return; }
+  } catch (e) { console.error(e); }
   // o questionário de perfil é o onboarding: conta nova vai direto para ele.
   // Sem as tabelas no banco, cai na apresentação por passos.
   let abriuPerfil = false;

@@ -392,6 +392,8 @@ export function instalaFixture() {
     inserirVarios: async (t: string, linhas: any[]) => linhas.map((linha) => { const l = { id: uuid(), ...linha }; tabela(t).push(l); return l; }),
     atualizar: async (t: string, id: any, campos: any) => { const l = tabela(t).find((x: any) => x.id === id); Object.assign(l, campos); return l; },
     apagar: async (t: string, id: any) => { db[t] = tabela(t).filter((x: any) => x.id !== id); },
+    opcional: async (t: string) => JSON.parse(JSON.stringify(tabela(t))),
+    salvaOnboarding: async (linha: any) => { db.onboarding_estado = [{ user_id: usuario.id, ...linha }]; return db.onboarding_estado[0]; },
     gravaPrefs: async (campos: any) => { db.preferencias = { ...(db.preferencias || {}), ...campos }; return db.preferencias; },
     gravaRegistro: async (linha: any) => { db.patrimonio_historico = db.patrimonio_historico.filter((h: any) => h.data !== linha.data); db.patrimonio_historico.push(linha); return linha; },
     log: async (evento: string, detalhe = {}) => { logs.unshift({ id: uuid(), quando: new Date().toISOString(), origem: "app", evento, detalhe }); },

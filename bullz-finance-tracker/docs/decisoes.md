@@ -134,3 +134,11 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Imagem Open Graph (`public/og-home.png`, 1200×630) gerada uma vez com o ffmpeg a partir da captura da Início; fica no git porque o build da Vercel não tem ffmpeg.
 - O gerador lê os `.ts` transpilando com o TypeScript do projeto (`scripts/le-ts.mjs`), para não depender da versão do Node da Vercel.
 - **Conferir depois do deploy**: que `/` mostra a home e `/inicio` abre o app. O comportamento foi testado com um servidor local que imita a Vercel, não na Vercel.
+
+## D-027 · Onboarding (M14)
+- O onboarding de configuração (`/configurar`, 9 passos) vale para **conta nova** (sem ativos, títulos, lançamentos nem ganhos na primeira entrada). Ele passa na frente do questionário de perfil e do tour antigos, que continuam disponíveis em Ajustes e no Perfil. O passo "Perfil" grava um perfil simples (`premissas.perfil_simples`: conservador, moderado ou arrojado, e o horizonte); o questionário completo segue opcional.
+- Conta que já existia: `existente: true` na primeira entrada depois do deploy; não vê o onboarding, só o checklist com as novidades (potes, hierarquia, plano mensal, agro por lote, alertas).
+- Um item do checklist sai quando o **dado** existe (ex.: potes criados) ou quando a pessoa dispensa; não basta ter passado pelo passo.
+- Progresso em `onboarding_estado` (migration 0011) e, como reserva, no armazenamento local, para retomar mesmo sem a tabela no banco.
+- "Conectar contas": não existe conexão por chave com a Binance (o plano pedia um guia da chave read-only). O passo explica como importar os extratos da B3, da Binance, do C6 e do PicPay.
+- Passo "Alertas": sugere alertas de empate para as posições abaixo do preço médio e cria os marcados.

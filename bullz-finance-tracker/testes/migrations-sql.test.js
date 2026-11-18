@@ -53,7 +53,8 @@ create function net.http_post(url text, headers jsonb, body jsonb, timeout_milli
 insert into auth.users (id) values ('${A}'), ('${B}');
 `;
 
-const NOVAS = ["potes", "potes_movimentos", "movimentos_internos", "agro_lotes", "despesas", "parcelamentos", "eventos_futuros", "planos_mensais", "planos_mensais_log"];
+const NOVAS = ["potes", "potes_movimentos", "movimentos_internos", "agro_lotes", "despesas", "parcelamentos", "eventos_futuros", "planos_mensais", "planos_mensais_log",
+  "alertas_preco", "revisoes", "notificacoes", "onboarding_estado"];
 let falhas = 0, casos = 0;
 const confere = (ok, txt) => { casos++; if (!ok) { falhas++; console.error("FALHOU:", txt); } };
 

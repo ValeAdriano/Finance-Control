@@ -23,7 +23,7 @@
     "seed:demo": "node scripts/seed-demo.js",
     "capturas": "node scripts/capturas.mjs",
     "video:render": "node scripts/video-tour.mjs",
-    "e2e": "node testes/e2e/home.e2e.mjs"
+    "e2e": "node testes/e2e/home.e2e.mjs && node testes/e2e/onboarding.e2e.mjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",

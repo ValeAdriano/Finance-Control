@@ -37,6 +37,7 @@ module.exports = [
   "modelo/hierarquia.js",
   "modelo/projecao-mensal.js",
   "modelo/plano-mensal.js",
+  "modelo/configuracao.js",
   "modelo/auditoria.js",
   "modelo/retrospectiva.js",
 ];

@@ -18,6 +18,7 @@ import { ui } from "../ui/folha";
 import { AnelMeta, LinhaTendencia, Rosca, Velocimetro, corFaixa } from "../ui/medidores";
 import { EstadoMercado } from "./comum/alertas";
 import { CartaoIncentivo2fa } from "./comum/autenticador";
+import { ChecklistConfiguracao } from "./configurar";
 import { abreAtivo } from "./comum/ativo";
 import {
   AgroResumo, Alocacao, CRESC_PADRAO, Crescimento, DetalhesTecnicos, Frase, Macro, Melhores, Proventos, Proximos30, RendaPassiva,
@@ -549,6 +550,7 @@ export default function Inicio() {
       <EstadoMercado />
       <T style={{ fontSize: 15, color: t.cores.ink2, marginBottom: 8 }}>{saudacao()}{nome ? ", " + nome : ""}.</T>
       {/* fora dos módulos: segurança vem antes da ordem escolhida no layout */}
+      <ChecklistConfiguracao />
       <CartaoIncentivo2fa />
       {ids.map((id) => <Isolado key={id} id={id}>{blocos[id] ? blocos[id]() : null}</Isolado>)}
       {d.atualizado ? (
