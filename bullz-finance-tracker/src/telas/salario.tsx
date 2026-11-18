@@ -14,6 +14,7 @@ import { ui, type ApiFolha } from "../ui/folha";
 import { CartaoSequencia, sequencia } from "./comum/sequencia";
 import { depoisDeMudar } from "./comum/dados";
 import FC from "../nucleo";
+import { PlanosMensais } from "./comum/planos-mensais";
 
 let mesVisto: string | null = null;
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -320,6 +321,8 @@ export default function Salario() {
           </Cartao>
         )}
       </Secao>
+
+      <PlanosMensais e={FC.estado} />
 
       <Secao><CartaoPlano key={JSON.stringify(plano)} plano={plano} rendaFixa={FC.salario.rendaDoMes(ganhos, hoje).fixa} ganhos={ganhos} /></Secao>
 

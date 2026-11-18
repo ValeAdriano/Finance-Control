@@ -130,6 +130,36 @@ function entradaEvento(z, { data, naoNegativo, texto }) {
 const eventoDe = (a) => ({ data: a.data, tipo: a.tipo, descricao: a.descricao || "",
   parametros: Object.fromEntries(["valor", "destino", "cabecas", "aporte_mensal"].filter((k) => a[k] != null).map((k) => [k, a[k]])) });
 
+// ---------------------------------------------------------------- plano mensal
+const MES = (z) => z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "mês no formato AAAA-MM");
+const planoDoMesSalvo = (e, mes) => (e.base.planosMensais || []).find((p) => p.mes === mes) || null;
+function resumoPlanoMensal(FC, e, p, detalhe = false) {
+  const i = FC.planoMensal.indicadores(p, e);
+  const r = { id: p.id || null, mes: p.mes, status: p.status, origem: p.origem, meta: n2(i.meta), aportado: n2(i.aportado), pct_executado: n2(i.pct_executado),
+    renda_prevista: n2(i.renda_prevista), renda_real: n2(i.renda_real), sobra_prevista: n2(i.sobra_prevista), sobra_real: n2(i.sobra_real),
+    fora_do_plano: n2(i.fora_do_plano), hierarquia_respeitada: i.hierarquia_respeitada,
+    selos: [i.cem_por_cento ? "100% executado" : null, i.fora_do_plano > 0.5 ? `R$ ${n2(i.fora_do_plano)} fora do plano` : null,
+      i.hierarquia_respeitada === true ? "hierarquia respeitada" : i.hierarquia_respeitada === false ? "hierarquia violada" : null].filter(Boolean) };
+  if (!detalhe) return r;
+  return { ...r, modo: p.modo, valor_fixo: n2(p.valor_fixo), impostos_previstos: n2(p.impostos_previstos), despesas_previstas: n2(p.despesas_previstas),
+    renda_detalhe: enxuga(p.renda_prevista || []),
+    destinos: (p.destinos || []).map((d, idx) => { const x = i.execucao.find((y) => y.idx === idx) || {}; return { idx, tipo: d.tipo, alvo: d.alvo, pct: n2(d.pct), previsto: n2(d.valor),
+      aportado: n2(x.aportado), desvio: n2(x.desvio), ...(d.sugestao ? { sugestao: d.sugestao } : {}), aportes: enxuga(x.aportes || []) }; }),
+    fora_do_plano_itens: enxuga(i.fora), contexto: enxuga(p.contexto || {}), regras_snapshot: enxuga(p.regras_snapshot || null, 100),
+    log: enxuga((e.base.planosLog || []).filter((l) => l.plano_id === p.id)) };
+}
+const entradaDestino = (z, texto) => z.object({ tipo: z.enum(["categoria", "ativo", "titulo_rf", "pote", "parcela"]), alvo: texto(80).min(1),
+  pct: z.number().min(0).max(100).nullable().optional(), valor: z.number().min(0) }).strict();
+async function salvaPlano(ctx, linha, id) {
+  const { FC } = ctx;
+  if (!FC.db.temTabela("planos_mensais")) throw new ErroMcp(MIGRATION("0008", "planos_mensais"));
+  const { user_id, criado_em, idx, ...l } = linha;
+  return id ? grava(() => FC.db.atualizar("planos_mensais", id, l)) : grava(() => FC.db.inserir("planos_mensais", l));
+}
+async function logPlano(ctx, plano_id, acao, motivo, detalhe = {}) {
+  try { await ctx.FC.db.inserir("planos_mensais_log", { plano_id, acao, motivo: motivo || "", quem: ctx.acesso.nome || "assistente", detalhe }); } catch (x) { console.error(x); }
+}
+
 // cria os potes padrão de quem ainda não tem nenhum (conta nova)
 async function garantePotes(ctx, e) {
   const { FC } = ctx;
@@ -388,6 +418,7 @@ export function ferramentas(z) {
         const mes = args.mes || FC.datas.hoje().slice(0, 7);
         const plano = FC.salario.planoDoMes({ plano: e.prefs.plano, ganhos: e.base.ganhos, base: e.base, mes });
         const fs = plano.fixo_mais_sobra;
+        const salvoMes = planoDoMesSalvo(e, mes);
         const custo = FC.rendaMes.custoDeVida(e.base.despesas || [], mes, FC.objetivos(e.prefs).custo_vida_mensal);
         const { itens: itensRenda, ...restoRenda } = plano.renda;
         return {
@@ -399,6 +430,8 @@ export function ferramentas(z) {
               apurado_no_fechamento: fs.apurado, falta_para_o_fixo: n2(fs.falta_para_o_fixo) } : {}) },
           parcelas_pendentes: plano.parcelas_pendentes.map((p) => ({ ...enxuga(p), como_executar: "registrar_movimento_interno com origem pote e parcelamento_id" })),
           despesas_do_mes: n2(FC.rendaMes.despesasDoMes(e.base.despesas || [], mes).total), custo_de_vida: { valor: n2(custo.valor), origem: custo.origem },
+          // o plano salvo do mês (Marco 8) vale mais que o recalculado com a configuração de hoje
+          plano_salvo: !!salvoMes, ...(salvoMes ? { plano_mensal: resumoPlanoMensal(FC, e, salvoMes, true) } : {}),
           ganhos: e.base.ganhos.map((g) => ({ id: g.id, nome: g.nome, categoria: g.categoria, tipo: g.tipo, valor: n2(g.valor), inicio: g.inicio, fim: g.fim || null,
             data_fim_contrato: g.data_fim_contrato || null, data_ultimo_pagamento: g.data_ultimo_pagamento || null,
             dia_regra: g.dia_regra || null, dia_numero: g.dia_numero ?? null, observacao: g.observacao || "",
@@ -502,6 +535,31 @@ export function ferramentas(z) {
         const e = await carrega(ctx, { comMercado: false });
         const ev = FC.projecaoMensal.eventosDoPeriodo(e, [], true).filter((x) => entre(String(x.data), f.de, f.ate)).sort((a, b) => String(a.data).localeCompare(String(b.data)));
         return { total: ev.length, eventos: ev.map((x) => ({ id: x.id || null, data: x.data, tipo: x.tipo, descricao: x.descricao || null, origem: x.origem, parametros: enxuga(x.parametros || {}) })) };
+      },
+    },
+    {
+      nome: "listar_planos_mensais",
+      titulo: "Planos mensais (histórico)",
+      descricao: "Resumo de cada mês com plano salvo: status (rascunho, ativo, fechado), meta, aportado, % executado, fora do plano, sobra prevista e real e se a hierarquia foi respeitada. Do mais recente para o mais antigo.",
+      entrada: () => ({ de: MES(z).optional(), ate: MES(z).optional() }),
+      async executa(ctx, f) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: false });
+        const ps = (e.base.planosMensais || []).filter((p) => (!f.de || p.mes >= f.de) && (!f.ate || p.mes <= f.ate)).sort((a, b) => b.mes.localeCompare(a.mes));
+        return { total: ps.length, planos: ps.map((p) => resumoPlanoMensal(FC, e, p)), ...(FC.db.temTabela("planos_mensais") ? {} : { aviso: MIGRATION("0008", "planos_mensais") }) };
+      },
+    },
+    {
+      nome: "detalhar_plano_mensal",
+      titulo: "Detalhe do plano de um mês",
+      descricao: "O plano de um mês: de onde vem cada número da renda, os destinos com previsto, aportado e desvio, os aportes atribuídos a cada destino, o que ficou fora do plano, o contexto do mês anterior e o log de reaberturas.",
+      entrada: () => ({ mes: MES(z) }),
+      async executa(ctx, { mes }) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: false });
+        const p = planoDoMesSalvo(e, mes);
+        if (!p) throw new ErroMcp(`Não há plano salvo para ${mes}. Gere um com gerar_plano_mensal.`);
+        return resumoPlanoMensal(FC, e, p, true);
       },
     },
     {
@@ -983,6 +1041,143 @@ export function ferramentas(z) {
         const salvo = await grava(() => FC.db.inserir("eventos_futuros", ev));
         await audita(ctx, "mcp_cadastro", { tabela: "eventos_futuros", id: salvo.id, tipo: a.tipo });
         return { ok: true, tabela: "eventos_futuros", registro: enxuga(sem(salvo)), ...efeito };
+      },
+    },
+    {
+      nome: "gerar_plano_mensal",
+      titulo: "Gerar o plano de um mês",
+      descricao: "Cria o rascunho do plano de um mês a partir dos ganhos previstos (com proporcional e eventos), impostos, despesas (média de 3 meses), o modo do plano global, a divisão sugerida pela hierarquia e pela reserva, as parcelas pendentes e os ativos de maior nota (sem cotação quebrada). Mostra de onde vem cada número e o desvio do mês anterior. Se já existe plano para o mês, devolve o existente. `simular: true` não grava.",
+      entrada: () => ({ mes: MES(z), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: true });
+        const ja = planoDoMesSalvo(e, a.mes);
+        if (ja) return { existente: true, ...resumoPlanoMensal(FC, e, ja, true) };
+        const r = FC.planoMensal.gera(e, a.mes);
+        if (a.simular) return { simulado: true, ...resumoPlanoMensal(FC, e, r, true) };
+        const salvo = await salvaPlano(ctx, r);
+        await audita(ctx, "mcp_plano_mensal", { mes: a.mes, acao: "gerar", id: salvo.id });
+        return { ok: true, ...resumoPlanoMensal(FC, e, { ...r, ...salvo }, true) };
+      },
+    },
+    {
+      nome: "editar_plano_mensal",
+      titulo: "Editar o rascunho do plano do mês",
+      descricao: "Ajusta um rascunho: destinos (lista completa, com tipo categoria|ativo|titulo_rf|pote|parcela, alvo, pct e valor), meta_total, valor_fixo e observação. Só rascunho: plano ativo ou fechado só muda depois de reabrir. A divisão é validada pela hierarquia (aviso, a trava fica na ativação). `simular: true` não grava.",
+      entrada: () => ({ mes: MES(z), destinos: z.array(entradaDestino(z, texto)).max(30).optional(), meta_total: naoNegativo.optional(),
+        valor_fixo: naoNegativo.optional(), observacao: texto(300).optional(), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const p = planoDoMesSalvo(e, a.mes);
+        if (!p) throw new ErroMcp(`Não há rascunho para ${a.mes}: gere com gerar_plano_mensal.`);
+        if (p.status !== "rascunho") throw new ErroMcp(`O plano de ${a.mes} está ${p.status}: só o rascunho é editável (reabra se precisar).`);
+        const mud = { ...(a.destinos ? { destinos: a.destinos.map((d) => ({ ...d, pct: d.pct ?? null })) } : {}), ...(a.meta_total != null ? { meta_total: a.meta_total } : {}),
+          ...(a.valor_fixo != null ? { valor_fixo: a.valor_fixo } : {}), ...(a.observacao != null ? { observacao: a.observacao } : {}), origem: "manual" };
+        const novo = { ...p, ...mud };
+        const v = FC.planoMensal.validaDivisao(novo, e);
+        const aviso = v.ok ? null : { violacoes: v.violacoes.map((x) => x.texto), divisao_valida_mais_proxima: v.mais_proxima };
+        if (a.simular) return { simulado: true, ...resumoPlanoMensal(FC, e, novo, true), ...(aviso ? { alerta_hierarquia: aviso } : {}) };
+        await salvaPlano(ctx, mud, p.id);
+        await audita(ctx, "mcp_plano_mensal", { mes: a.mes, acao: "editar", campos: Object.keys(mud) });
+        return { ok: true, ...resumoPlanoMensal(FC, e, novo, true), ...(aviso ? { alerta_hierarquia: aviso } : {}) };
+      },
+    },
+    {
+      nome: "ativar_plano_mensal",
+      titulo: "Ativar o plano do mês",
+      descricao: "Congela o rascunho: previsto, destinos e o retrato das regras (faixas, reserva, carteira). Depois disso mudar as preferências não altera o mês. Se a divisão viola a hierarquia, só ativa com `aceitar_violacao: true` (fica registrado). Um mês ativo por vez: se outro estiver ativo, ele é fechado antes, com aviso. `simular: true` não grava.",
+      entrada: () => ({ mes: MES(z), aceitar_violacao: z.boolean().default(false), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: true });
+        const p = planoDoMesSalvo(e, a.mes);
+        if (!p) throw new ErroMcp(`Não há rascunho para ${a.mes}.`);
+        if (p.status !== "rascunho") throw new ErroMcp(`O plano de ${a.mes} já está ${p.status}.`);
+        const v = FC.planoMensal.validaDivisao(p, e);
+        if (!v.ok && !a.aceitar_violacao) {
+          const m = v.mais_proxima;
+          throw new ErroMcp(`A divisão viola a hierarquia: ${v.violacoes.map((x) => x.texto).join("; ")}. A válida mais próxima é RF ${n2(m.rf)}%, Ações ${n2(m.acoes)}%, Cripto ${n2(m.cripto)}%. Ajuste com editar_plano_mensal ou ative com aceitar_violacao: true.`);
+        }
+        const outro = (e.base.planosMensais || []).find((x) => x.status === "ativo" && x.mes !== a.mes);
+        const avisos = outro ? [`O plano de ${outro.mes} estava ativo e foi fechado antes.`] : [];
+        const snap = FC.planoMensal.snapshot(e, v, a.aceitar_violacao);
+        if (a.simular) return { simulado: true, avisos, regras_snapshot: enxuga(snap, 100), ...resumoPlanoMensal(FC, e, p) };
+        if (outro) {
+          await salvaPlano(ctx, { status: "fechado", fechado_em: new Date().toISOString(), ...FC.planoMensal.realizado(outro, e) }, outro.id);
+          await logPlano(ctx, outro.id, "fechar", `fechado ao ativar ${a.mes}`);
+        }
+        await salvaPlano(ctx, { status: "ativo", ativado_em: new Date().toISOString(), regras_snapshot: snap }, p.id);
+        await logPlano(ctx, p.id, "ativar", a.aceitar_violacao && !v.ok ? "ativado aceitando a violação da hierarquia" : "");
+        await audita(ctx, "mcp_plano_mensal", { mes: a.mes, acao: "ativar", aceitar_violacao: a.aceitar_violacao });
+        return { ok: true, avisos, ...resumoPlanoMensal(FC, e, { ...p, status: "ativo", regras_snapshot: snap }) };
+      },
+    },
+    {
+      nome: "fechar_plano_mensal",
+      titulo: "Fechar o plano do mês",
+      descricao: "Apura o realizado (renda, impostos, despesas, sobra, aportado, execução por destino e fora do plano) e fecha o mês. Depois de fechado, só muda reabrindo. O agendamento fecha sozinho no dia 1º do mês seguinte. `simular: true` mostra a apuração sem gravar.",
+      entrada: () => ({ mes: MES(z), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const p = planoDoMesSalvo(e, a.mes);
+        if (!p) throw new ErroMcp(`Não há plano para ${a.mes}.`);
+        if (p.status === "fechado" && !(p.contexto && p.contexto.apurar)) throw new ErroMcp(`O plano de ${a.mes} já está fechado.`);
+        const rz = FC.planoMensal.realizado(p, e);
+        const novo = { ...p, ...rz, status: "fechado" };
+        if (a.simular) return { simulado: true, ...resumoPlanoMensal(FC, e, novo, true) };
+        const { apurar, ...ctxSem } = p.contexto || {};
+        await salvaPlano(ctx, { ...rz, status: "fechado", fechado_em: p.fechado_em || new Date().toISOString(), contexto: ctxSem }, p.id);
+        await logPlano(ctx, p.id, "fechar", "");
+        await audita(ctx, "mcp_plano_mensal", { mes: a.mes, acao: "fechar" });
+        return { ok: true, ...resumoPlanoMensal(FC, e, novo, true) };
+      },
+    },
+    {
+      nome: "reabrir_plano_mensal",
+      titulo: "Reabrir o plano de um mês",
+      descricao: "Reabre um plano fechado (volta a ativo) para corrigir algo. Exige um motivo, que fica no log do mês. `simular: true` não grava.",
+      entrada: () => ({ mes: MES(z), motivo: texto(300).min(3), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const p = planoDoMesSalvo(e, a.mes);
+        if (!p || p.status !== "fechado") throw new ErroMcp(`Não há plano fechado para ${a.mes}.`);
+        const outro = (e.base.planosMensais || []).find((x) => x.status === "ativo");
+        if (outro) throw new ErroMcp(`O plano de ${outro.mes} está ativo; feche-o antes de reabrir ${a.mes} (um mês ativo por vez).`);
+        if (a.simular) return { simulado: true, mes: a.mes, de: "fechado", para: "ativo", motivo: a.motivo };
+        await salvaPlano(ctx, { status: "ativo", fechado_em: null }, p.id);
+        await logPlano(ctx, p.id, "reabrir", a.motivo);
+        await audita(ctx, "mcp_plano_mensal", { mes: a.mes, acao: "reabrir", motivo: a.motivo });
+        return { ok: true, mes: a.mes, status: "ativo", motivo: a.motivo };
+      },
+    },
+    {
+      nome: "reconstruir_planos_mensais",
+      titulo: "Reconstruir planos de meses passados",
+      descricao: "Backfill: para cada mês passado com dados e sem plano salvo, reconstrói o plano como fechado (origem reconstruido) pelos ganhos e lançamentos daquele mês e o plano global. Mês que já tem plano fica como está. `simular: true` não grava.",
+      entrada: () => ({ meses: z.array(MES(z)).min(1).max(24), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const atual = FC.datas.hoje().slice(0, 7);
+        const saida = [];
+        for (const mes of a.meses) {
+          if (mes > atual) { saida.push({ mes, pulado: "mês futuro" }); continue; }
+          if (planoDoMesSalvo(e, mes)) { saida.push({ mes, pulado: "já tem plano" }); continue; }
+          const r = FC.planoMensal.reconstroi(e, mes);
+          if (!a.simular) { const salvo = await salvaPlano(ctx, r); r.id = salvo.id; (e.base.planosMensais = e.base.planosMensais || []).push({ ...r, ...salvo }); }
+          saida.push(resumoPlanoMensal(FC, e, r, true));
+        }
+        if (!a.simular) await audita(ctx, "mcp_plano_mensal", { acao: "reconstruir", meses: a.meses });
+        return { ...(a.simular ? { simulado: true } : { ok: true }), planos: saida };
       },
     },
     {

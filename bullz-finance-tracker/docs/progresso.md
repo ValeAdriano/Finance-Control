@@ -13,6 +13,8 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 7. `supabase/migrations/0005_renda_pj.sql` (ganhos PJ, despesas, parcelamentos, parâmetros de DAS e Simples)
 8. `supabase/migrations/0006_hierarquia.sql` (preferencias.hierarquia)
 9. `supabase/migrations/0007_eventos_futuros.sql`
+10. `supabase/migrations/0008_planos_mensais.sql` (planos, log, colunas em aportes, agendamento `fc-fecha-planos`)
+11. backfill: `reconstruir_planos_mensais` com `["2026-10", "2026-11"]` pelo MCP (simule antes)
 
 ## Edge Functions a publicar
 
@@ -128,3 +130,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0007_eventos_futuros.sql`.
 
 **Pendências**: a tela de Projeções ainda mostra só a projeção longa; a visão mensal com cenários entra no M11, junto das capturas.
+
+## M8 · Plano mensal com histórico e execução (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/plano-mensal.js`: previsto (renda com a origem de cada número, impostos, despesas, modo, meta), geração do rascunho (divisão da hierarquia ou do plano, sugestão de ativo por nota sem cotação quebrada, parcelas, desvio do mês anterior, eventos do mês), execução por destino com atribuição automática ou manual e `fora_do_plano`, validação pela hierarquia, snapshot das regras, realizado e reconstrução (D-021).
+- MCP: `listar_planos_mensais`, `detalhar_plano_mensal`, `gerar_plano_mensal`, `editar_plano_mensal`, `ativar_plano_mensal`, `fechar_plano_mensal`, `reabrir_plano_mensal` (com motivo) e `reconstruir_planos_mensais`, todas as de gravação com `simular`; `salario_e_plano` com `plano_salvo` e o plano do mês salvo.
+- Tela de Salário: linha do tempo por mês (status, meta × aportado, barras previsto × executado, selos), detalhe por destino com os aportes, ativar e fechar, "Criar plano de {mês}" e gráfico de 12 meses.
+- Testes: `testes/plano-mensal-m8.test.js` (6), com os seis critérios de aceite.
+
+**Migrations**: `0008_planos_mensais.sql`.
+
+**Pendências**: reatribuir aporte e editar destinos do rascunho pela tela (hoje pelo MCP).

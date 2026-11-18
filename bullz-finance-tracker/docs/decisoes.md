@@ -85,3 +85,13 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Taxas por ativo: retorno anualizado com proventos reinvestidos e DY médio, calculados do histórico de preço que o app já baixa (Yahoo pela Edge Function `mercado`; o plano cita brapi). Janela padrão de 5 anos; com menos de 0,9 ano de histórico, o ativo rende o CDI e a resposta diz isso. O cálculo é local e barato, então não criei o cache `taxas_historicas`: as taxas saem em cada projeção, com a fonte.
 - Agro na projeção: fica parado no valor de hoje até um evento de venda; a venda entra líquida de Funrural (quando há parâmetro) no caixa.
 - Aporte de cada mês: `FC.salario.metaDoMes` do mês futuro (no fixo + sobra, com o custo de vida previsto). Divisão: a do plano do Salário; no modo hierarquia ou sem destinos, a divisão sugerida (M6).
+
+## D-021 · Plano mensal (M8)
+- `aportado_total` é o **cumprido**: por destino, o aportado até o previsto (o excesso num destino não cobre a falta de outro, como o Salário já fazia). Todo o dinheiro novo do mês fica em `investido_total`. Assim o backfill de nov/2026 fecha em R$ 1.290 (100%) mesmo com ações acima do previsto.
+- Atribuição automática, nesta ordem: o destino informado no lançamento (`plano_mensal_id` + `destino_idx`), o ativo ou título igual, a categoria do ativo (RF, Ações, Cripto). Sem destino, `fora_do_plano`.
+- Parcelas executadas cumprem o destino `parcela`, mas não entram no `aportado_total` (não são dinheiro novo).
+- Mês fechado devolve a execução salva; mês aberto recalcula. Mudar preferências não mexe no salvo.
+- A trava `aceitar_violacao` só vale no modo `hierarquia`. No modo `metas_fixas` o plano ativa sem validar a ordem.
+- Backfill (`reconstruir_planos_mensais`): meta pelo plano global de hoje e pela renda do mês; cada ativo ou título que recebeu aporte vira um destino, com o previsto do destino do plano que ele casa (o próprio ativo, ou o pilar dele) repartido pelo executado. Aporte sem destino correspondente vai para `fora_do_plano`. Mês com plano salvo fica como está.
+- Fechamento automático: `privado.fecha_planos_vencidos()` no pg_cron (`fc-fecha-planos`, dia 1º às 03:05 UTC) só muda o status e marca `contexto.apurar`; o realizado é apurado na próxima chamada de `fechar_plano_mensal` (ou pela tela, ao fechar). Motivo: o cálculo de execução mora no núcleo JS.
+- Reatribuir um aporte a outro destino: pelo MCP (`editar_registro` em `aportes`, campos `plano_mensal_id` e `destino_idx`). A tela ainda não tem o botão.

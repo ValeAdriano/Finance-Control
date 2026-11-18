@@ -185,6 +185,7 @@ test("MCP · nenhuma resposta leva user_id nem número com cauda de ponto flutua
   const { chama, lista } = await requisicao();
   const args = { detalhar_ativo: { ticker: "ITSA4" }, ...require("./mcp-escritas.js").LEITURAS };
   for (const f of lista.filter((x) => !x.escreve)) {
+    if (args[f.nome] === null) continue;   // leitura que depende de dado salvo: testada no arquivo do marco
     const txt = JSON.stringify(await chama(f.nome, args[f.nome] || {}));
     assert.ok(!txt.includes("user_id"), `${f.nome} devolveu user_id`);
     assert.ok(!/\d\.\d{9,}/.test(txt), `${f.nome} devolveu número sem arredondar: ${(/[^,{]*\d\.\d{9,}/.exec(txt) || [""])[0]}`);

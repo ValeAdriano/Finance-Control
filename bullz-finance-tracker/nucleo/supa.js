@@ -149,7 +149,7 @@
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos, agroLotes, parametros, despesas, parcelamentos, eventosFuturos] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos, agroLotes, parametros, despesas, parcelamentos, eventosFuturos, planosMensais, planosLog] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
@@ -157,7 +157,7 @@
         // tabelas do plano de evolução: vazias se a migration ainda não foi aplicada
         opcional("potes", "criado_em"), opcional("potes_movimentos", "data"), opcional("movimentos_internos", "data"),
         opcional("agro_lotes", "criado_em"), opcional("parametros_fiscais", "chave"),
-        opcional("despesas", "data"), opcional("parcelamentos", "inicio"), opcional("eventos_futuros", "data"),
+        opcional("despesas", "data"), opcional("parcelamentos", "inicio"), opcional("eventos_futuros", "data"), opcional("planos_mensais", "mes"), opcional("planos_mensais_log", "quando"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
@@ -172,7 +172,10 @@
           cabecas_previstas: num(l.cabecas_previstas) })),
         parametros: parametros.map((p) => ({ ...p, valor: num(p.valor) })),
         despesas: despesas.map((d) => ({ ...d, valor: num(d.valor) })),
-        eventosFuturos,
+        eventosFuturos, planosLog,
+        planosMensais: planosMensais.map((p) => ({ ...p, meta_total: num(p.meta_total), aportado_total: num(p.aportado_total), valor_fixo: num(p.valor_fixo),
+          sobra_prevista: num(p.sobra_prevista), sobra_real: num(p.sobra_real), renda_real: num(p.renda_real), impostos_previstos: num(p.impostos_previstos),
+          despesas_previstas: num(p.despesas_previstas), impostos_reais: num(p.impostos_reais), despesas_reais: num(p.despesas_reais) })),
         parcelamentos: parcelamentos.map((p) => ({ ...p, valor_total: num(p.valor_total), n_parcelas: Number(p.n_parcelas) })),
         historico: historico.map((h) => ({ ...h, patrimonio: num(h.patrimonio), renda_variavel: num(h.renda_variavel) || 0,
           cripto: num(h.cripto) || 0, renda_fixa: num(h.renda_fixa) || 0, agro: num(h.agro) || 0, investido: num(h.investido) })),

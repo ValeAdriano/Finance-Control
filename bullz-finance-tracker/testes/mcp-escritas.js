@@ -14,3 +14,8 @@ module.exports.registrar_parcelamento = { valor_total: 600, n_parcelas: 3, inici
 module.exports.configurar_alocacao = { modo_alocacao: "hierarquia" };
 module.exports.registrar_evento = { data: "2027-02-15", tipo: "aporte_extra", valor: 1000 };
 module.exports.LEITURAS.projetar = { meses: 3 };
+Object.assign(module.exports, {
+  gerar_plano_mensal: { mes: "2026-12" }, editar_plano_mensal: { mes: "2026-12", meta_total: 1 }, ativar_plano_mensal: { mes: "2026-12" },
+  fechar_plano_mensal: { mes: "2026-12" }, reabrir_plano_mensal: { mes: "2026-12", motivo: "teste" }, reconstruir_planos_mensais: { meses: ["2026-10"] },
+});
+module.exports.LEITURAS.detalhar_plano_mensal = null;   // precisa de plano salvo: coberto em testes/plano-mensal-m8.test.js

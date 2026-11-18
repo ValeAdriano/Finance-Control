@@ -52,6 +52,7 @@ export function camposPorTabela(z) {
       preco: positivo.nullable(), valor: z.number().describe("negativo numa venda ou num resgate"),
       titulo: texto(80).nullable(), observacao: texto(160),
       indexador: z.enum(INDEXADORES).nullable(), taxa: z.number().nullable(),
+      plano_mensal_id: z.string().uuid().nullable().describe("reatribui o aporte a um plano mensal"), destino_idx: z.number().int().min(0).nullable(),
     },
     ativos: {
       ticker, classe: z.enum(CLASSES), pilar: z.enum(PILARES), lista: z.enum(LISTAS),

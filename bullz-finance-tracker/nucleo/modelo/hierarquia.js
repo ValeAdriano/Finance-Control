@@ -28,7 +28,8 @@
 
   /** o que viola numa divisão em % (rf, acoes, cripto) */
   function violacoes(d, faixas) {
-    const f = faixas || FC.PADRAO_HIERARQUIA.faixas, v = [], eps = 1e-6;
+    // tolerância de 0,05 p.p.: divisões vindas de valores em centavos não fecham exato
+    const f = faixas || FC.PADRAO_HIERARQUIA.faixas, v = [], eps = 0.05;
     if (d.acoes > d.rf + eps) v.push({ regra: "ordem", texto: `Ações (${d.acoes.toFixed(1)}%) acima da renda fixa (${d.rf.toFixed(1)}%)` });
     if (d.cripto > d.acoes + eps) v.push({ regra: "ordem", texto: `Cripto (${d.cripto.toFixed(1)}%) acima de ações (${d.acoes.toFixed(1)}%)` });
     if (d.rf < f.rf.piso - eps) v.push({ regra: "piso", texto: `Renda fixa (${d.rf.toFixed(1)}%) abaixo do piso de ${f.rf.piso}%` });
