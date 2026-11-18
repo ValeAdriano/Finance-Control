@@ -6,6 +6,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 
 1. `supabase/migrations/0001_dados_m1.sql` (colunas de ganhos e `privado.politicas_padrao`)
 2. backfill opcional: `supabase/backfills/0001_preco_dos_lancamentos.sql`
+3. `supabase/migrations/0002_potes.sql` (potes, potes_movimentos, renda_fixa.pote_id, seed)
 
 ## Edge Functions a publicar
 
@@ -44,3 +45,16 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0001_dados_m1.sql`.
 
 **Pendências**: a tela de Salário ainda não edita `data_fim_contrato`/`data_ultimo_pagamento` (dá pelo MCP); entra no M5 com o proporcional.
+
+## M2 · Potes com finalidade (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/potes.js`: saldo por pote (títulos + caixa de proventos + movimentos), reserva medida só pelo pote de reserva, total comprometido com IR, transferência validada (D-011).
+- Carteira: `dados.potes`; o dinheiro de fora dos títulos soma no pilar caixa. Alertas: reserva pelo pote e aviso de IR comprometido.
+- MCP: `listar_potes`, `mover_entre_potes` (com `simular`), `resumo_patrimonio.potes`, `salvar_titulo.pote_id`.
+- Tela `/potes` (saldo, reserva × meta, mover).
+- Testes: `testes/potes-m2.test.js` (4). Ajudante `testes/mcp-req.js`; `testes/mcp-escritas.js` registra as ferramentas de gravação novas no teste de "só consulta".
+
+**Migrations**: `0002_potes.sql`.
+
+**Pendências**: a tela Potes ainda não está no menu (abre por `/potes` e pelos alertas); entra na navegação no M14 junto com o checklist.

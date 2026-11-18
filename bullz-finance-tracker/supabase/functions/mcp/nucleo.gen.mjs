@@ -1,5 +1,5 @@
 /* GERADO por scripts/gera-nucleo-mcp.js — não edite à mão.
- * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas.js, modelo/salario.js, modelo/auditoria.js, modelo/retrospectiva.js. */
+ * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/potes.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas.js, modelo/salario.js, modelo/auditoria.js, modelo/retrospectiva.js. */
 /* eslint-disable */
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
@@ -1477,11 +1477,13 @@ FC.config = {
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
         tudo("patrimonio_historico", "data"), tudo("ganhos", "inicio"),
+        // tabelas do plano de evolução: vazias se a migration ainda não foi aplicada
+        opcional("potes", "criado_em"), opcional("potes_movimentos", "data"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
@@ -1489,6 +1491,8 @@ FC.config = {
         aportes: aportes.map(normAporte),
         prefsBrutas: prefs || {},
         ganhos: ganhos.map((g) => ({ ...g, valor: num(g.valor) })),
+        potes: potes.map((p) => ({ ...p, meta_valor: num(p.meta_valor) })),
+        potesMovs: potesMovs.map((m) => ({ ...m, valor: num(m.valor) })),
         historico: historico.map((h) => ({ ...h, patrimonio: num(h.patrimonio), renda_variavel: num(h.renda_variavel) || 0,
           cripto: num(h.cripto) || 0, renda_fixa: num(h.renda_fixa) || 0, agro: num(h.agro) || 0, investido: num(h.investido) })),
         agro: { movs: movs.map(normMov), custos: custos.map((c) => ({ ...c, valor: num(c.valor) })),
@@ -3734,7 +3738,7 @@ FC.config = {
   }
 
   // ---------------------------------------------------------------- alocação
-  function alocacao(ativos, rendaFixa, agro, alvos, cxProv) {
+  function alocacao(ativos, rendaFixa, agro, alvos, cxProv, potes) {
     const valor = {}, dentro = {};
     FC.PILARES.forEach((p) => { valor[p.chave] = 0; dentro[p.chave] = []; });
     for (const a of ativos) {
@@ -3765,6 +3769,11 @@ FC.config = {
     if (cxProv && cxProv.ativo && cxProv.saldo > 0.5) {
       valor.caixa += cxProv.saldo;
       dentro.caixa.push({ nome: cxProv.nome, ticker: null, tipo: "proventos à espera do reinvestimento", valor: cxProv.saldo, score: null, cor: "verde", veredito: null });
+    }
+    // dinheiro guardado em potes fora de títulos (ex.: venda do gado)
+    if (potes && Math.abs(potes.externo) > 0.5) {
+      valor.caixa += potes.externo;
+      dentro.caixa.push({ nome: "Saldo dos potes", ticker: null, tipo: "fora de títulos", valor: potes.externo, score: null, cor: "verde", veredito: null });
     }
     const total = Object.values(valor).reduce((a, b) => a + b, 0);
     if (!total) return { linhas: [], total: 0 };
@@ -3892,7 +3901,16 @@ FC.config = {
     try { if (FC.estado && FC.estado.proventos) pagos = FC.dividendos.analisa({ ativos }, base, FC.estado.proventos).pagamentos; } catch (e) { console.error(e); }
     let cxProv = null;
     try { if (FC.caixaProventos) cxProv = FC.caixaProventos.analisa(base, pagos, prefs.proventos, ix); } catch (e) { console.error(e); }
-    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo, cxProv);
+    // potes (Marco 2): separam a renda fixa por finalidade sem mudar a soma;
+    // só o dinheiro que entrou de fora num pote (sem par) soma no caixa
+    let potes = null;
+    try {
+      if (FC.potes && base.potes && base.potes.length) {
+        potes = FC.potes.analisa(base.potes, base.potesMovs || [], rendaFixa, {
+          caixaProventos: cxProv, poteProventos: (prefs.proventos || {}).pote_id || null, objetivos: FC.objetivos ? FC.objetivos(prefs) : {} });
+      }
+    } catch (e) { console.error(e); potes = null; }
+    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo, cxProv, potes);
 
     const comPos = ativos.filter((a) => a.posicao);
     const comCusto = comPos.filter((a) => a.posicao.custo);
@@ -3923,7 +3941,7 @@ FC.config = {
       const v = a.posicao.atual * fr;
       return v - v / (1 + a.variacao_dia / 100);
     });
-    const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado);
+    const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado) + (potes ? potes.externo : 0);
     const cxSaldo = cxProv && cxProv.ativo ? cxProv.saldo : 0;
 
     const proventos = aportes.filter((a) => a.tipo === "provento").sort((a, b) => b.data.localeCompare(a.data));
@@ -3931,7 +3949,7 @@ FC.config = {
 
     const dados = {
       ativos, rendaFixa, agro, macro, regras,
-      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo, caixa_proventos: cxProv,
+      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo, caixa_proventos: cxProv, potes,
       historico: hist,
       registros: base.historico || [],
       resumo: {
@@ -6584,6 +6602,132 @@ FC.config = {
 })();
 
 
+/* ---- modelo/potes.js */
+/* Potes: o dinheiro da renda fixa separado por finalidade (Marco 2).
+ *
+ * Um pote tem um tipo (reserva de emergência, oportunidade, oportunidade do
+ * agro, IR a pagar, livre) e um saldo. O saldo é:
+ *   títulos de renda fixa com pote_id do pote (título sem pote = "livre")
+ * + o caixa de proventos, se preferencias.proventos.pote_id apontar para ele
+ * + os movimentos do pote (potes_movimentos).
+ *
+ * Mover entre potes grava dois movimentos de sinal contrário com o mesmo
+ * transferencia_id: o patrimônio e a alocação não mudam (a soma é zero).
+ * Dinheiro que entra de fora (venda do gado, Marco 3) é um movimento sem
+ * par: entra no pilar caixa. O pilar caixa soma todos os potes.
+ *
+ * Sem a tabela `potes` no banco (migration 0002 não aplicada), `analisa`
+ * devolve null e o app segue como antes. */
+(function () {
+  const FC = window.FC;
+
+  FC.TIPOS_POTE = {
+    reserva_emergencia: { nome: "Reserva de emergência", cor: "verde", ordem: 1 },
+    oportunidade: { nome: "Oportunidade", cor: "azul", ordem: 2 },
+    oportunidade_agro: { nome: "Oportunidade do agro", cor: "terra", ordem: 3 },
+    ir_a_pagar: { nome: "IR a pagar", cor: "vermelho", ordem: 4, comprometido: true },
+    livre: { nome: "Livre", cor: "cinza", ordem: 5 },
+  };
+
+  function uuid() {
+    const c = typeof crypto !== "undefined" ? crypto : null;
+    if (c && typeof c.randomUUID === "function") return c.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+      const r = (Math.random() * 16) | 0;
+      return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  }
+
+  // os potes que toda conta começa tendo (um de cada tipo)
+  function padroes() {
+    return Object.entries(FC.TIPOS_POTE).map(([tipo, t]) => ({ nome: t.nome, tipo, meta_valor: null }));
+  }
+
+  /** o pote que recebe o que não tem pote (o "livre" mais antigo) */
+  function livreDe(potes) {
+    return potes.filter((p) => p.tipo === "livre").sort((a, b) => String(a.criado_em || "").localeCompare(String(b.criado_em || "")))[0] || null;
+  }
+
+  /**
+   * base: { potes, potesMovs, rendaFixa (com valor de hoje) }
+   * opcoes: { caixaProventos: {ativo, saldo}, poteProventos: id|null, objetivos }
+   */
+  function analisa(potes, movs, rendaFixa, opcoes = {}) {
+    if (!potes || !potes.length) return null;
+    const livre = livreDe(potes);
+    const porId = new Map(potes.map((p) => [p.id, {
+      ...p, meta_valor: p.meta_valor == null ? null : Number(p.meta_valor),
+      titulos: [], valor_titulos: 0, valor_movimentos: 0, valor_proventos: 0, saldo: 0,
+      ...(FC.TIPOS_POTE[p.tipo] ? { cor: FC.TIPOS_POTE[p.tipo].cor, comprometido: !!FC.TIPOS_POTE[p.tipo].comprometido } : {}),
+    }]));
+    const alvo = (id) => porId.get(id) || (livre ? porId.get(livre.id) : null);
+    for (const t of rendaFixa || []) {
+      const p = alvo(t.pote_id);
+      if (!p) continue;
+      const v = Number(t.valor_aplicado) || 0;
+      p.titulos.push({ id: t.id, nome: t.nome, valor: v });
+      p.valor_titulos += v;
+    }
+    for (const m of movs || []) {
+      const p = alvo(m.pote_id);
+      if (p) p.valor_movimentos += Number(m.valor) || 0;
+    }
+    const cx = opcoes.caixaProventos;
+    if (cx && cx.ativo && cx.saldo > 0) {
+      const p = alvo(opcoes.poteProventos);
+      if (p) p.valor_proventos += cx.saldo;
+    }
+    const lista = [...porId.values()].map((p) => {
+      p.saldo = p.valor_titulos + p.valor_movimentos + p.valor_proventos;
+      p.falta_para_meta = p.meta_valor != null ? Math.max(0, p.meta_valor - p.saldo) : null;
+      return p;
+    }).sort((a, b) => ((FC.TIPOS_POTE[a.tipo] || {}).ordem || 9) - ((FC.TIPOS_POTE[b.tipo] || {}).ordem || 9) || String(a.nome).localeCompare(String(b.nome)));
+
+    const total = FC.soma(lista, (p) => p.saldo);
+    // dinheiro que entrou nos potes de fora (sem par): soma no pilar caixa
+    const externo = FC.soma(movs || [], (m) => Number(m.valor) || 0);
+    const comprometido = FC.soma(lista.filter((p) => p.comprometido), (p) => p.saldo);
+
+    // reserva de emergência: medida SÓ pelo pote reserva_emergencia
+    const obj = opcoes.objetivos || {};
+    const reservaPotes = lista.filter((p) => p.tipo === "reserva_emergencia");
+    const custo = Number(obj.custo_vida_mensal) || 0, meses = Number(obj.meses_reserva) || 6;
+    const temReserva = FC.soma(reservaPotes, (p) => p.saldo);
+    const metaReserva = reservaPotes.find((p) => p.meta_valor != null) ? FC.soma(reservaPotes, (p) => p.meta_valor || 0) : custo > 0 ? custo * meses : null;
+    const reserva = {
+      saldo: temReserva, meta: metaReserva, meses_cobertos: custo > 0 ? temReserva / custo : null,
+      abaixo_da_meta: metaReserva != null ? temReserva < metaReserva - 0.5 : null, falta: metaReserva != null ? Math.max(0, metaReserva - temReserva) : null,
+    };
+    return { potes: lista, total, externo, comprometido, reserva, livre_id: livre ? livre.id : null };
+  }
+
+  /** valida e monta a transferência (sem gravar). Devolve as duas linhas. */
+  function transferencia(estadoPotes, { de, para, valor, data, descricao }) {
+    if (!estadoPotes) throw new Error("Os potes ainda não existem nesta conta.");
+    const v = Number(valor);
+    if (!(v > 0)) throw new Error("Informe um valor positivo.");
+    const acha = (x) => estadoPotes.potes.find((p) => p.id === x || p.tipo === x || String(p.nome).toLowerCase() === String(x).toLowerCase());
+    const o = acha(de), d = acha(para);
+    if (!o) throw new Error(`Pote de origem "${de}" não encontrado.`);
+    if (!d) throw new Error(`Pote de destino "${para}" não encontrado.`);
+    if (o.id === d.id) throw new Error("Origem e destino são o mesmo pote.");
+    if (v > o.saldo + 0.005) throw new Error(`${o.nome} tem ${FC.fmt.brlTexto(o.saldo)}; não dá para tirar ${FC.fmt.brlTexto(v)}.`);
+    const id = uuid();
+    const dia = data || FC.datas.hoje();
+    const txt = descricao || `${o.nome} → ${d.nome}`;
+    return {
+      origem: o, destino: d, valor: v,
+      linhas: [
+        { pote_id: o.id, data: dia, valor: -v, descricao: txt, transferencia_id: id },
+        { pote_id: d.id, data: dia, valor: v, descricao: txt, transferencia_id: id },
+      ],
+    };
+  }
+
+  FC.potes = { padroes, analisa, transferencia, livreDe, uuid };
+})();
+
+
 /* ---- modelo/desempenho.js */
 /* Desempenho da carteira: uma nota de 0 a 100 do quanto os ativos renderam
  * contra a referência de cada um, no período (dia, mês, ano ou tudo).
@@ -7291,7 +7435,18 @@ FC.config = {
     const custo = Number(obj.custo_vida_mensal) || 0;
     const meses = Number(obj.meses_reserva) || 6;
     const daReserva = rf.filter((t) => (meta[t.id] || {}).reserva);
-    if (custo > 0) {
+    const pts = dados.potes;
+    if (pts && pts.reserva && pts.reserva.meta != null) {
+      // com potes, a reserva é medida SÓ pelo pote de reserva de emergência
+      const r = pts.reserva;
+      if (r.abaixo_da_meta) {
+        saida.push({ nivel: r.saldo < r.meta / 2 ? "alto" : "medio", titulo: `Reserva de emergência em ${pct((r.saldo / r.meta) * 100)} da meta`,
+          texto: `O pote de reserva tem ${brl(r.saldo)} de ${brl(r.meta)}. Faltam ${brl(r.falta)}: vale completar antes de arriscar mais.`, link: "#/potes" });
+      }
+    } else if (pts) {
+      if (!(custo > 0)) saida.push({ nivel: "info", titulo: "Informe seu custo de vida",
+        texto: "Com ele o painel mede se o pote de reserva de emergência está completo.", link: "#/ajustes/criterios" });
+    } else if (custo > 0) {
       const alvo = custo * meses;
       const tem = FC.soma(daReserva, (t) => t.valor_aplicado);
       if (!daReserva.length) {
@@ -7306,6 +7461,12 @@ FC.config = {
     } else if (daReserva.length || rf.length) {
       saida.push({ nivel: "info", titulo: "Informe seu custo de vida",
         texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes/criterios" });
+    }
+
+    // ---- IR a pagar: dinheiro que parece patrimônio, mas já tem dono
+    if (pts && pts.comprometido > 0.5) {
+      saida.push({ nivel: "info", titulo: `${brl(pts.comprometido)} comprometidos com IR`,
+        texto: "Esse saldo está no patrimônio, mas é do imposto a pagar. Não conte com ele para aportar.", link: "#/potes" });
     }
 
     // ---- caixa de proventos chegou à meta: hora de reinvestir

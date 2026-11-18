@@ -108,7 +108,18 @@
     const custo = Number(obj.custo_vida_mensal) || 0;
     const meses = Number(obj.meses_reserva) || 6;
     const daReserva = rf.filter((t) => (meta[t.id] || {}).reserva);
-    if (custo > 0) {
+    const pts = dados.potes;
+    if (pts && pts.reserva && pts.reserva.meta != null) {
+      // com potes, a reserva é medida SÓ pelo pote de reserva de emergência
+      const r = pts.reserva;
+      if (r.abaixo_da_meta) {
+        saida.push({ nivel: r.saldo < r.meta / 2 ? "alto" : "medio", titulo: `Reserva de emergência em ${pct((r.saldo / r.meta) * 100)} da meta`,
+          texto: `O pote de reserva tem ${brl(r.saldo)} de ${brl(r.meta)}. Faltam ${brl(r.falta)}: vale completar antes de arriscar mais.`, link: "#/potes" });
+      }
+    } else if (pts) {
+      if (!(custo > 0)) saida.push({ nivel: "info", titulo: "Informe seu custo de vida",
+        texto: "Com ele o painel mede se o pote de reserva de emergência está completo.", link: "#/ajustes/criterios" });
+    } else if (custo > 0) {
       const alvo = custo * meses;
       const tem = FC.soma(daReserva, (t) => t.valor_aplicado);
       if (!daReserva.length) {
@@ -123,6 +134,12 @@
     } else if (daReserva.length || rf.length) {
       saida.push({ nivel: "info", titulo: "Informe seu custo de vida",
         texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes/criterios" });
+    }
+
+    // ---- IR a pagar: dinheiro que parece patrimônio, mas já tem dono
+    if (pts && pts.comprometido > 0.5) {
+      saida.push({ nivel: "info", titulo: `${brl(pts.comprometido)} comprometidos com IR`,
+        texto: "Esse saldo está no patrimônio, mas é do imposto a pagar. Não conte com ele para aportar.", link: "#/potes" });
     }
 
     // ---- caixa de proventos chegou à meta: hora de reinvestir

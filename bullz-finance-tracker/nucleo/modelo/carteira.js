@@ -79,7 +79,7 @@
   }
 
   // ---------------------------------------------------------------- alocação
-  function alocacao(ativos, rendaFixa, agro, alvos, cxProv) {
+  function alocacao(ativos, rendaFixa, agro, alvos, cxProv, potes) {
     const valor = {}, dentro = {};
     FC.PILARES.forEach((p) => { valor[p.chave] = 0; dentro[p.chave] = []; });
     for (const a of ativos) {
@@ -110,6 +110,11 @@
     if (cxProv && cxProv.ativo && cxProv.saldo > 0.5) {
       valor.caixa += cxProv.saldo;
       dentro.caixa.push({ nome: cxProv.nome, ticker: null, tipo: "proventos à espera do reinvestimento", valor: cxProv.saldo, score: null, cor: "verde", veredito: null });
+    }
+    // dinheiro guardado em potes fora de títulos (ex.: venda do gado)
+    if (potes && Math.abs(potes.externo) > 0.5) {
+      valor.caixa += potes.externo;
+      dentro.caixa.push({ nome: "Saldo dos potes", ticker: null, tipo: "fora de títulos", valor: potes.externo, score: null, cor: "verde", veredito: null });
     }
     const total = Object.values(valor).reduce((a, b) => a + b, 0);
     if (!total) return { linhas: [], total: 0 };
@@ -237,7 +242,16 @@
     try { if (FC.estado && FC.estado.proventos) pagos = FC.dividendos.analisa({ ativos }, base, FC.estado.proventos).pagamentos; } catch (e) { console.error(e); }
     let cxProv = null;
     try { if (FC.caixaProventos) cxProv = FC.caixaProventos.analisa(base, pagos, prefs.proventos, ix); } catch (e) { console.error(e); }
-    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo, cxProv);
+    // potes (Marco 2): separam a renda fixa por finalidade sem mudar a soma;
+    // só o dinheiro que entrou de fora num pote (sem par) soma no caixa
+    let potes = null;
+    try {
+      if (FC.potes && base.potes && base.potes.length) {
+        potes = FC.potes.analisa(base.potes, base.potesMovs || [], rendaFixa, {
+          caixaProventos: cxProv, poteProventos: (prefs.proventos || {}).pote_id || null, objetivos: FC.objetivos ? FC.objetivos(prefs) : {} });
+      }
+    } catch (e) { console.error(e); potes = null; }
+    const { linhas, total } = alocacao(ativos, rendaFixa, agro, prefs.alocacao_alvo, cxProv, potes);
 
     const comPos = ativos.filter((a) => a.posicao);
     const comCusto = comPos.filter((a) => a.posicao.custo);
@@ -268,7 +282,7 @@
       const v = a.posicao.atual * fr;
       return v - v / (1 + a.variacao_dia / 100);
     });
-    const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado);
+    const rf = FC.soma(rendaFixa, (r) => r.valor_aplicado) + (potes ? potes.externo : 0);
     const cxSaldo = cxProv && cxProv.ativo ? cxProv.saldo : 0;
 
     const proventos = aportes.filter((a) => a.tipo === "provento").sort((a, b) => b.data.localeCompare(a.data));
@@ -276,7 +290,7 @@
 
     const dados = {
       ativos, rendaFixa, agro, macro, regras,
-      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo, caixa_proventos: cxProv,
+      alocacao: linhas, alocacao_alvo: prefs.alocacao_alvo, caixa_proventos: cxProv, potes,
       historico: hist,
       registros: base.historico || [],
       resumo: {

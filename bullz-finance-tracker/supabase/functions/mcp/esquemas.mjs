@@ -61,6 +61,7 @@ export function camposPorTabela(z) {
       taxa: z.number().nullable().describe("cdi e selic: % do índice · ipca: juro real ao ano · prefixado: % ao ano"),
       vencimento: data.nullable(), valor_aplicado: naoNegativo, pilar: z.enum(PILARES), data_inicio: data.nullable(),
       valor_atual: naoNegativo.nullable().describe("saldo informado à mão, se houver"), valor_atual_em: data.nullable(),
+      pote_id: z.string().uuid().nullable().describe("pote do título (listar_potes); nulo = livre"),
     },
     ganhos: {
       nome: texto(80).min(1), categoria: z.enum(CATEGORIAS_GANHO), tipo: z.enum(TIPOS_GANHO),

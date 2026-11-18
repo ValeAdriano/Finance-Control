@@ -36,3 +36,9 @@ Preço zero ou ausente sem erro da fonte marca o ativo com `cotacao_quebrada: tr
 
 ## D-010 · Fim do ganho (M1)
 `ganhos.fim` segue como o último mês com pagamento. Colunas novas: `data_fim_contrato` (para o proporcional do M5) e `data_ultimo_pagamento` (quando existe, vale no lugar de `fim` para a renda do mês).
+
+## D-011 · Saldo dos potes (M2)
+Um pote soma os títulos com o `pote_id` dele (título sem pote = livre), o caixa de proventos se `preferencias.proventos.pote_id` apontar para ele e os seus movimentos em `potes_movimentos`. Mover entre potes grava duas linhas de sinal contrário com o mesmo `transferencia_id`: o total não muda, então patrimônio e alocação não mudam. Dinheiro que entra de fora num pote (venda do gado, M3/M4) é uma linha sem par e soma no pilar caixa. O seed da migration põe no pote de reserva os títulos já marcados como reserva em `premissas.titulos`; o resto fica no livre, sem tocar em `renda_fixa`.
+
+## D-012 · Conta sem potes (M2)
+Conta nova não ganha potes no cadastro: a tela Potes oferece "Criar os potes" e o primeiro `mover_entre_potes` cria os padrões. Sem a tabela no banco, a tela explica e o MCP responde com a migration a aplicar.

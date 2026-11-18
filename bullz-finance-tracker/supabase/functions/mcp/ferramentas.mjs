@@ -67,10 +67,29 @@ const rent = (r) => r && ({ aplicado: n2(r.aplicado), devolvido: n2(r.devolvido)
 
 const entre = (d, de, ate) => (!de || d >= de) && (!ate || d <= ate);
 
+// ---------------------------------------------------------------- potes
+const pote = (p) => ({ id: p.id, nome: p.nome, tipo: p.tipo, saldo: n2(p.saldo), meta: n2(p.meta_valor), falta_para_meta: n2(p.falta_para_meta),
+  em_titulos: n2(p.valor_titulos), fora_de_titulos: n2(p.valor_movimentos), proventos: n2(p.valor_proventos),
+  titulos: (p.titulos || []).map((t) => ({ id: t.id, nome: t.nome, valor: n2(t.valor) })), ...(p.comprometido ? { comprometido: true } : {}) });
+const resumoPotes = (pts) => pts && ({ total: n2(pts.total), comprometido_com_ir: n2(pts.comprometido),
+  reserva: { saldo: n2(pts.reserva.saldo), meta: n2(pts.reserva.meta), meses_cobertos: n2(pts.reserva.meses_cobertos), abaixo_da_meta: pts.reserva.abaixo_da_meta },
+  potes: pts.potes.map(pote) });
+const MIGRATION = (n, t) => `A tabela ${t} ainda não existe no banco desta conta: aplique a migration ${n} (supabase/migrations/) e tente de novo.`;
+
+// cria os potes padrão de quem ainda não tem nenhum (conta nova)
+async function garantePotes(ctx, e) {
+  const { FC } = ctx;
+  if (e.base.potes && e.base.potes.length) return false;
+  if (!FC.db.temTabela("potes")) throw new ErroMcp(MIGRATION("0002", "potes"));
+  for (const p of FC.potes.padroes()) await grava(() => FC.db.inserir("potes", p));
+  return true;
+}
+
 // ---------------------------------------------------------------- gravação
 function traduz(erro) {
   const m = (erro && erro.message) || String(erro);
   if ((erro && erro.code === "42501") || /row-level security/i.test(m)) return new ErroMcp(SO_CONSULTA);
+  if (erro && (erro.code === "PGRST205" || erro.code === "42P01")) return new ErroMcp("Tabela ausente no banco: aplique as migrations pendentes (supabase/migrations/). " + m);
   if (erro && erro.code === "PGRST116") return new ErroMcp("Registro não encontrado. Confira o id com uma ferramenta de listagem.");
   if (erro && erro.code === "23505") return new ErroMcp("Já existe um registro com essa chave (ticker ou nome repetido).");
   if (erro && (erro.code === "23514" || erro.code === "22P02")) return new ErroMcp("O banco recusou os valores: " + m);
@@ -126,6 +145,7 @@ export function ferramentas(z) {
           alocacao: d.alocacao.map((l) => ({ pilar: l.chave, nome: l.nome, valor: n2(l.valor), pct_do_patrimonio: n2(l.pct), meta_pct: n2(l.alvo_pct),
             pct_na_base_da_meta: n2(l.pct_meta), desvio_pct: n2(l.desvio_pct), falta_para_a_meta: n2(l.desvio_reais), fora_da_meta: !!l.fora_meta })),
           rentabilidade_desde_o_inicio: d.rentab ? rent(d.rentab.total) : null,
+          potes: resumoPotes(d.potes),
           alertas, cotacoes_de: d.atualizado, ...avisoMercado(e),
         };
       },
@@ -350,6 +370,18 @@ export function ferramentas(z) {
       },
     },
     {
+      nome: "listar_potes",
+      titulo: "Potes (finalidade do dinheiro)",
+      descricao: "A renda fixa separada por finalidade: reserva de emergência, oportunidade, oportunidade do agro, IR a pagar e livre. Saldo de cada pote, títulos dentro dele, meta e quanto falta. A reserva de emergência é medida só pelo pote dela; IR a pagar é dinheiro comprometido.",
+      entrada: () => ({}),
+      async executa(ctx) {
+        const e = await carrega(ctx, { comMercado: true, comProventos: true });
+        const pts = e.dados.potes;
+        if (!pts) return { tem_potes: false, mensagem: ctx.FC.db.temTabela("potes") ? "A conta ainda não tem potes: o primeiro mover_entre_potes cria os padrões." : MIGRATION("0002", "potes") };
+        return { tem_potes: true, ...resumoPotes(pts), ...avisoMercado(e) };
+      },
+    },
+    {
       nome: "auditar_dados",
       titulo: "Auditar os dados",
       descricao: "Roda as checagens de coerência da conta (custo nulo, resultado que não fecha, retorno sem sentido, aplicado divergente, cotação quebrada, premissa de aporte duplicada, proventos ambíguos, fim de ganho divergente) e devolve as inconsistências encontradas. Só leitura. Lista vazia = nada a apontar.",
@@ -459,7 +491,8 @@ export function ferramentas(z) {
       descricao: "Cria um título de renda fixa ou atualiza um existente, pelo nome. `tipo` cdi ou selic: taxa = % do índice; ipca: taxa = juro real ao ano; prefixado: taxa = % ao ano. Para um título novo que vai receber aportes, deixe valor_aplicado em 0 e lance os aportes com registrar_lancamento.",
       entrada: () => ({ nome: texto(80).min(1), novo_nome: texto(80).min(1).optional().describe("para renomear um título existente"),
         tipo: z.enum(TIPOS_RF).optional(), taxa: z.number().nullable().optional(), vencimento: data.nullable().optional(),
-        valor_aplicado: naoNegativo.optional(), pilar: z.enum(PILARES).optional(), data_inicio: data.nullable().optional() }),
+        valor_aplicado: naoNegativo.optional(), pilar: z.enum(PILARES).optional(), data_inicio: data.nullable().optional(),
+        pote_id: z.string().uuid().nullable().optional().describe("o pote do título (veja listar_potes); nulo = livre") }),
       async executa(ctx, a) {
         const { FC } = ctx;
         exigeEscrita(ctx);
@@ -474,7 +507,7 @@ export function ferramentas(z) {
         } else {
           if (!a.tipo) throw new ErroMcp(`Título novo: informe o tipo (${TIPOS_RF.join(", ")}).`);
           salvo = await grava(() => FC.db.inserir("renda_fixa", { nome, tipo: a.tipo, taxa: a.taxa ?? null, vencimento: a.vencimento ?? null,
-            valor_aplicado: a.valor_aplicado || 0, pilar: a.pilar || "caixa", data_inicio: a.data_inicio ?? null }));
+            valor_aplicado: a.valor_aplicado || 0, pilar: a.pilar || "caixa", data_inicio: a.data_inicio ?? null, ...(a.pote_id ? { pote_id: a.pote_id } : {}) }));
         }
         await audita(ctx, item ? "mcp_edicao" : "mcp_cadastro", { tabela: "renda_fixa", id: salvo.id, nome: salvo.nome });
         return { ok: true, criado: !item, tabela: "renda_fixa", registro: enxuga(sem(salvo)) };
@@ -583,6 +616,32 @@ export function ferramentas(z) {
         await grava(() => FC.db.gravaPrefs({ alocacao_alvo: depois }));
         await audita(ctx, "mcp_metas", { antes, depois });
         return { ok: true, antes: enxuga(antes), depois };
+      },
+    },
+    {
+      nome: "mover_entre_potes",
+      titulo: "Mover dinheiro entre potes",
+      descricao: "Muda a finalidade de um valor: tira de um pote e põe em outro (ex.: do livre para a reserva de emergência). O patrimônio e a alocação não mudam. `de` e `para` aceitam o id, o tipo (reserva_emergencia, oportunidade, oportunidade_agro, ir_a_pagar, livre) ou o nome. Com `simular: true` devolve o antes e o depois sem gravar.",
+      entrada: () => ({ de: texto(80).min(1), para: texto(80).min(1), valor: positivo, data: dataOpc, descricao: texto(160).optional(),
+        simular: z.boolean().default(false).describe("true: mostra o efeito e não grava") }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        let e = await carrega(ctx, { comMercado: true, comProventos: true });
+        if (!e.dados.potes) {
+          if (a.simular) throw new ErroMcp(FC.db.temTabela("potes") ? "A conta ainda não tem potes; mova sem simular para criar os padrões." : MIGRATION("0002", "potes"));
+          await garantePotes(ctx, e);
+          e = await carrega(ctx, { comMercado: true, comProventos: true });
+        }
+        let t;
+        try { t = FC.potes.transferencia(e.dados.potes, a); } catch (x) { throw new ErroMcp(x.message); }
+        const antes = { origem: n2(t.origem.saldo), destino: n2(t.destino.saldo), patrimonio: n2(e.dados.resumo.patrimonio) };
+        const depois = { origem: n2(t.origem.saldo - t.valor), destino: n2(t.destino.saldo + t.valor), patrimonio: n2(e.dados.resumo.patrimonio) };
+        const efeito = { de: t.origem.nome, para: t.destino.nome, valor: n2(t.valor), antes, depois };
+        if (a.simular) return { simulado: true, ...efeito };
+        for (const l of t.linhas) await grava(() => FC.db.inserir("potes_movimentos", l));
+        await audita(ctx, "mcp_potes", { de: t.origem.id, para: t.destino.id, valor: t.valor, transferencia_id: t.linhas[0].transferencia_id });
+        return { ok: true, ...efeito };
       },
     },
     {

@@ -147,11 +147,13 @@
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
         tudo("patrimonio_historico", "data"), tudo("ganhos", "inicio"),
+        // tabelas do plano de evolução: vazias se a migration ainda não foi aplicada
+        opcional("potes", "criado_em"), opcional("potes_movimentos", "data"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
@@ -159,6 +161,8 @@
         aportes: aportes.map(normAporte),
         prefsBrutas: prefs || {},
         ganhos: ganhos.map((g) => ({ ...g, valor: num(g.valor) })),
+        potes: potes.map((p) => ({ ...p, meta_valor: num(p.meta_valor) })),
+        potesMovs: potesMovs.map((m) => ({ ...m, valor: num(m.valor) })),
         historico: historico.map((h) => ({ ...h, patrimonio: num(h.patrimonio), renda_variavel: num(h.renda_variavel) || 0,
           cripto: num(h.cripto) || 0, renda_fixa: num(h.renda_fixa) || 0, agro: num(h.agro) || 0, investido: num(h.investido) })),
         agro: { movs: movs.map(normMov), custos: custos.map((c) => ({ ...c, valor: num(c.valor) })),

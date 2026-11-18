@@ -248,6 +248,8 @@ test("MCP · conexão só de consulta não grava nada, por nenhuma ferramenta", 
     salvar_titulo: { nome: "Novo", tipo: "cdi" }, salvar_ganho: { nome: "X", tipo: "avulso", valor: 1 },
     registrar_agro: { especie: "custo", categoria_custo: "frete", valor: 1 }, atualizar_metas: { metas: { acoes: 50, caixa: 20 } },
     editar_registro: { tabela: "ativos", id: 1, campos: { lista: "watchlist" } }, apagar_registro: { tabela: "ativos", id: 1 },
+    // as do plano de evolução (sem simular: true)
+    ...require("./mcp-escritas.js"),
   };
   const escritas = lista.filter((f) => f.escreve);
   assert.deepEqual(escritas.map((f) => f.nome).sort(), Object.keys(args).sort(), "ferramenta de escrita sem caso neste teste");
@@ -387,7 +389,9 @@ test("MCP · o banco só libera ao cliente de IA as tabelas que as ferramentas u
   const listas = [...bloco.matchAll(/foreach t in array array\[([^\]]+)\]/g)].map((m) => [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
   assert.equal(listas.length, 2, "esperava a lista liberada e a lista bloqueada");
   const [liberadas, bloqueadas] = listas;
-  for (const t of e.TABELAS) assert.ok(liberadas.includes(t), `${t} é editável pelo MCP mas não tem política "mcp" no schema`);
+  // tabelas novas (migrations) usam privado.politicas_padrao, que aplica as mesmas políticas "mcp"
+  const padrao = [...sql.matchAll(/politicas_padrao\('([a-z_]+)'\)/g)].map((m) => m[1]);
+  for (const t of e.TABELAS) assert.ok(liberadas.includes(t) || padrao.includes(t), `${t} é editável pelo MCP mas não tem política "mcp" no schema`);
   for (const t of ["perfil_rascunho", "perfil_investidor", "plano_investimento", "onboarding_eventos"]) assert.ok(bloqueadas.includes(t), `${t} deveria estar bloqueada`);
   assert.equal(liberadas.filter((t) => bloqueadas.includes(t)).length, 0);
 });
