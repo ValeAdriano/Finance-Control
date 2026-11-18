@@ -15,6 +15,7 @@ import { CartaoSequencia, sequencia } from "./comum/sequencia";
 import { depoisDeMudar } from "./comum/dados";
 import FC from "../nucleo";
 import { PlanosMensais } from "./comum/planos-mensais";
+import { OrdemCerta } from "./comum/evolucao";
 
 let mesVisto: string | null = null;
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -322,6 +323,7 @@ export default function Salario() {
         )}
       </Secao>
 
+      <OrdemCerta e={FC.estado} />
       <PlanosMensais e={FC.estado} />
 
       <Secao><CartaoPlano key={JSON.stringify(plano)} plano={plano} rendaFixa={FC.salario.rendaDoMes(ganhos, hoje).fixa} ganhos={ganhos} /></Secao>

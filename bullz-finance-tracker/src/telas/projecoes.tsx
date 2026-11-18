@@ -15,6 +15,7 @@ import { Icone } from "../ui/icone";
 import { ui } from "../ui/folha";
 import { depoisDeMudar } from "./comum/dados";
 import FC from "../nucleo";
+import { ProjecaoMensal } from "./comum/evolucao";
 
 const ok = (v: any) => FC.ok(v);
 let rascunho: any = null;
@@ -323,6 +324,7 @@ export default function Projecoes() {
           </View>
         </View>
       </Cartao>
+      <ProjecaoMensal e={FC.estado} />
       {proj ? <Resultado p={proj} /> : null}
     </Pagina>
   );

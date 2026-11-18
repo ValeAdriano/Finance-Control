@@ -170,3 +170,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0010_parametros_ir.sql`.
 
 **Pendências**: a tela de IRPF ainda mostra a apuração antiga (`FC.impostos`); trocar para `FC.ir` quando a migration estiver aplicada em produção.
+
+## M11 · Conta demo e capturas automáticas (2026-11-18)
+
+**Feito**
+- `seed/demo/dados.js`: conta fictícia com RF em potes (reserva, oportunidade, IR a pagar), ações e FIIs com proventos, cripto com uma posição no prejuízo e alerta de empate, agro com lote comprado, troca e venda planejada, renda PJ + aluguel, despesas de 3 meses, 3 planos mensais fechados e 1 ativo, um movimento interno (cripto → RF), revisões e um evento futuro.
+- `npm run seed:demo` (`scripts/seed-demo.js`), idempotente, só para dev.
+- Modo `?fixture=demo` no app.
+- `npm run capturas` (`scripts/capturas.mjs` + `scripts/capturas.config.ts`): 9 telas × desktop/celular × claro/escuro = 36 WebP em `public/capturas/` (1,1 MB), sem erro de console.
+- Seções novas: projeção mês a mês com cenários, lotes do agro, "a ordem certa" e a tela de alertas.
+- Testes: `testes/demo-m11.test.js` (3): seed duas vezes sem duplicar, nenhum valor da conta real, a demo exercita tudo e passa em `auditar_dados`.
+
+**Pendências**: o seed não foi rodado contra um Supabase de dev (não há um neste ambiente); a simulação e o teste com o banco em memória cobrem a idempotência.

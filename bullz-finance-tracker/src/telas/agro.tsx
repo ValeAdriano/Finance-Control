@@ -19,6 +19,7 @@ import { BarrasH } from "./comum/pagadoras";
 import { escolher, formCotacao, formMovimento, formPesagem } from "./agro/formularios";
 import { Historico, filtraCategoria } from "./agro/historico";
 import FC from "../nucleo";
+import { LotesAgro } from "./comum/evolucao";
 
 const ok = (v: any) => FC.ok(v);
 const ORIGEM_VALOR: Record<string, string> = {
@@ -206,6 +207,8 @@ export default function Agro() {
           </Secao>
 
           <ComoEsta fin={fin} />
+
+          <LotesAgro ag={ag} />
 
           {ag.porCategoria.length ? (
             <Secao titulo="Rebanho por categoria" sub="toque numa categoria para vender, mudar ou ver o histórico">

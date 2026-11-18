@@ -111,3 +111,9 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Exterior (Lei 14.754/2023) fica listado à parte (`exterior`), fora do DARF mensal.
 - IR rural do ano: soma das vendas do agro do ano, por presunção (padrão) ou livro-caixa (receita − compras − custos do ano).
 - O módulo `irpf` já era ligado por padrão em `preferencias.modulos` (`FC.resolveModulos`); não precisou mudar.
+
+## D-024 · Conta demo e capturas (M11)
+- Uma fonte só: `seed/demo/dados.js` monta a conta demo (datas relativas a hoje, ids fixos). O `npm run seed:demo` grava num Supabase de dev por upsert (idempotente) e recusa a URL de produção; sem variáveis, só simula. O app usa os mesmos dados no modo `?fixture=demo`.
+- No modo demo a conta já tem 2FA, tour visto e telemetria respondida, para nada cobrir as telas.
+- Capturas: build web com `EXPO_PUBLIC_FIXTURE=demo` em `.capturas-build/` (fora do git), servido localmente, fotografado pelo Playwright do ambiente (1440 e 390 px, claro e escuro) e convertido para WebP pelo ffmpeg. O script falha com qualquer erro de console. O Playwright não entrou nas dependências do app: quem roda as capturas instala à parte (`docs/conteudo.md`).
+- As telas que faltavam para mostrar as funcionalidades novas entraram como seções: "Mês a mês" em Projeções, "Por lote" no Agro, "A ordem certa" no Salário e a tela `/alertas`.

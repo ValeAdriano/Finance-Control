@@ -166,7 +166,9 @@ function supabaseFalso(db = baseDemo(), opcoes = {}) {
       else if (q.op === "insert" || q.op === "upsert") {
         saida = q.linhas.map((l) => {
           const pk = CHAVE[nome] || "id";
-          const ja = q.op === "upsert" ? linhas().find((x) => x[pk] === l[pk]) : null;
+          // upsert: pelas colunas de onConflict (como o PostgREST) ou pela chave primária
+          const cols = q.conflito ? q.conflito.split(",").map((c) => c.trim()) : [pk];
+          const ja = q.op === "upsert" ? linhas().find((x) => cols.every((c) => l[c] !== undefined && x[c] === l[c])) : null;
           if (ja) { Object.assign(ja, l); return ja; }
           const nova = { [pk]: l[pk] ?? "novo-" + (++seq), user_id: "u-demo", criado_em: HOJE, ...l };
           linhas().push(nova);
@@ -190,7 +192,7 @@ function supabaseFalso(db = baseDemo(), opcoes = {}) {
     const api = {
       select() { return api; },
       insert(l) { q.op = "insert"; q.linhas = [].concat(l); return api; },
-      upsert(l) { q.op = "upsert"; q.linhas = [].concat(l); return api; },
+      upsert(l, o) { q.op = "upsert"; q.linhas = [].concat(l); q.conflito = (o && o.onConflict) || null; return api; },
       update(c) { q.op = "update"; q.campos = c; return api; },
       delete() { q.op = "delete"; return api; },
       eq(c, v) { q.filtros.push((l) => String(l[c]) === String(v)); return api; },

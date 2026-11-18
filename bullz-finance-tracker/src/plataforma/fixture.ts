@@ -5,12 +5,15 @@
  * Liga com:  web → ?fixture=1 na URL (fica na sessão da aba)
  *            nativo → EXPO_PUBLIC_FIXTURE=1
  * Variantes: ?fixture=admin (conta admin), ?fixture=vazia (conta nova),
- *            ?fixture=sempeso (agro lançado só por cabeça, sem pesagens).
+ *            ?fixture=sempeso (agro lançado só por cabeça, sem pesagens),
+ *            ?fixture=demo (a conta demo de seed/demo/dados.js, com potes,
+ *            lotes, planos mensais e alertas: a das capturas e do vídeo).
  *
  * Nada aqui fala com o Supabase: auth, tabelas e Edge Function são trocados
  * por versões em memória com a mesma forma de dados. */
 import { Platform } from "react-native";
 import FC from "../nucleo";
+import { montaDemo } from "../../seed/demo/dados";
 
 function modoPedido(): string | null {
   // no build de produção, só um build feito de propósito para demonstração liga o modo
@@ -297,7 +300,9 @@ export function instalaFixture() {
   console.warn("[bullz] MODO FIXTURE ligado: dados de demonstração, sem rede (" + MODO_FIXTURE + ")");
   const vazia = MODO_FIXTURE === "vazia";
   const admin = MODO_FIXTURE === "admin";
-  const db: any = baseDemo(vazia);
+  const demo = MODO_FIXTURE === "demo";
+  const db: any = demo ? montaDemo({ hoje: hoje(), uid: "fixture-usuario" }) : baseDemo(vazia);
+  if (demo) db.preferencias = db.preferencias[0];
   // quem não pesa o gado: sem pesagens e sem peso nos lançamentos (preço por cabeça)
   if (MODO_FIXTURE === "sempeso") {
     db.agro_pesagens = [];
@@ -306,11 +311,14 @@ export function instalaFixture() {
       m.peso_medio_kg = null; m.preco_arroba = null;
     }
   }
-  const usuario = { id: "fixture-usuario", email: "demo@bullz.local", user_metadata: { nome: "Demo" }, factors: [] };
+  const usuario = { id: "fixture-usuario", email: "demo@bullz.local", factors: [],
+    // a conta demo já passou pelo tour e respondeu a telemetria: nada abre por cima das telas
+    user_metadata: demo ? { nome: "Conta demo", onboarding_visto: true, consentimento_uso: { aceito: false, em: hoje(), versao: 1 } } : { nome: "Demo" } };
   let logado = true;
   const logs: any[] = [];
-  const fatores: any[] = [], pendentes: Record<string, any> = {};
-  let passouCodigo = false;
+  // a conta demo já tem 2FA ligado e validado: o aviso de segurança não cobre as capturas
+  const fatores: any[] = demo ? [{ id: "fixture-totp-demo", friendly_name: "Celular", status: "verified", factor_type: "totp" }] : [], pendentes: Record<string, any> = {};
+  let passouCodigo = demo;
 
   Object.assign(FC.auth, {
     sessao: async () => (logado ? { user: usuario } : null),
@@ -373,7 +381,11 @@ export function instalaFixture() {
         prefsBrutas: c.preferencias || {},
         ganhos: c.ganhos,
         historico: c.patrimonio_historico,
-        agro: { movs: c.agro_movimentos, custos: c.agro_custos, pesagens: c.agro_pesagens },
+        agro: { movs: FC.lotes.expandeTrocas(c.agro_movimentos), movsBrutos: c.agro_movimentos, custos: c.agro_custos, pesagens: c.agro_pesagens },
+        // tabelas do plano de evolução (só a conta demo tem)
+        potes: c.potes || [], potesMovs: c.potes_movimentos || [], movimentosInternos: c.movimentos_internos || [], agroLotes: c.agro_lotes || [],
+        parametros: c.parametros_fiscais || [], despesas: c.despesas || [], parcelamentos: c.parcelamentos || [], eventosFuturos: c.eventos_futuros || [],
+        planosMensais: c.planos_mensais || [], planosLog: c.planos_mensais_log || [], alertasPreco: c.alertas_preco || [], revisoes: c.revisoes || [], notificacoes: c.notificacoes || [],
       };
     },
     inserir: async (t: string, linha: any) => { const l = { id: t === "ativos" || t === "renda_fixa" ? ++seqId : uuid(), criado_em: new Date().toISOString(), ...linha }; tabela(t).push(l); return l; },
@@ -394,7 +406,7 @@ export function instalaFixture() {
   const perfil: any = lePerfil() || { atual: null, rascunho: null, plano: null, historico: [], planos: [], adiamentos: 0 };
   const guarda = <X,>(x: X): X => { try { globalThis.sessionStorage?.setItem(CHAVE_PERFIL, JSON.stringify(perfil)); } catch { /* sem sessão */ } return x; };
   Object.assign(FC.perfilDb, {
-    carrega: async () => ({ indisponivel: false, atual: perfil.atual, rascunho: perfil.rascunho, plano: perfil.plano, adiamentos: perfil.adiamentos || 0, modo: "educativo", ativou: !!perfil.atual }),
+    carrega: async () => demo ? { indisponivel: true } : ({ indisponivel: false, atual: perfil.atual, rascunho: perfil.rascunho, plano: perfil.plano, adiamentos: perfil.adiamentos || 0, modo: "educativo", ativou: !!perfil.atual }),
     salvaRascunho: async (respostas: any, passo: any) => guarda(perfil.rascunho = { respostas, passo, versao_modelo: FC.PERFIL.versao, atualizado_em: new Date().toISOString() }),
     apagaRascunho: async () => { perfil.rascunho = null; guarda(0); },
     conclui: async (p: any) => {
