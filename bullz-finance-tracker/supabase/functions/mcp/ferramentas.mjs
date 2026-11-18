@@ -59,6 +59,9 @@ function posicao(a) {
     quantidade: p ? n8(p.quantidade) : 0, preco_medio: p ? np(p.preco_medio) : null, custo: p ? n2(p.custo) : null, valor: p ? n2(p.atual) : 0,
     resultado: p ? n2(p.resultado) : null, resultado_pct: p ? n2(p.variacao) : null,
     nota: n2(a.score), leitura: a.veredito || null, ...(a.erro ? { erro: a.erro } : {}),
+    // preço de empate (Marco 9): o preço médio; quanto falta subir para chegar nele
+    preco_empate: p && p.preco_medio > 0 ? np(p.preco_medio) : null,
+    alta_necessaria_pct: p && p.preco_medio > 0 && a.preco > 0 ? n2(a.preco < p.preco_medio ? (p.preco_medio / a.preco - 1) * 100 : 0) : null,
     ...(p && p.custo_estimado ? { custo_estimado: true } : {}), ...(a.cotacao_quebrada ? { cotacao_quebrada: true, nota_sem_cotacao: n2(a.score_bruto) } : {}) };
 }
 const rent = (r) => r && ({ aplicado: n2(r.aplicado), devolvido: n2(r.devolvido), valor_atual: n2(r.valor_atual), ganho: n2(r.ganho),
@@ -560,6 +563,28 @@ export function ferramentas(z) {
         const p = planoDoMesSalvo(e, mes);
         if (!p) throw new ErroMcp(`Não há plano salvo para ${mes}. Gere um com gerar_plano_mensal.`);
         return resumoPlanoMensal(FC, e, p, true);
+      },
+    },
+    {
+      nome: "listar_alertas",
+      titulo: "Alertas de preço e revisões",
+      descricao: "Os alertas de preço cadastrados (acima, abaixo ou empate com o preço médio), com o preço de agora, o alvo e se dispararia hoje; as revisões programadas (as vencidas primeiro) e as notificações recentes. Cada item traz o `id` (tabelas alertas_preco e revisoes em editar_registro e apagar_registro).",
+      entrada: () => ({ incluir_feitas: z.boolean().default(false) }),
+      async executa(ctx, { incluir_feitas }) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: true });
+        const av = FC.alertasPreco.avalia(e.base.alertasPreco || [], e.dados);
+        const hoje = FC.datas.hoje();
+        return {
+          alertas: (e.base.alertasPreco || []).map((al) => { const x = av.find((y) => y.alerta === al) || {};
+            return { id: al.id, ticker: al.ticker, condicao: al.condicao, valor: np(al.valor), ligado: al.ligado !== false, alvo: np(x.alvo), preco_agora: np(x.preco),
+              dispararia_hoje: !!x.dispara, ultimo_disparo: al.ultimo_disparo || null, ...(x.motivo ? { observacao: x.motivo } : {}) }; }),
+          revisoes: (e.base.revisoes || []).filter((r) => incluir_feitas || !r.feita).sort((a, b) => a.data.localeCompare(b.data))
+            .map((r) => ({ id: r.id, ticker: r.ticker || null, tema: r.tema || null, data: r.data, pergunta: r.pergunta, feita: !!r.feita, vencida: !r.feita && r.data <= hoje })),
+          notificacoes: (e.base.notificacoes || []).slice(-20).reverse().map((n) => ({ quando: n.quando, titulo: n.titulo, texto: n.texto, lida: !!n.lida })),
+          sugestoes_de_empate: enxuga(FC.alertasPreco.sugereEmpates(e.dados, e.base.alertasPreco || [])),
+          ...(FC.db.temTabela("alertas_preco") ? {} : { aviso: MIGRATION("0009", "alertas_preco") }), ...avisoMercado(e),
+        };
       },
     },
     {
@@ -1178,6 +1203,46 @@ export function ferramentas(z) {
         }
         if (!a.simular) await audita(ctx, "mcp_plano_mensal", { acao: "reconstruir", meses: a.meses });
         return { ...(a.simular ? { simulado: true } : { ok: true }), planos: saida };
+      },
+    },
+    {
+      nome: "criar_alerta_preco",
+      titulo: "Criar um alerta de preço",
+      descricao: "Avisa quando o preço de um ativo da carteira passar de um valor (`acima`), cair abaixo dele (`abaixo`) ou voltar ao preço médio da posição (`empate`, sem valor). O aviso aparece nos alertas do app; o agendamento avalia depois de cada registro diário de cotações. `simular: true` mostra se dispararia hoje, sem gravar.",
+      entrada: () => ({ ticker, condicao: z.enum(["acima", "abaixo", "empate"]), valor: positivo.optional().describe("acima e abaixo: o preço alvo"), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        if (a.condicao !== "empate" && !a.valor) throw new ErroMcp("Informe o valor do alerta (acima ou abaixo).");
+        const e = await carrega(ctx, { comMercado: true });
+        const at = e.dados.ativos.find((x) => x.ticker === a.ticker);
+        if (!at) throw new ErroMcp(`${a.ticker} não está cadastrado.`);
+        if (a.condicao === "empate" && !(at.posicao && at.posicao.preco_medio > 0)) throw new ErroMcp(`${a.ticker} não tem preço médio: o alerta de empate precisa dele.`);
+        const linha = { ticker: a.ticker, condicao: a.condicao, valor: a.condicao === "empate" ? null : a.valor, ligado: true };
+        const r = FC.alertasPreco.dispara(linha, at.preco, at.posicao ? at.posicao.preco_medio : null);
+        const efeito = { alvo: np(r.alvo), preco_agora: np(at.preco), dispararia_hoje: r.dispara };
+        if (a.simular) return { simulado: true, registro: linha, ...efeito };
+        if (!FC.db.temTabela("alertas_preco")) throw new ErroMcp(MIGRATION("0009", "alertas_preco"));
+        const salvo = await grava(() => FC.db.inserir("alertas_preco", linha));
+        await audita(ctx, "mcp_cadastro", { tabela: "alertas_preco", id: salvo.id, ticker: a.ticker });
+        return { ok: true, tabela: "alertas_preco", registro: enxuga(sem(salvo)), ...efeito };
+      },
+    },
+    {
+      nome: "criar_revisao",
+      titulo: "Programar uma revisão",
+      descricao: "Agenda uma pergunta para rever um ativo ou um tema numa data (ex.: \"o BNB ainda faz sentido?\" em 01/03). Na data, ela aparece nos alertas do resumo até ser marcada como feita (editar_registro, tabela revisoes, campo feita). `simular: true` não grava.",
+      entrada: () => ({ ticker: ticker.optional(), tema: texto(80).optional(), data, pergunta: texto(300).min(3), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        if (!a.ticker && !a.tema) throw new ErroMcp("Informe o ticker ou o tema da revisão.");
+        const linha = { ticker: a.ticker || null, tema: a.tema || null, data: a.data, pergunta: a.pergunta, feita: false };
+        if (a.simular) return { simulado: true, registro: linha, aparece_em: a.data };
+        if (!FC.db.temTabela("revisoes")) throw new ErroMcp(MIGRATION("0009", "revisoes"));
+        const salvo = await grava(() => FC.db.inserir("revisoes", linha));
+        await audita(ctx, "mcp_cadastro", { tabela: "revisoes", id: salvo.id });
+        return { ok: true, tabela: "revisoes", registro: enxuga(sem(salvo)), aparece_em: a.data };
       },
     },
     {

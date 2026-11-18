@@ -1,5 +1,5 @@
 /* GERADO por scripts/gera-nucleo-mcp.js — não edite à mão.
- * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/lotes.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/potes.js, modelo/movimentos.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas.js, modelo/salario.js, modelo/renda-mes.js, modelo/hierarquia.js, modelo/projecao-mensal.js, modelo/plano-mensal.js, modelo/auditoria.js, modelo/retrospectiva.js. */
+ * Fontes: src/nucleo/shim.js e, de nucleo/: config.js, util.js, padroes.js, layout.js, supa.js, graficos.js, modelo/avaliador.js, modelo/agro.js, modelo/lotes.js, modelo/rentabilidade.js, modelo/carteira.js, modelo/base.js, modelo/perfil.js, modelo/recomendacao.js, modelo/renda.js, modelo/projecao.js, modelo/importador.js, modelo/dividendos.js, modelo/caixa-proventos.js, modelo/potes.js, modelo/movimentos.js, modelo/desempenho.js, modelo/impostos.js, modelo/alertas-preco.js, modelo/alertas.js, modelo/salario.js, modelo/renda-mes.js, modelo/hierarquia.js, modelo/projecao-mensal.js, modelo/plano-mensal.js, modelo/auditoria.js, modelo/retrospectiva.js. */
 /* eslint-disable */
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
@@ -1482,7 +1482,7 @@ FC.config = {
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos, agroLotes, parametros, despesas, parcelamentos, eventosFuturos, planosMensais, planosLog] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos, agroLotes, parametros, despesas, parcelamentos, eventosFuturos, planosMensais, planosLog, alertasPreco, revisoes, notificacoes] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
@@ -1491,6 +1491,7 @@ FC.config = {
         opcional("potes", "criado_em"), opcional("potes_movimentos", "data"), opcional("movimentos_internos", "data"),
         opcional("agro_lotes", "criado_em"), opcional("parametros_fiscais", "chave"),
         opcional("despesas", "data"), opcional("parcelamentos", "inicio"), opcional("eventos_futuros", "data"), opcional("planos_mensais", "mes"), opcional("planos_mensais_log", "quando"),
+        opcional("alertas_preco", "criado_em"), opcional("revisoes", "data"), opcional("notificacoes", "quando"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
@@ -1505,7 +1506,8 @@ FC.config = {
           cabecas_previstas: num(l.cabecas_previstas) })),
         parametros: parametros.map((p) => ({ ...p, valor: num(p.valor) })),
         despesas: despesas.map((d) => ({ ...d, valor: num(d.valor) })),
-        eventosFuturos, planosLog,
+        eventosFuturos, planosLog, revisoes, notificacoes,
+        alertasPreco: alertasPreco.map((a) => ({ ...a, valor: num(a.valor) })),
         planosMensais: planosMensais.map((p) => ({ ...p, meta_total: num(p.meta_total), aportado_total: num(p.aportado_total), valor_fixo: num(p.valor_fixo),
           sobra_prevista: num(p.sobra_prevista), sobra_real: num(p.sobra_real), renda_real: num(p.renda_real), impostos_previstos: num(p.impostos_previstos),
           despesas_previstas: num(p.despesas_previstas), impostos_reais: num(p.impostos_reais), despesas_reais: num(p.despesas_reais) })),
@@ -7746,6 +7748,79 @@ FC.config = {
 })();
 
 
+/* ---- modelo/alertas-preco.js */
+/* Alertas de preço, preço de empate e revisões programadas (Marco 9).
+ *
+ * Alerta: { ticker, condicao: acima | abaixo | empate, valor, ligado, ultimo_disparo }.
+ * "empate" usa o preço médio atual da posição: dispara quando o preço chega
+ * ao preço médio (preço ≥ preço médio), o ponto em que a posição deixa de
+ * estar no prejuízo. Comparação em centavos, para 4.313,00 disparar e
+ * 4.312,99 não.
+ *
+ * Revisão: { ticker | tema, data, pergunta, feita }. Aparece nos alertas do
+ * resumo a partir da data, até ser marcada como feita.
+ *
+ * O mesmo cálculo roda no app, no MCP e (em SQL, pelo agendamento
+ * fc-avalia-alertas) no banco, que grava a notificação in-app. */
+(function () {
+  const FC = window.FC;
+  const cent = (v) => Math.round(Number(v) * 100);
+
+  /** preço de empate e quanto falta subir, por posição */
+  function empate(posicao, preco) {
+    if (!posicao || !(posicao.preco_medio > 0)) return { preco_empate: null, alta_necessaria_pct: null };
+    const pe = posicao.preco_medio;
+    return { preco_empate: pe, alta_necessaria_pct: preco > 0 && preco < pe ? (pe / preco - 1) * 100 : 0 };
+  }
+
+  /** o alerta dispara com este preço? (e qual o alvo) */
+  function dispara(alerta, preco, precoMedio) {
+    if (!(Number(preco) > 0)) return { dispara: false, alvo: null, motivo: "sem cotação" };
+    const alvo = alerta.condicao === "empate" ? precoMedio : Number(alerta.valor);
+    if (!(alvo > 0)) return { dispara: false, alvo: null, motivo: alerta.condicao === "empate" ? "sem preço médio" : "sem valor" };
+    const p = cent(preco), a = cent(alvo);
+    const ok = alerta.condicao === "abaixo" ? p <= a : p >= a;   // acima e empate: chegou ao alvo
+    return { dispara: ok, alvo };
+  }
+
+  /** avalia os alertas ligados contra as posições de hoje */
+  function avalia(alertas, dados) {
+    const saida = [];
+    for (const al of alertas || []) {
+      if (al.ligado === false) continue;
+      const a = (dados.ativos || []).find((x) => x.ticker === al.ticker);
+      if (!a || a.cotacao_quebrada) { saida.push({ alerta: al, dispara: false, motivo: a ? "cotação quebrada" : "ativo fora da carteira" }); continue; }
+      const pm = a.posicao ? a.posicao.preco_medio : null;
+      const r = dispara(al, a.preco, pm);
+      saida.push({ alerta: al, ticker: al.ticker, preco: a.preco, ...r });
+    }
+    return saida;
+  }
+
+  /** texto do aviso de um disparo */
+  function texto(d) {
+    const brl = (v) => FC.fmt.brlTexto(v);
+    const al = d.alerta;
+    if (al.condicao === "empate") return { titulo: `${al.ticker} voltou ao preço médio`, texto: `Cotação ${brl(d.preco)}, preço médio ${brl(d.alvo)}: a posição saiu do prejuízo.` };
+    return { titulo: `${al.ticker} ${al.condicao === "acima" ? "passou de" : "caiu abaixo de"} ${brl(d.alvo)}`, texto: `Cotação de agora: ${brl(d.preco)}.` };
+  }
+
+  /** revisões vencidas (a partir da data, até feita) */
+  function revisoesDoDia(revisoes, hoje = FC.datas.hoje()) {
+    return (revisoes || []).filter((r) => !r.feita && r.data <= hoje).sort((a, b) => a.data.localeCompare(b.data));
+  }
+
+  /** sugestão de alertas de empate para as posições no prejuízo (onboarding, Marco 14) */
+  function sugereEmpates(dados, alertas = []) {
+    const tem = new Set((alertas || []).filter((a) => a.condicao === "empate").map((a) => a.ticker));
+    return (dados.ativos || []).filter((a) => a.posicao && a.posicao.preco_medio > 0 && a.preco > 0 && a.preco < a.posicao.preco_medio && !tem.has(a.ticker))
+      .map((a) => ({ ticker: a.ticker, condicao: "empate", preco: a.preco, preco_medio: a.posicao.preco_medio, alta_necessaria_pct: (a.posicao.preco_medio / a.preco - 1) * 100 }));
+  }
+
+  FC.alertasPreco = { empate, dispara, avalia, texto, revisoesDoDia, sugereEmpates };
+})();
+
+
 /* ---- modelo/alertas.js */
 /* Alertas: o que merece atenção na carteira, em linguagem de gente.
  * Concentração, títulos vencendo, limite do FGC, reserva de emergência e
@@ -7902,6 +7977,23 @@ FC.config = {
         if (hz.reserva.aumentar) {
           saida.push({ nivel: "info", titulo: `Reserva de ${hz.reserva.meses_sugerido} meses sugerida`,
             texto: `Sua renda tem PJ sem 13º, férias e FGTS. A meta atual é de ${hz.reserva.meses_atual} meses; ajuste em Ajustes se fizer sentido.`, link: "#/ajustes/criterios" });
+        }
+      }
+    } catch (e) { console.error(e); }
+
+    // ---- alertas de preço, revisões e notificações (Marco 9)
+    try {
+      if (FC.alertasPreco && base) {
+        for (const d of FC.alertasPreco.avalia(base.alertasPreco || [], dados)) {
+          if (!d.dispara) continue;
+          const t = FC.alertasPreco.texto(d);
+          saida.push({ nivel: "medio", titulo: t.titulo, texto: t.texto, link: "#/ativos/" + d.ticker, origem: "alerta_preco", ref: d.alerta.id });
+        }
+        for (const r of FC.alertasPreco.revisoesDoDia(base.revisoes || [])) {
+          saida.push({ nivel: "info", titulo: `Revisão: ${r.ticker || r.tema}`, texto: r.pergunta, link: r.ticker ? "#/ativos/" + r.ticker : "#/inicio", origem: "revisao", ref: r.id });
+        }
+        for (const n of (base.notificacoes || []).filter((x) => !x.lida && x.origem !== "alerta_preco").slice(0, 5)) {
+          saida.push({ nivel: "info", titulo: n.titulo, texto: n.texto, origem: "notificacao", ref: n.id });
         }
       }
     } catch (e) { console.error(e); }

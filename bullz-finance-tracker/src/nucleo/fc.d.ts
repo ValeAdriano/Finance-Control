@@ -38,7 +38,7 @@ export interface FC {
   // modelos de cálculo (modelo/*)
   avaliador: Ns; agro: Ns; rentab: Ns; carteira: Ns; base: Ns; perfil: Ns; recomendacao: Ns;
   renda: Ns; projecao: Ns; importador: Ns; dividendos: Ns; caixaProventos: Ns; desempenho: Ns; impostos: Ns;
-  alertas: Ns; salario: Ns; auditoria: Ns; potes: Ns; movimentos: Ns; lotes: Ns; rendaMes: Ns; hierarquia: Ns; projecaoMensal: Ns; planoMensal: Ns; recap: Ns; graham: Fn;
+  alertas: Ns; salario: Ns; auditoria: Ns; potes: Ns; movimentos: Ns; lotes: Ns; rendaMes: Ns; hierarquia: Ns; projecaoMensal: Ns; planoMensal: Ns; alertasPreco: Ns; recap: Ns; graham: Fn;
 
   // supabase/config (config.js, supa.js) — superfície livre
   config: { supabaseUrl: string; supabaseChave: string };

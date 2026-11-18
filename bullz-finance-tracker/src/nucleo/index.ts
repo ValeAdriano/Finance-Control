@@ -71,6 +71,7 @@ export function carregaNucleo(): FCTipo {
   require("../../nucleo/modelo/movimentos.js");
   require("../../nucleo/modelo/desempenho.js");
   require("../../nucleo/modelo/impostos.js");
+  require("../../nucleo/modelo/alertas-preco.js");
   require("../../nucleo/modelo/alertas.js");
   require("../../nucleo/modelo/salario.js");
   require("../../nucleo/modelo/renda-mes.js");

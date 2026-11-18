@@ -24,7 +24,8 @@ const recorta = (de, ate) => {
 // do schema: o 2FA exigido pelo banco, o admin e o bloco do MCP inteiro
 const SQL_2FA = recorta("create schema if not exists privado;", "drop function if exists public.painel_mfa_ok();");
 const SQL_ADMIN = recorta("create or replace function privado.eh_admin()", "-- ------------------------------------------------------------ uso do app");
-const SQL_MCP = recorta("create table if not exists public.mcp_acessos");
+// até as migrations do plano de evolução (que têm teste próprio: testes/migrations-sql.test.js)
+const SQL_MCP = recorta("create table if not exists public.mcp_acessos", "--  MIGRATIONS DO PLANO DE EVOLUÇÃO");
 
 const A = "00000000-0000-0000-0000-00000000000a", B = "00000000-0000-0000-0000-00000000000b";
 const DADOS = ["ativos", "renda_fixa", "aportes", "preferencias", "agro_movimentos", "agro_custos", "agro_pesagens", "patrimonio_historico", "ganhos"];

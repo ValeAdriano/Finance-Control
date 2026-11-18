@@ -15,6 +15,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 9. `supabase/migrations/0007_eventos_futuros.sql`
 10. `supabase/migrations/0008_planos_mensais.sql` (planos, log, colunas em aportes, agendamento `fc-fecha-planos`)
 11. backfill: `reconstruir_planos_mensais` com `["2026-10", "2026-11"]` pelo MCP (simule antes)
+12. `supabase/migrations/0009_alertas.sql` (alertas_preco, revisoes, notificacoes, agendamento `fc-avalia-alertas`)
 
 ## Edge Functions a publicar
 
@@ -142,3 +143,17 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0008_planos_mensais.sql`.
 
 **Pendências**: reatribuir aporte e editar destinos do rascunho pela tela (hoje pelo MCP).
+
+## M9 · Alertas e acompanhamento (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/alertas-preco.js`: preço de empate, disparo em centavos (acima, abaixo, empate), avaliação contra as posições, revisões do dia e sugestão de empates para posições no prejuízo (D-022).
+- Alertas do Início: disparos de preço, revisões vencidas e notificações não lidas.
+- Banco: `privado.avalia_alertas_preco()` + agendamento `fc-avalia-alertas` grava em `notificacoes`.
+- MCP: `listar_posicoes.preco_empate` e `alta_necessaria_pct`; `criar_alerta_preco` e `criar_revisao` (com `simular`); `listar_alertas`.
+- **Validação das migrations num Postgres 16 real**: `testes/migrations-sql.test.js` (`npm run teste:banco`) aplica o `schema.sql` inteiro duas vezes sobre um Supabase de mentira e confere RLS, políticas, seed sem duplicar, checks, índice de um plano ativo, agendamentos e o fechamento automático. O `testes/mcp-sql.test.js` passou a recortar o schema antes das migrations.
+- Testes: `testes/alertas-m9.test.js` (3), com o critério de aceite do BNB.
+
+**Migrations**: `0009_alertas.sql`.
+
+**Pendências**: tela para criar alerta no detalhe do ativo (hoje pelo MCP e pelo onboarding do M14).

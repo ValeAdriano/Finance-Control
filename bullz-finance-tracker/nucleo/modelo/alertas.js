@@ -157,6 +157,23 @@
       }
     } catch (e) { console.error(e); }
 
+    // ---- alertas de preço, revisões e notificações (Marco 9)
+    try {
+      if (FC.alertasPreco && base) {
+        for (const d of FC.alertasPreco.avalia(base.alertasPreco || [], dados)) {
+          if (!d.dispara) continue;
+          const t = FC.alertasPreco.texto(d);
+          saida.push({ nivel: "medio", titulo: t.titulo, texto: t.texto, link: "#/ativos/" + d.ticker, origem: "alerta_preco", ref: d.alerta.id });
+        }
+        for (const r of FC.alertasPreco.revisoesDoDia(base.revisoes || [])) {
+          saida.push({ nivel: "info", titulo: `Revisão: ${r.ticker || r.tema}`, texto: r.pergunta, link: r.ticker ? "#/ativos/" + r.ticker : "#/inicio", origem: "revisao", ref: r.id });
+        }
+        for (const n of (base.notificacoes || []).filter((x) => !x.lida && x.origem !== "alerta_preco").slice(0, 5)) {
+          saida.push({ nivel: "info", titulo: n.titulo, texto: n.texto, origem: "notificacao", ref: n.id });
+        }
+      }
+    } catch (e) { console.error(e); }
+
     // ---- IR a pagar: dinheiro que parece patrimônio, mas já tem dono
     if (pts && pts.comprometido > 0.5) {
       saida.push({ nivel: "info", titulo: `${brl(pts.comprometido)} comprometidos com IR`,

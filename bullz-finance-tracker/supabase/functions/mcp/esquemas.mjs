@@ -22,7 +22,7 @@ export const CATEGORIAS_GADO = ["bezerro", "bezerra", "garrote", "novilha", "boi
 export const CATEGORIAS_CUSTO = ["nutricao", "sanidade", "mao_de_obra", "arrendamento", "frete", "maquinas", "impostos", "outros"];
 
 /** tabelas que `editar_registro` e `apagar_registro` alcançam (e mais nenhuma) */
-export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes", "despesas", "parcelamentos", "eventos_futuros"];
+export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes", "despesas", "parcelamentos", "eventos_futuros", "alertas_preco", "revisoes"];
 
 export function dataValida(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -99,6 +99,8 @@ export function camposPorTabela(z) {
     eventos_futuros: {
       data, tipo: z.enum(["venda_agro", "mudanca_renda", "aporte_extra", "resgate"]), parametros: z.record(z.string(), z.unknown()), descricao: texto(160),
     },
+    alertas_preco: { condicao: z.enum(["acima", "abaixo", "empate"]), valor: positivo.nullable(), ligado: z.boolean() },
+    revisoes: { ticker: ticker.nullable(), tema: texto(80).nullable(), data, pergunta: texto(300).min(3), feita: z.boolean() },
     agro_lotes: {
       nome: texto(80).min(1), valor_estimado_cabeca: naoNegativo.nullable(), data_estimativa: data.nullable(),
       custos_inclusos_no_preco: z.boolean(), data_prevista: data.nullable(), cabecas_previstas: z.number().int().positive().nullable(),

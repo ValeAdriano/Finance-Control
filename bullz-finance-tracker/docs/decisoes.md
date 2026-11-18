@@ -95,3 +95,9 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Backfill (`reconstruir_planos_mensais`): meta pelo plano global de hoje e pela renda do mês; cada ativo ou título que recebeu aporte vira um destino, com o previsto do destino do plano que ele casa (o próprio ativo, ou o pilar dele) repartido pelo executado. Aporte sem destino correspondente vai para `fora_do_plano`. Mês com plano salvo fica como está.
 - Fechamento automático: `privado.fecha_planos_vencidos()` no pg_cron (`fc-fecha-planos`, dia 1º às 03:05 UTC) só muda o status e marca `contexto.apurar`; o realizado é apurado na próxima chamada de `fechar_plano_mensal` (ou pela tela, ao fechar). Motivo: o cálculo de execução mora no núcleo JS.
 - Reatribuir um aporte a outro destino: pelo MCP (`editar_registro` em `aportes`, campos `plano_mensal_id` e `destino_idx`). A tela ainda não tem o botão.
+
+## D-022 · Alertas (M9)
+- "Empate" = o preço chega ao preço médio da posição (preço ≥ preço médio), comparado em centavos. O preço de empate em `listar_posicoes` é o preço médio; `alta_necessaria_pct` é quanto falta subir (0 quando já está acima).
+- Canal: o Bullz não tem e-mail nem push. A entrega é in-app: os alertas que disparam com a cotação de agora aparecem na lista de alertas do Início (e em `resumo_patrimonio.alertas`); os disparos do agendamento vão para a tabela `notificacoes`.
+- Agendamento `fc-avalia-alertas` às 21h40 UTC (18h40 de Brasília), meia hora depois do registro diário das 18h10, que grava o preço e o custo de cada ativo em `patrimonio_historico.ativos`. A função `privado.avalia_alertas_preco()` usa essa foto e dispara cada alerta no máximo uma vez a cada 20 horas.
+- Revisões aparecem a partir da data até `feita = true`.
