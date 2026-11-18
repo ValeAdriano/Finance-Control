@@ -136,6 +136,27 @@
         texto: "Com ele o painel mede se a reserva de emergência está completa e quanto falta para viver de renda.", link: "#/ajustes/criterios" });
     }
 
+    // ---- hierarquia RF › Ações › Cripto (Marco 6)
+    try {
+      if (FC.hierarquia && prefs && prefs.hierarquia && prefs.hierarquia.modo_alocacao === "hierarquia" && base) {
+        const hz = FC.hierarquia.analisa({ dados, prefs, base });
+        const pc = (v) => FC.fmt.num(v, 0) + "%";
+        if (hz.plano && !hz.plano.ok) {
+          const m = hz.plano.mais_proxima;
+          saida.push({ nivel: "medio", titulo: "O plano de aporte quebra a ordem RF › Ações › Cripto",
+            texto: `${hz.plano.violacoes.map((v) => v.texto).join("; ")}. A divisão válida mais próxima é RF ${pc(m.rf)}, Ações ${pc(m.acoes)}, Cripto ${pc(m.cripto)}.`, link: "#/salario" });
+        }
+        if (!hz.ordem_respeitada) {
+          saida.push({ nivel: "info", titulo: "Carteira fora da ordem RF › Ações › Cripto",
+            texto: hz.meses_para_corrigir != null ? `Com o aporte atual e preços parados, a ordem se corrige em ${hz.meses_para_corrigir} ${hz.meses_para_corrigir === 1 ? "mês" : "meses"}.` : "Sem aporte mensal, a ordem não se corrige sozinha.", link: "#/salario" });
+        }
+        if (hz.reserva.aumentar) {
+          saida.push({ nivel: "info", titulo: `Reserva de ${hz.reserva.meses_sugerido} meses sugerida`,
+            texto: `Sua renda tem PJ sem 13º, férias e FGTS. A meta atual é de ${hz.reserva.meses_atual} meses; ajuste em Ajustes se fizer sentido.`, link: "#/ajustes/criterios" });
+        }
+      }
+    } catch (e) { console.error(e); }
+
     // ---- IR a pagar: dinheiro que parece patrimônio, mas já tem dono
     if (pts && pts.comprometido > 0.5) {
       saida.push({ nivel: "info", titulo: `${brl(pts.comprometido)} comprometidos com IR`,

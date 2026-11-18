@@ -22,6 +22,7 @@
       plano: FC.mescla(FC.PADRAO_PLANO, brutas.plano),
       proventos: FC.mescla(FC.PADRAO_PROVENTOS, brutas.proventos),
       layout: brutas.layout || null,
+      hierarquia: FC.mescla(FC.PADRAO_HIERARQUIA || {}, brutas.hierarquia),
     };
     // proventos: o destino é a fonte; o booleano do plano sai dele
     p.plano.destino_proventos = FC.salario.destinoProventos(p.plano, p.proventos);

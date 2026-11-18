@@ -104,6 +104,21 @@ function planejaMov(FC, e, a) {
   try { return FC.movimentos.planeja(e, a); } catch (x) { throw new ErroMcp(x.message); }
 }
 
+// ---------------------------------------------------------------- hierarquia
+const divisao = (x) => x && { rf: n2(x.rf), acoes: n2(x.acoes), cripto: n2(x.cripto) };
+function hierarquiaResumo(FC, e) {
+  try {
+    const h = FC.hierarquia.analisa(e);
+    return {
+      modo_alocacao: h.modo, ordem_respeitada: h.ordem_respeitada, meses_para_corrigir: h.meses_para_corrigir,
+      divisao_sugerida_aporte: { ...divisao(h.divisao_sugerida_aporte), motivo: h.divisao_sugerida_aporte.motivo },
+      hierarquia: { carteira_pct: divisao(h.carteira.pct), faixas: h.faixas, aporte_mensal: n2(h.aporte_mensal),
+        plano: h.plano ? { divisao: divisao(h.plano.divisao), valido: h.plano.ok, violacoes: h.plano.violacoes.map((v) => v.texto), divisao_valida_mais_proxima: divisao(h.plano.mais_proxima) } : null,
+        reserva: h.reserva },
+    };
+  } catch (x) { console.error(x); return {}; }
+}
+
 // cria os potes padrão de quem ainda não tem nenhum (conta nova)
 async function garantePotes(ctx, e) {
   const { FC } = ctx;
@@ -174,6 +189,7 @@ export function ferramentas(z) {
             pct_na_base_da_meta: n2(l.pct_meta), desvio_pct: n2(l.desvio_pct), falta_para_a_meta: n2(l.desvio_reais), fora_da_meta: !!l.fora_meta })),
           rentabilidade_desde_o_inicio: d.rentab ? rent(d.rentab.total) : null,
           potes: resumoPotes(d.potes),
+          ...hierarquiaResumo(FC, e),
           alertas, cotacoes_de: d.atualizado, ...avisoMercado(e),
         };
       },
@@ -871,6 +887,29 @@ export function ferramentas(z) {
         const salvo = await grava(() => FC.db.inserir("parcelamentos", linha));
         await audita(ctx, "mcp_cadastro", { tabela: "parcelamentos", id: salvo.id });
         return { ok: true, tabela: "parcelamentos", registro: enxuga(sem(salvo)), ...efeito };
+      },
+    },
+    {
+      nome: "configurar_alocacao",
+      titulo: "Configurar o modo de alocação",
+      descricao: "Escolhe entre `metas_fixas` (metas por pilar, como sempre) e `hierarquia` (RF › Ações › Cripto com faixas: RF 45–70% com piso de 40%, Ações 22–38% e nunca acima da RF, Cripto 5–17% e nunca acima de Ações). Faixas e meses de reserva para renda PJ são opcionais. `simular: true` mostra a avaliação da carteira e do plano sem gravar.",
+      entrada: () => ({ modo_alocacao: z.enum(["metas_fixas", "hierarquia"]),
+        faixas: z.object({ rf: z.object({ min: z.number(), max: z.number(), piso: z.number() }).strict(), acoes: z.object({ min: z.number(), max: z.number() }).strict(),
+          cripto: z.object({ min: z.number(), max: z.number() }).strict() }).strict().optional(),
+        meses_reserva_pj: z.number().int().min(1).max(36).optional(), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: true });
+        const nova = { ...e.prefs.hierarquia, modo_alocacao: a.modo_alocacao, ...(a.faixas ? { faixas: a.faixas } : {}), ...(a.meses_reserva_pj ? { meses_reserva_pj: a.meses_reserva_pj } : {}) };
+        const f = nova.faixas;
+        if (f.rf.min > f.rf.max || f.acoes.min > f.acoes.max || f.cripto.min > f.cripto.max) throw new ErroMcp("Faixa com mínimo acima do máximo.");
+        if (!FC.hierarquia.maisProxima({ rf: 0, acoes: 0, cripto: 0 }, f)) throw new ErroMcp("Nenhuma divisão cabe nessas faixas somando 100%.");
+        const avaliacao = hierarquiaResumo(FC, { ...e, prefs: { ...e.prefs, hierarquia: nova } });
+        if (a.simular) return { simulado: true, hierarquia: nova, ...avaliacao };
+        await grava(() => FC.db.gravaPrefs({ hierarquia: nova }));
+        await audita(ctx, "mcp_metas", { hierarquia: nova });
+        return { ok: true, hierarquia: nova, ...avaliacao };
       },
     },
     {

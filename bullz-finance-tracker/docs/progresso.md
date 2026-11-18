@@ -11,6 +11,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 5. `supabase/migrations/0004_agro_lotes.sql` (parametros_fiscais com seed, agro_lotes, colunas de troca e lote)
 6. backfill opcional: `node scripts/backfill-lotes.js` (simula) e `--grava`
 7. `supabase/migrations/0005_renda_pj.sql` (ganhos PJ, despesas, parcelamentos, parâmetros de DAS e Simples)
+8. `supabase/migrations/0006_hierarquia.sql` (preferencias.hierarquia)
 
 ## Edge Functions a publicar
 
@@ -101,3 +102,15 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0005_renda_pj.sql`.
 
 **Pendências**: o formulário de ganho do app ainda não tem os campos de PJ e proporcional (dá pelo MCP); a tela de despesas fica para o onboarding (M14), que pede custo de vida e despesas.
+
+## M6 · Hierarquia de alocação (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/hierarquia.js`: grupos RF/Ações/Cripto, violações (ordem, piso, faixas), divisão válida mais próxima, divisão do plano, divisão sugerida, meses para corrigir e reserva dinâmica (D-019).
+- `preferencias.hierarquia` com padrão; alertas de plano fora da ordem, carteira fora da ordem e reserva sugerida.
+- MCP: `resumo_patrimonio` com `modo_alocacao`, `ordem_respeitada`, `meses_para_corrigir`, `divisao_sugerida_aporte` e `hierarquia`; `configurar_alocacao` (com `simular`).
+- Testes: `testes/hierarquia-m6.test.js` (5), com o critério de aceite da carteira real.
+
+**Migrations**: `0006_hierarquia.sql`.
+
+**Pendências**: a escolha do modo no app entra no onboarding (M14, passo "Como dividir").

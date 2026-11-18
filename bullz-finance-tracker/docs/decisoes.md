@@ -70,3 +70,11 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - Total a investir no fixo + sobra = renda − impostos − despesas (nunca negativo); `sobra` = total − fixo e pode ser negativa (aí `falta_para_o_fixo` diz quanto). Mês fechado usa as despesas reais; mês corrente ou futuro usa o maior entre o lançado e o custo de vida previsto.
 - Custo de vida = média dos 3 meses anteriores que têm despesa; sem nenhum, `objetivos.custo_vida_mensal`.
 - Parcela executada = movimento interno com `parcelamento_id`; as pendentes são as parcelas até o mês, menos as executadas, na ordem.
+
+## D-019 · Hierarquia (M6)
+- Configuração em `preferencias.hierarquia` (coluna nova, migration 0006). `metas_fixas` continua o padrão: quem não escolher não vê nada mudar.
+- "A divisão válida mais próxima" é a de menor distância quadrática numa grade de 0,5 p.p. que respeita faixas, piso e ordem e soma 100%.
+- Divisão sugerida: RF no máximo da faixa se o pote de reserva está abaixo da meta; Cripto no mínimo se a carteira está fora da ordem; sem nenhum dos dois, o meio das faixas; Ações completa 100%. Se o resultado sair das faixas, vale a válida mais próxima.
+- "Meses para corrigir" simula o aporte mensal do plano (ou a premissa) dividido pelo plano, se ele for válido, ou pela sugerida, com preços parados. Sem aporte, `null`.
+- Reserva dinâmica: com ganho PJ ativo e `sem_13_ferias_fgts` diferente de `false`, sugere `meses_reserva_pj` (padrão 12) como alerta. A meta salva não muda.
+- Os alertas da hierarquia só aparecem no modo `hierarquia`. O MCP sempre devolve a avaliação, com `modo_alocacao`.
