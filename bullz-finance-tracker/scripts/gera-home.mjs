@@ -40,7 +40,8 @@ const imagem = (nome, alt, { eager = false, classe = "" } = {}) => `<picture cla
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 // ---------------------------------------------------------------- seções
-const nav = `<header class="nav"><div class="larg nav-in">
+const nav = `<div class="progresso" aria-hidden="true"></div>
+<header class="nav"><div class="larg nav-in">
   <a class="logo" href="/" aria-label="Bullz, início"><img src="/assets/img/icone.svg" width="28" height="28" alt=""><span>Bullz</span></a>
   <nav aria-label="Seções"><ul>${C.nav.links.map((l) => `<li><a href="${l.href}">${esc(l.rotulo)}</a></li>`).join("")}</ul></nav>
   <a class="btn btn-claro" href="/inicio">${esc(C.nav.entrar)}</a>
@@ -50,11 +51,11 @@ const hero = `<section class="hero" aria-labelledby="hero-t">
   <div class="ceu" aria-hidden="true"></div>
   <div class="larg hero-in">
     <div class="hero-txt">
-      <h1 id="hero-t">${esc(C.hero.titulo)}</h1>
-      <p class="sub">${esc(C.hero.sub)}</p>
-      <div class="ctas"><a class="btn btn-claro" href="/inicio">${esc(C.hero.entrar)}</a><a class="btn btn-vidro" href="#tour">${esc(C.hero.tour)}</a></div>
+      <h1 id="hero-t" class="ent" style="--i:0">${esc(C.hero.titulo)}</h1>
+      <p class="sub ent" style="--i:1">${esc(C.hero.sub)}</p>
+      <div class="ctas ent" style="--i:2"><a class="btn btn-claro" href="/inicio">${esc(C.hero.entrar)}</a><a class="btn btn-vidro" href="#tour">${esc(C.hero.tour)}</a></div>
     </div>
-    <div class="aparelhos" aria-hidden="true">
+    <div class="aparelhos ent" style="--i:3" aria-hidden="true">
       <div class="desktop"><div class="barra"><i></i><i></i><i></i></div>
         <video class="auto" muted playsinline loop preload="none" poster="${T.arquivos.poster}" width="1280" height="720">
           <source src="${T.arquivos.webm}" type="video/webm"><source src="${T.arquivos.mp4}" type="video/mp4"></video></div>
@@ -64,8 +65,8 @@ const hero = `<section class="hero" aria-labelledby="hero-t">
 </section>`;
 
 const tour = `<section id="tour" class="secao" aria-labelledby="tour-t"><div class="larg">
-  <h2 id="tour-t">${esc(C.tour.titulo)}</h2><p class="sub">${esc(C.tour.sub)}</p>
-  <div class="tour">
+  <h2 id="tour-t" class="rv">${esc(C.tour.titulo)}</h2><p class="sub rv" style="--i:1">${esc(C.tour.sub)}</p>
+  <div class="tour rv" style="--i:2">
     <video id="video-tour" controls muted playsinline preload="none" poster="${T.arquivos.poster}" width="1280" height="720">
       <source src="${T.arquivos.webm}" type="video/webm"><source src="${T.arquivos.mp4}" type="video/mp4">
       <track kind="captions" srclang="pt-BR" label="Português" src="${T.arquivos.vtt}" default></video>
@@ -74,7 +75,7 @@ const tour = `<section id="tour" class="secao" aria-labelledby="tour-t"><div cla
 </div></section>`;
 
 const telasColagem = ["plano-mensal", "projecao", "agro-lotes", "potes", "alertas"].filter(temCaptura);
-const colagem = `<section class="colagem" aria-label="Telas do app"><div class="larg colagem-in">
+const colagem = `<section class="colagem" aria-label="Telas do app"><div class="larg colagem-in rv">
   ${telasColagem.map((n, i) => `<div class="flutua f${i}" data-vel="${[0.06, -0.04, 0.09, -0.07, 0.05][i]}">${imagem(n, `Tela do Bullz: ${n.replace(/-/g, " ")}`)}</div>`).join("")}
 </div></section>`;
 
@@ -83,34 +84,34 @@ const marquee = `<section class="marquee" aria-label="${esc(C.conectaCom.titulo)
 </section>`;
 
 const pilares = `<section class="secao" aria-labelledby="pil-t"><div class="larg">
-  <h2 id="pil-t">${esc(C.pilares.titulo)}</h2>
-  <div class="grade4">${C.pilares.itens.map((p) => `<article class="pilar" style="--cor:${COR[p.chave]}"><span class="ponto" aria-hidden="true"></span><h3>${esc(p.nome)}</h3><p>${esc(p.frase)}</p></article>`).join("")}</div>
+  <h2 id="pil-t" class="rv">${esc(C.pilares.titulo)}</h2>
+  <div class="grade4">${C.pilares.itens.map((p, i) => `<article class="pilar rv luz" style="--cor:${COR[p.chave]};--i:${i}"><span class="ponto" aria-hidden="true"></span><h3>${esc(p.nome)}</h3><p>${esc(p.frase)}</p></article>`).join("")}</div>
 </div></section>`;
 
 const blocos = `<section id="${C.funcionalidades.id}" class="secao" aria-label="Como funciona"><div class="larg">
   ${C.funcionalidades.itens.map((f, i) => `<article class="bloco${i % 2 ? " inv" : ""}">
-    <div class="bloco-txt"><p class="etq">${esc(f.etiqueta)}</p><h2>${esc(f.titulo)}</h2><p>${esc(f.texto)}</p></div>
-    <div class="bloco-img">${f.captura && temCaptura(f.captura) ? imagem(f.captura, `${f.etiqueta}: tela do Bullz com a conta demo`) : f.conversa ? `<div class="chat" role="img" aria-label="Exemplo de conversa com um assistente de IA">${f.conversa.map((m) => `<p class="msg ${m.quem === "você" ? "eu" : "ia"}"><b>${esc(m.quem)}</b>${esc(m.texto)}</p>`).join("")}</div>` : ""}</div>
+    <div class="bloco-txt rv"><p class="etq">${esc(f.etiqueta)}</p><h2>${esc(f.titulo)}</h2><p>${esc(f.texto)}</p></div>
+    <div class="bloco-img rv" style="--i:1">${f.captura && temCaptura(f.captura) ? imagem(f.captura, `${f.etiqueta}: tela do Bullz com a conta demo`) : f.conversa ? `<div class="chat" role="img" aria-label="Exemplo de conversa com um assistente de IA">${f.conversa.map((m) => `<p class="msg ${m.quem === "você" ? "eu" : "ia"}"><b>${esc(m.quem)}</b>${esc(m.texto)}</p>`).join("")}</div>` : ""}</div>
   </article>`).join("")}
 </div></section>`;
 
 const mais = `<section class="secao" aria-labelledby="mais-t"><div class="larg">
-  <h2 id="mais-t">${esc(C.maisCoisas.titulo)}</h2>
-  <div class="grade3">${C.maisCoisas.itens.map((x) => `<article class="card"><h3>${esc(x.titulo)}</h3><p>${esc(x.texto)}</p></article>`).join("")}</div>
+  <h2 id="mais-t" class="rv">${esc(C.maisCoisas.titulo)}</h2>
+  <div class="grade3">${C.maisCoisas.itens.map((x, i) => `<article class="card rv luz" style="--i:${i % 3}"><h3>${esc(x.titulo)}</h3><p>${esc(x.texto)}</p></article>`).join("")}</div>
 </div></section>`;
 
 const promessas = `<section id="${C.promessas.id}" class="secao" aria-labelledby="pro-t"><div class="larg">
-  <h2 id="pro-t">${esc(C.promessas.titulo)}</h2>
-  <div class="grade3">${C.promessas.itens.map((x) => `<article class="promessa"><h3>${esc(x.titulo)}</h3><p>${esc(x.texto)}</p></article>`).join("")}</div>
+  <h2 id="pro-t" class="rv">${esc(C.promessas.titulo)}</h2>
+  <div class="grade3">${C.promessas.itens.map((x, i) => `<article class="promessa rv luz" style="--i:${i}"><h3>${esc(x.titulo)}</h3><p>${esc(x.texto)}</p></article>`).join("")}</div>
 </div></section>`;
 
 const perguntas = `<section id="${C.perguntas.id}" class="secao" aria-labelledby="faq-t"><div class="larg estreito">
-  <h2 id="faq-t">${esc(C.perguntas.titulo)}</h2>
-  ${C.perguntas.itens.map((q) => `<details><summary>${esc(q.p)}</summary><p>${esc(q.r)}</p></details>`).join("")}
+  <h2 id="faq-t" class="rv">${esc(C.perguntas.titulo)}</h2>
+  ${C.perguntas.itens.map((q, i) => `<details class="rv" style="--i:${i}"><summary>${esc(q.p)}</summary><p>${esc(q.r)}</p></details>`).join("")}
 </div></section>`;
 
 const cta = `<section class="cta" aria-labelledby="cta-t"><div class="ceu baixo" aria-hidden="true"></div><div class="larg">
-  <h2 id="cta-t">${esc(C.ctaFinal.titulo)}</h2><p class="sub">${esc(C.ctaFinal.sub)}</p><a class="btn btn-claro grande" href="/inicio">${esc(C.ctaFinal.botao)}</a>
+  <h2 id="cta-t" class="rv">${esc(C.ctaFinal.titulo)}</h2><p class="sub rv" style="--i:1">${esc(C.ctaFinal.sub)}</p><a class="btn btn-claro grande rv brilho" style="--i:2" href="/inicio">${esc(C.ctaFinal.botao)}</a>
 </div></section>`;
 
 const rodape = `<footer class="rodape"><div class="larg rodape-in"><p>${esc(C.rodape.texto)}</p><ul>${C.rodape.links.map((l) => `<li><a href="${l.href}">${esc(l.rotulo)}</a></li>`).join("")}</ul></div></footer>`;
@@ -189,6 +190,59 @@ details p{color:var(--ink2);margin:8px 0 0}
 .cta{position:relative;overflow:hidden;text-align:center;padding:130px 0}.cta .sub{margin-left:auto;margin-right:auto}
 .rodape{border-top:1px solid var(--linha);padding:28px 0 40px;color:var(--ink2);font-size:14px}
 .rodape-in{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}.rodape ul{display:flex;gap:18px;list-style:none;margin:0;padding:0}
+:root{--ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);interpolate-size:allow-keywords}
+.btn{transition:transform .16s var(--ease-out),background-color .2s ease,border-color .2s ease,box-shadow .2s ease}
+.btn:active{transform:scale(.97)}
+.nav{transition:background-color .3s ease,border-color .3s ease}
+.nav:not(.rolou){background:rgba(5,6,7,.35);border-bottom-color:transparent}
+.nav nav a{position:relative;transition:color .2s ease}
+.nav nav a::after{content:"";position:absolute;left:0;right:0;bottom:-6px;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .25s var(--ease-out)}
+h1{background:linear-gradient(180deg,#fff 30%,#b9bcc6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.progresso{position:fixed;top:0;left:0;right:0;height:2px;z-index:30;background:linear-gradient(90deg,#30d158,#0a84ff,#bf5af2,#c9a77c);transform-origin:left;transform:scaleX(0);pointer-events:none}
+@supports (animation-timeline:scroll()){.progresso{animation:progresso linear both;animation-timeline:scroll(root)}}
+@keyframes progresso{to{transform:scaleX(1)}}
+.ent{animation:entra .9s var(--ease-out) both;animation-delay:calc(var(--i,0)*90ms + 60ms)}
+.aparelhos.ent{animation-duration:1.2s}
+@keyframes entra{from{opacity:0;transform:translateY(18px)}}
+.ceu::after{content:"";position:absolute;inset:-20% -10% auto;height:120%;background:radial-gradient(600px 260px at 30% 70%,rgba(10,132,255,.14),transparent 70%),radial-gradient(520px 240px at 75% 60%,rgba(191,90,242,.10),transparent 70%);animation:aurora 18s var(--ease-in-out) infinite alternate;pointer-events:none}
+@keyframes aurora{to{transform:translate3d(4%,-3%,0) scale(1.08)}}
+.celular{animation:flutua 7s ease-in-out infinite alternate}
+@keyframes flutua{to{transform:translateY(-10px)}}
+.js .rv{opacity:0;transform:translateY(22px);transition:opacity .8s var(--ease-out),transform .8s var(--ease-out);transition-delay:calc(var(--i,0)*70ms)}
+.js .rv.vis{opacity:1;transform:none}
+.js .rv.luz{transition:border-color .25s ease,opacity .8s var(--ease-out),transform .8s var(--ease-out);transition-delay:0s,calc(var(--i,0)*70ms),calc(var(--i,0)*70ms)}
+.luz{position:relative;overflow:hidden;transition:border-color .25s ease,opacity .8s var(--ease-out),transform .8s var(--ease-out)}
+.luz::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s ease;background:radial-gradient(360px circle at var(--mx,50%) var(--my,0%),rgba(255,255,255,.07),transparent 60%)}
+.pilar.luz::before{background:radial-gradient(360px circle at var(--mx,50%) var(--my,0%),color-mix(in srgb,var(--cor) 22%,transparent),transparent 60%)}
+.bloco-img img,.flutua img{transition:transform .6s var(--ease-out)}
+summary{list-style:none;justify-content:space-between;gap:16px}summary::-webkit-details-marker{display:none}
+summary::after{content:"";flex:none;width:10px;height:10px;border-right:2px solid var(--ink2);border-bottom:2px solid var(--ink2);transform:translateY(-3px) rotate(45deg);transition:transform .25s var(--ease-out)}
+details[open] summary::after{transform:translateY(2px) rotate(-135deg)}
+details::details-content{block-size:0;overflow:hidden;opacity:0;transition:block-size .3s var(--ease-out),opacity .3s ease,content-visibility .3s allow-discrete}
+details[open]::details-content{block-size:auto;opacity:1}
+.brilho{position:relative;overflow:hidden;isolation:isolate}
+.brilho::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.7) 50%,transparent 65%);transform:translateX(-120%);animation:brilho 4.5s var(--ease-in-out) 1.5s infinite}
+@keyframes brilho{40%,100%{transform:translateX(120%)}}
+.trilho:hover ul{animation-play-state:paused}
+.trilho li{transition:color .2s ease}
+.capitulos button{transition:background-color .2s ease,border-color .2s ease,transform .16s var(--ease-out)}
+.capitulos button:active{transform:scale(.98)}
+@media (hover:hover) and (pointer:fine){
+.btn-claro:hover{box-shadow:0 8px 30px rgba(255,255,255,.18)}
+.btn-vidro:hover{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.28)}
+.nav nav a:hover::after{transform:scaleX(1)}
+.luz:hover{border-color:rgba(255,255,255,.18)}.luz:hover::before{opacity:1}
+.pilar.luz:hover{border-color:color-mix(in srgb,var(--cor) 45%,transparent);border-top-color:var(--cor)}
+.bloco-img:hover img{transform:scale(1.015)}
+.trilho li:hover{color:#fff}
+}
+@media (prefers-reduced-motion:reduce){
+.ent{animation:fade .4s ease both}@keyframes fade{from{opacity:0}}
+.js .rv{transform:none;transition:opacity .4s ease}
+.ceu::after,.celular,.brilho::after,.progresso{animation:none}
+.btn:active,.capitulos button:active{transform:none}
+.bloco-img img,.flutua img{transition:none}
+}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.rola,.trilho ul{animation:none}.flutua{transform:none!important}}
 `;
 
@@ -238,6 +292,7 @@ ${rodape}
 
 // quem já entrou vai direto para o app; link antigo "/#/ativos" vai para "/ativos"
 const sessao = `/* home pública: já tem sessão? vai para o app (gerado por scripts/gera-home.mjs) */
+document.documentElement.classList.add("js");
 (function(){try{var h=location.hash;if(h&&h.indexOf("#/")===0){location.replace(h.slice(1));return;}
 var s=localStorage.getItem("fc-sessao");if(s&&/refresh_token/.test(s)){location.replace("/inicio");}}catch(e){}})();
 `;
@@ -254,6 +309,11 @@ window.addEventListener("load",function(){autos.forEach(function(el){io.observe(
 var fl=[].slice.call(document.querySelectorAll(".flutua"));
 if(!calmo&&fl.length){var pend=false;function mexe(){pend=false;var y=window.scrollY;fl.forEach(function(el){var r=el.parentElement.getBoundingClientRect();var d=(r.top+r.height/2)-innerHeight/2;el.style.transform="translateY("+(d*(+el.dataset.vel||0)).toFixed(1)+"px)";});}
 addEventListener("scroll",function(){if(!pend){pend=true;requestAnimationFrame(mexe);}},{passive:true});mexe();}
+var rv=[].slice.call(document.querySelectorAll(".rv"));
+if("IntersectionObserver" in window){var ro=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("vis");ro.unobserve(e.target);}});},{threshold:.12,rootMargin:"0px 0px -8% 0px"});rv.forEach(function(el){ro.observe(el);});}
+else rv.forEach(function(el){el.classList.add("vis");});
+var nv=document.querySelector(".nav");function navega(){if(nv)nv.classList.toggle("rolou",scrollY>8);}addEventListener("scroll",navega,{passive:true});navega();
+if(matchMedia("(hover: hover) and (pointer: fine)").matches){[].slice.call(document.querySelectorAll(".luz")).forEach(function(el){el.addEventListener("pointermove",function(ev){var r=el.getBoundingClientRect();el.style.setProperty("--mx",(ev.clientX-r.left)+"px");el.style.setProperty("--my",(ev.clientY-r.top)+"px");});});}
 })();
 `;
 fs.writeFileSync(path.join(DIST, "index.html"), html);
