@@ -129,3 +129,21 @@ test("M8 · um ativo por vez, fechar apura o realizado e reabrir exige motivo e 
   const l = await chama("listar_planos_mensais");
   assert.deepEqual(l.planos.map((p) => p.mes), ["2027-01", "2026-12"]);
 });
+
+test("M8 · o rascunho gravado só leva colunas que existem em planos_mensais (erro despesas_origem)", async () => {
+  const { supabaseFalso } = require("./mcp-fixture.js");
+  // o banco falso recusa coluna inexistente, como o PostgREST
+  const sb = supabaseFalso({ planos_mensais: [] });
+  const r = await sb.cliente.from("planos_mensais").insert({ mes: "2026-12", despesas_origem: "premissa" }).select().single();
+  assert.equal(r.error.code, "PGRST204");
+  assert.match(r.error.message, /despesas_origem/);
+  // o que o app e o MCP gravam passa
+  const db = contaAdriano();
+  const { chama, FC } = await requisicao({ db });
+  const g = await chama("gerar_plano_mensal", { mes: "2026-12" });
+  assert.equal(g.status, "rascunho");
+  const linha = FC.planoMensal.paraBanco({ ...FC.planoMensal.gera(await FC.base.carrega({ comMercado: false }), "2027-01"), despesas_origem: "x", renda_total: 1 });
+  assert.equal(linha.despesas_origem, undefined);
+  assert.equal(linha.contexto.despesas_origem, "x");
+  assert.ok(Object.keys(linha).every((k) => FC.planoMensal.COLUNAS.includes(k)));
+});

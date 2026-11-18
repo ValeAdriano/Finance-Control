@@ -121,7 +121,7 @@ export function PlanosMensais({ e }: { e: any }) {
   const criar = async () => {
     try {
       const r = FC.planoMensal.gera(e, proximo);
-      await FC.db.inserir("planos_mensais", r);
+      await FC.db.inserir("planos_mensais", FC.planoMensal.paraBanco(r));
       await depoisDeMudar(`Rascunho de ${nomeMes(proximo)} criado`);
     } catch (err) { ui.erro(err); }
   };

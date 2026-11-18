@@ -183,7 +183,7 @@ function Plano({ e, feito }: Props) {
   const r = salvo || FC.planoMensal.gera(e, mes);
   const criar = async (ativar: boolean) => {
     if (!FC.db.temTabela("planos_mensais")) { ui.aviso("O plano mensal ainda não está disponível nesta conta.", "erro"); await feito(); return; }
-    const linha = salvo || (await FC.db.inserir("planos_mensais", r));
+    const linha = salvo || (await FC.db.inserir("planos_mensais", FC.planoMensal.paraBanco(r)));
     if (ativar && linha.status === "rascunho") {
       const v = FC.planoMensal.validaDivisao(linha, e);
       await FC.db.atualizar("planos_mensais", linha.id, { status: "ativo", ativado_em: new Date().toISOString(), regras_snapshot: FC.planoMensal.snapshot(e, v, !v.ok) });
@@ -196,7 +196,7 @@ function Plano({ e, feito }: Props) {
         <T>Para investir em {FC.planoMensal.nomeMes(mes)}:</T><Rs style={{ fontSize: 24, fontWeight: "600" }}>{FC.fmt.brlTexto(r.meta_total)}</Rs>
       </View>
       {(r.renda_prevista || []).map((x: any, i: number) => <T key={i} style={{ fontSize: 13, color: t.cores.ink2 }}>{`${FC.fmt.brlTexto(x.valor)} = ${x.origem}`}</T>)}
-      <T style={{ fontSize: 13, color: t.cores.ink2 }}>{`− impostos ${FC.fmt.brlTexto(r.impostos_previstos || 0)} · − despesas ${FC.fmt.brlTexto(r.despesas_previstas || 0)} (${r.despesas_origem || "premissa"})`}</T>
+      <T style={{ fontSize: 13, color: t.cores.ink2 }}>{`− impostos ${FC.fmt.brlTexto(r.impostos_previstos || 0)} · − despesas ${FC.fmt.brlTexto(r.despesas_previstas || 0)} (${r.despesas_origem || (r.contexto || {}).despesas_origem || "premissa"})`}</T>
       <Composicao partes={(r.destinos || []).filter((d: any) => d.tipo === "categoria").map((d: any) => ({ valor: d.valor, cor: COR[d.alvo] || "var(--sref)" }))} />
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
         <Botao onPress={() => criar(true)}>Criar e ativar</Botao>

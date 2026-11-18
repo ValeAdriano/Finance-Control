@@ -148,6 +148,29 @@ function baseDemo() {
 
 const CHAVE = { preferencias: "user_id" };
 
+// as colunas de cada tabela, lidas do supabase/schema.sql (create table + add
+// column): o banco falso recusa coluna que não existe, como o PostgREST
+// ("Could not find the 'x' column of 't' in the schema cache", PGRST204)
+const COLUNAS = (() => {
+  const sql = require("fs").readFileSync(require("path").join(__dirname, "..", "supabase", "schema.sql"), "utf8").replace(/--[^\n]*/g, "");
+  const mapa = {};
+  for (const m of sql.matchAll(/create table if not exists public\.(\w+)\s*\(([\s\S]*?)\n\);/g)) {
+    const cols = (mapa[m[1]] = mapa[m[1]] || new Set());
+    for (const linha of m[2].split("\n")) {
+      const c = /^\s*([a-z_][a-z0-9_]*)\s+(uuid|text|numeric|integer|bigint|date|boolean|jsonb|timestamptz|text\[\])/.exec(linha);
+      if (c && !["unique", "check", "primary", "constraint"].includes(c[1])) cols.add(c[1]);
+    }
+  }
+  for (const m of sql.matchAll(/alter table public\.(\w+) add column if not exists (\w+)/g)) (mapa[m[1]] = mapa[m[1]] || new Set()).add(m[2]);
+  return mapa;
+})();
+function colunaInexistente(nome, linhas) {
+  const cols = COLUNAS[nome];
+  if (!cols) return null;
+  for (const l of linhas) for (const k of Object.keys(l)) if (!cols.has(k)) return k;
+  return null;
+}
+
 /** `opcoes.somenteLeitura` faz toda gravação falhar como a RLS falharia;
  *  `opcoes.semMercado` derruba a Edge Function. Devolve o módulo que o
  *  núcleo espera ({ createClient }) e o `db`, para o teste espiar. */
@@ -161,6 +184,10 @@ function supabaseFalso(db = baseDemo(), opcoes = {}) {
     function executa() {
       const escreve = q.op !== "select";
       if (escreve && opcoes.somenteLeitura && nome !== "log_sistema") return { data: null, error: negado };
+      if (escreve && q.op !== "delete") {
+        const k = colunaInexistente(nome, q.op === "update" ? [q.campos] : q.linhas);
+        if (k) return { data: null, error: { message: `Could not find the '${k}' column of '${nome}' in the schema cache`, code: "PGRST204" } };
+      }
       let saida;
       if (q.op === "select") saida = linhas().filter(passa);
       else if (q.op === "insert" || q.op === "upsert") {

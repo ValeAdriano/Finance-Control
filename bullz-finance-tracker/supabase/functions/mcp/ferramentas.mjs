@@ -156,7 +156,7 @@ const entradaDestino = (z, texto) => z.object({ tipo: z.enum(["categoria", "ativ
 async function salvaPlano(ctx, linha, id) {
   const { FC } = ctx;
   if (!FC.db.temTabela("planos_mensais")) throw new ErroMcp(MIGRATION("0008", "planos_mensais"));
-  const { user_id, criado_em, idx, ...l } = linha;
+  const l = FC.planoMensal.paraBanco(linha);   // só as colunas da tabela
   return id ? grava(() => FC.db.atualizar("planos_mensais", id, l)) : grava(() => FC.db.inserir("planos_mensais", l));
 }
 async function logPlano(ctx, plano_id, acao, motivo, detalhe = {}) {

@@ -9301,7 +9301,23 @@ FC.config = {
       execucao: exec, fora: fora, cem_por_cento: meta > 0 && aportado >= meta - 0.5 };
   }
 
-  FC.planoMensal = { gera, previsto, execucao, validaDivisao, snapshot, realizado, reconstroi, indicadores, divisaoPorGrupo, comGrupo, aportesDoMes, nomeMes };
+  // ---------------------------------------------------------------- banco
+  // as colunas de planos_mensais (migration 0008). O que o cálculo devolve a
+  // mais (renda_total, despesas_origem) vai para `contexto`, que é jsonb.
+  const COLUNAS = ["id", "mes", "status", "renda_prevista", "impostos_previstos", "despesas_previstas", "modo", "valor_fixo", "sobra_prevista", "meta_total",
+    "destinos", "regras_snapshot", "contexto", "renda_real", "impostos_reais", "despesas_reais", "sobra_real", "aportado_total", "execucao", "fora_do_plano",
+    "origem", "observacao", "ativado_em", "fechado_em"];
+  function paraBanco(plano) {
+    const linha = {};
+    for (const k of COLUNAS) if (plano[k] !== undefined) linha[k] = plano[k];
+    const extra = {};
+    if (plano.renda_total !== undefined) extra.renda_total = plano.renda_total;
+    if (plano.despesas_origem !== undefined) extra.despesas_origem = plano.despesas_origem;
+    if (Object.keys(extra).length) linha.contexto = { ...(plano.contexto || {}), ...extra };
+    return linha;
+  }
+
+  FC.planoMensal = { paraBanco, COLUNAS, gera, previsto, execucao, validaDivisao, snapshot, realizado, reconstroi, indicadores, divisaoPorGrupo, comGrupo, aportesDoMes, nomeMes };
 })();
 
 
