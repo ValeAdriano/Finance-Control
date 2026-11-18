@@ -536,6 +536,9 @@
     entrada: { nome: "Outra entrada", sinal: 1, cor: "cinza" },
     saida: { nome: "Outra saída", sinal: -1, cor: "cinza" },
     reclassificacao: { nome: "Mudança de categoria", sinal: 0, cor: "amarelo" },
+    // permuta: sai cabeças de um lote e entra num novo (o rebanho conta pelas
+    // linhas expandidas de FC.lotes.expandeTrocas)
+    troca: { nome: "Troca", sinal: 0, cor: "amarelo" },
   };
   FC.CATEGORIAS_CUSTO = {
     nutricao: "Nutrição e sal", sanidade: "Sanidade e vacinas", mao_de_obra: "Mão de obra",

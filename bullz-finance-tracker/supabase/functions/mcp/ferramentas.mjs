@@ -324,6 +324,12 @@ export function ferramentas(z) {
           por_fazenda: g.porFazenda, por_lote: g.porLote,
           financeiro: enxuga(g.financeiro), ganho_de_peso: enxuga(g.gmd, 30),
           lancamentos_inconsistentes: enxuga(g.inconsistentes, 20),
+          lotes: g.lotes ? g.lotes.lotes.map((l) => ({ id: l.id, chave: l.chave, nome: l.nome, aberto: l.aberto, aberto_em: l.aberto_em, fechado_em: l.fechado_em, dias: l.dias,
+            cabecas_entrada: l.cabecas_entrada, cabecas: l.cabecas, custo_total: n2(l.custo_total), custo_em_aberto: n2(l.custo_em_aberto), custo_medio_cabeca: n2(l.custo_medio_cabeca),
+            receita: n2(l.receita), resultado_realizado: n2(l.resultado_realizado), valor_estimado: n2(l.valor_estimado), avaliado_por: l.origem_valor,
+            resultado_total: n2(l.resultado_total), custos_inclusos_no_preco: l.custos_inclusos_no_preco, ...(l.alerta_custos ? { alerta: "lote sem custos lançados" } : {}) })) : [],
+          vendas_planejadas: g.lotes ? enxuga(g.lotes.vendas_planejadas) : [],
+          custos_sem_lote: g.lotes ? n2(g.lotes.custos_sem_lote) : null,
         };
       },
     },
@@ -337,7 +343,7 @@ export function ferramentas(z) {
         const pega = (lista, tabela) => lista.filter((x) => entre(x.data, f.de, f.ate)).sort((a, b) => b.data.localeCompare(a.data)).slice(0, f.limite)
           .map((x) => { const { user_id, criado_em, ...resto } = x; return { tabela, ...enxuga(resto) }; });
         const s = {};
-        if (f.especie === "todos" || f.especie === "movimentos") s.movimentos = pega(e.base.agro.movs, "agro_movimentos");
+        if (f.especie === "todos" || f.especie === "movimentos") s.movimentos = pega(e.base.agro.movsBrutos || e.base.agro.movs, "agro_movimentos");
         if (f.especie === "todos" || f.especie === "custos") s.custos = pega(e.base.agro.custos, "agro_custos");
         if (f.especie === "todos" || f.especie === "pesagens") s.pesagens = pega(e.base.agro.pesagens, "agro_pesagens");
         return s;
@@ -587,31 +593,47 @@ export function ferramentas(z) {
     {
       nome: "registrar_agro",
       titulo: "Registrar movimento, custo ou pesagem do gado",
-      descricao: "Lança no agro. movimento: `tipo` (compra, venda, nascimento, morte, entrada, saida, reclassificacao), `categoria`, `cabecas` e, em compra e venda, o preço (`preco_arroba` com `peso_medio_kg`, ou `preco_cabeca`, ou `valor_total`). custo: `categoria_custo` e `valor`. pesagem: `categoria`, `cabecas` e `peso_medio_kg`.",
+      descricao: "Lança no agro. movimento: `tipo` (compra, venda, troca, nascimento, morte, entrada, saida, reclassificacao), `categoria`, `cabecas` e, em compra e venda, o preço (`preco_arroba` com `peso_medio_kg`, ou `preco_cabeca`, ou `valor_total`). troca: `cabecas_saida`, `cabecas_entrada`, `valor_referencia_saida` e `valor_referencia_entrada` (totais), `categoria` (sai) e `categoria_destino` (entra): fecha o ciclo das cabeças que saem e abre um lote novo. `lote_id` liga ao lote (veja agro_resumo); sem ele, a compra abre um lote e a saída baixa dos lotes mais antigos. venda com `destino` (pote): Funrural retido e o líquido vai para o pote como movimento interno; com `reservar_ir`, o IR estimado vai para o pote IR a pagar. custo: `categoria_custo` e `valor`. pesagem: `categoria`, `cabecas` e `peso_medio_kg`. `simular: true` mostra o efeito sem gravar.",
       entrada: () => ({
         especie: z.enum(["movimento", "custo", "pesagem"]),
         data: dataOpc.describe("AAAA-MM-DD (padrão: hoje)"),
-        tipo: z.enum(TIPOS_MOV).optional(), categoria: z.enum(CATEGORIAS_GADO).optional(), categoria_destino: z.enum(CATEGORIAS_GADO).optional().describe("só em reclassificacao"),
+        tipo: z.enum(TIPOS_MOV).optional(), categoria: z.enum(CATEGORIAS_GADO).optional(), categoria_destino: z.enum(CATEGORIAS_GADO).optional().describe("reclassificacao e troca"),
         cabecas: z.number().int().positive().optional(), peso_medio_kg: positivo.optional(),
         preco_arroba: naoNegativo.optional(), preco_cabeca: naoNegativo.optional(), valor_total: naoNegativo.optional(),
         despesas: naoNegativo.optional().describe("frete, comissão, Funrural da operação"),
         reinvestido: naoNegativo.optional().describe("venda: quanto do líquido fica no agro para as próximas compras"),
         categoria_custo: z.enum(CATEGORIAS_CUSTO).optional(), valor: positivo.optional().describe("custo: o valor pago"), descricao: texto(160).optional(),
         fazenda: texto(80).optional(), lote: texto(80).optional(), contraparte: texto(80).optional(), observacao: texto(160).optional(),
+        lote_id: z.string().uuid().optional().describe("o lote do movimento ou do custo (agro_resumo.lotes)"),
+        cabecas_saida: z.number().int().positive().optional(), cabecas_entrada: z.number().int().positive().optional(),
+        valor_referencia_saida: naoNegativo.optional(), valor_referencia_entrada: naoNegativo.optional(),
+        destino: texto(80).optional().describe("venda: pote que recebe o líquido (tipo, nome ou id; ex.: oportunidade_agro)"),
+        funrural_retido: z.boolean().default(true).describe("venda com destino: o comprador retém o Funrural"),
+        reservar_ir: z.boolean().default(true).describe("venda com destino: separa o IR estimado no pote IR a pagar"),
+        simular: z.boolean().default(false),
       }),
       async executa(ctx, a) {
         const { FC } = ctx;
-        exigeEscrita(ctx);
+        if (!a.simular) exigeEscrita(ctx);
         const dia = a.data || FC.datas.hoje();
-        let tabela, linha;
+        let tabela, linha, extra = null;
         if (a.especie === "custo") {
           if (!a.categoria_custo || !a.valor) throw new ErroMcp("Custo: informe categoria_custo e valor.");
           tabela = "agro_custos";
-          linha = { data: dia, categoria: a.categoria_custo, descricao: a.descricao || "", valor: a.valor, fazenda: a.fazenda || null, lote: a.lote || null };
+          linha = { data: dia, categoria: a.categoria_custo, descricao: a.descricao || "", valor: a.valor, fazenda: a.fazenda || null, lote: a.lote || null, ...(a.lote_id ? { lote_id: a.lote_id } : {}) };
         } else if (a.especie === "pesagem") {
           if (!a.categoria || !a.cabecas || !a.peso_medio_kg) throw new ErroMcp("Pesagem: informe categoria, cabecas e peso_medio_kg.");
           tabela = "agro_pesagens";
           linha = { data: dia, categoria: a.categoria, lote: a.lote || null, fazenda: a.fazenda || null, cabecas: a.cabecas, peso_medio_kg: a.peso_medio_kg, observacao: a.observacao || "" };
+        } else if (a.tipo === "troca") {
+          if (!a.categoria || !a.cabecas_saida || !a.cabecas_entrada || a.valor_referencia_saida == null || a.valor_referencia_entrada == null) {
+            throw new ErroMcp("Troca: informe categoria, cabecas_saida, cabecas_entrada, valor_referencia_saida e valor_referencia_entrada (valores totais).");
+          }
+          tabela = "agro_movimentos";
+          linha = { data: dia, tipo: "troca", categoria: a.categoria, categoria_destino: a.categoria_destino || a.categoria, cabecas: a.cabecas_saida,
+            cabecas_saida: a.cabecas_saida, cabecas_entrada: a.cabecas_entrada, valor_referencia_saida: a.valor_referencia_saida, valor_referencia_entrada: a.valor_referencia_entrada,
+            valor_total: 0, despesas: 0, fazenda: a.fazenda || null, lote: a.lote || null, contraparte: a.contraparte || null, observacao: a.observacao || "",
+            ...(a.lote_id ? { lote_id: a.lote_id } : {}) };
         } else {
           if (!a.tipo || !a.categoria || !a.cabecas) throw new ErroMcp("Movimento: informe tipo, categoria e cabecas.");
           if (a.tipo === "reclassificacao" && !a.categoria_destino) throw new ErroMcp("Reclassificação: informe categoria_destino.");
@@ -625,15 +647,99 @@ export function ferramentas(z) {
               preco_cabeca: a.preco_cabeca ?? null, valor_total: a.valor_total ?? null }, rend);
           }
           if (comPreco && !(total > 0)) throw new ErroMcp(modo === "arroba" && !a.peso_medio_kg ? "Para fechar por @, informe o peso médio." : "Compra e venda precisam de preço: preco_arroba com peso_medio_kg, preco_cabeca ou valor_total.");
+          let despesas = comPreco ? a.despesas || 0 : 0;
+          if (a.destino && a.tipo !== "venda") throw new ErroMcp("`destino` só vale para venda.");
+          if (a.destino) {
+            // impostos rurais: Funrural (retido) e IR estimado; parâmetros do banco
+            const imp = FC.lotes.impostosVenda(total, { parametros: e.base.parametros || [], data: dia, funrural_retido: a.funrural_retido,
+              ir_modo: e.prefs.agro.ir_modo, ir_aliquota: e.prefs.agro.ir_aliquota });
+            if (a.funrural_retido && imp.funrural != null && a.despesas == null) despesas = imp.funrural;
+            const liquido = total - despesas;
+            const pts = e.dados.potes;
+            if (!pts) throw new ErroMcp(FC.db.temTabela("potes") ? "A conta ainda não tem potes: crie com mover_entre_potes ou na tela Potes." : MIGRATION("0002", "potes"));
+            const acha = (x) => pts.potes.find((p) => p.id === x || p.tipo === x || String(p.nome).toLowerCase() === String(x).toLowerCase());
+            const pd = acha(a.destino);
+            if (!pd) throw new ErroMcp(`Pote "${a.destino}" não encontrado.`);
+            const pir = acha("ir_a_pagar");
+            const ir = a.reservar_ir && imp.ir_estimado > 0 && pir ? Math.min(imp.ir_estimado, liquido) : 0;
+            extra = { imp, liquido, pd, pir, ir };
+          }
           tabela = "agro_movimentos";
           linha = { data: dia, tipo: a.tipo, categoria: a.categoria, categoria_destino: a.tipo === "reclassificacao" ? a.categoria_destino : null, cabecas: a.cabecas,
             peso_medio_kg: a.peso_medio_kg ?? null, preco_arroba: modo === "arroba" ? a.preco_arroba : null, preco_cabeca: modo === "cabeca" ? a.preco_cabeca : null,
-            valor_total: Math.round(total * 100) / 100, despesas: comPreco ? a.despesas || 0 : 0, reinvestido: a.tipo === "venda" ? a.reinvestido ?? null : null,
-            fazenda: a.fazenda || null, lote: a.lote || null, contraparte: comPreco ? a.contraparte || null : null, observacao: a.observacao || "" };
+            valor_total: Math.round(total * 100) / 100, despesas: Math.round(despesas * 100) / 100, reinvestido: a.tipo === "venda" && !a.destino ? a.reinvestido ?? null : null,
+            fazenda: a.fazenda || null, lote: a.lote || null, contraparte: comPreco ? a.contraparte || null : null, observacao: a.observacao || "",
+            ...(a.lote_id ? { lote_id: a.lote_id } : {}) };
+        }
+        const efeitoVenda = extra && { receita_bruta: n2(extra.imp.receita), funrural: n2(extra.imp.funrural), funrural_retido: extra.imp.funrural_retido,
+          liquido: n2(extra.liquido), para_o_pote: { pote: extra.pd.nome, valor: n2(extra.liquido) },
+          ir_estimado: n2(extra.imp.ir_estimado), ir_reservado: extra.ir > 0 ? { pote: extra.pir.nome, valor: n2(extra.ir) } : null,
+          estimativa: true, parametros_usados: enxuga(extra.imp.parametros_usados), ...(extra.imp.motivo ? { motivo: extra.imp.motivo } : {}) };
+        if (a.simular) return { simulado: true, tabela, registro: enxuga(linha), ...(efeitoVenda ? { venda: efeitoVenda } : {}) };
+        if (extra) {
+          // venda com destino: movimento interno do lote para o pote
+          if (!FC.db.temTabela("movimentos_internos")) throw new ErroMcp(MIGRATION("0003", "movimentos_internos"));
+          const id = FC.potes.uuid();
+          await grava(() => FC.db.inserir("movimentos_internos", { id, data: dia, origem_tipo: "agro_lote", origem_id: a.lote_id || a.lote || a.categoria,
+            origem_quantidade: a.cabecas, origem_preco: linha.valor_total / a.cabecas, destino_tipo: "pote", destino_id: extra.pd.id, custos: { impostos: linha.despesas },
+            observacao: `venda do gado → ${extra.pd.nome}`.slice(0, 160) }));
+          linha.movimento_interno_id = id;
+          const salvo = await grava(() => FC.db.inserir(tabela, linha));
+          await grava(() => FC.db.inserir("potes_movimentos", { pote_id: extra.pd.id, data: dia, valor: extra.liquido, descricao: "venda do gado", movimento_interno_id: id }));
+          if (extra.ir > 0) {
+            const t = FC.potes.uuid();
+            await grava(() => FC.db.inserir("potes_movimentos", { pote_id: extra.pd.id, data: dia, valor: -extra.ir, descricao: "IR estimado da venda do gado", transferencia_id: t }));
+            await grava(() => FC.db.inserir("potes_movimentos", { pote_id: extra.pir.id, data: dia, valor: extra.ir, descricao: "IR estimado da venda do gado", transferencia_id: t }));
+          }
+          await audita(ctx, "mcp_lancamento", { tabela, id: salvo.id, especie: a.especie, data: dia, movimento_interno_id: id });
+          return { ok: true, tabela, registro: enxuga(sem(salvo)), venda: efeitoVenda };
         }
         const salvo = await grava(() => FC.db.inserir(tabela, linha));
         await audita(ctx, "mcp_lancamento", { tabela, id: salvo.id, especie: a.especie, data: dia });
         return { ok: true, tabela, registro: enxuga(sem(salvo)) };
+      },
+    },
+    {
+      nome: "planejar_venda_agro",
+      titulo: "Planejar a venda de um lote do gado",
+      descricao: "Registra no lote a venda prevista (data, cabeças, preço esperado por cabeça, destino planejado) e, se quiser, a estimativa manual do valor por cabeça e se os custos estão inclusos no preço. Devolve a receita esperada, o Funrural e o IR estimados. A venda planejada alimenta as projeções. `lote` é o id ou o nome do lote (agro_resumo.lotes). `simular: true` não grava.",
+      entrada: () => ({ lote: texto(80).min(1), data_prevista: data.optional(), cabecas: z.number().int().positive().optional(),
+        preco_esperado_cabeca: naoNegativo.optional(), destino_planejado: texto(80).optional().describe("pote ou ativo de destino"),
+        valor_estimado_cabeca: naoNegativo.optional(), custos_inclusos_no_preco: z.boolean().optional(), nome: texto(80).optional().describe("nome do lote, para um lote que ainda não tem"),
+        simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const e = await carrega(ctx, { comMercado: false });
+        const L = (e.dados.agro.lotes || {}).lotes || [];
+        const l = L.find((x) => x.id === a.lote || x.chave === a.lote || (x.nome && x.nome.toLowerCase() === a.lote.toLowerCase()));
+        if (!l) throw new ErroMcp(`Lote "${a.lote}" não encontrado. Veja agro_resumo.lotes.`);
+        if (!l.aberto) throw new ErroMcp("Esse lote já foi todo vendido ou trocado.");
+        const cab = a.cabecas || l.cabecas;
+        if (cab > l.cabecas) throw new ErroMcp(`O lote tem ${l.cabecas} cabeças.`);
+        const receita = a.preco_esperado_cabeca != null ? a.preco_esperado_cabeca * cab : null;
+        const imp = receita != null ? FC.lotes.impostosVenda(receita, { parametros: e.base.parametros || [], data: a.data_prevista, ir_modo: e.prefs.agro.ir_modo, ir_aliquota: e.prefs.agro.ir_aliquota }) : null;
+        const campos = { ...(a.data_prevista ? { data_prevista: a.data_prevista } : {}), ...(a.cabecas ? { cabecas_previstas: a.cabecas } : {}),
+          ...(a.preco_esperado_cabeca != null ? { preco_esperado_cabeca: a.preco_esperado_cabeca } : {}), ...(a.destino_planejado ? { destino_planejado: a.destino_planejado } : {}),
+          ...(a.valor_estimado_cabeca != null ? { valor_estimado_cabeca: a.valor_estimado_cabeca, data_estimativa: FC.datas.hoje() } : {}),
+          ...(a.custos_inclusos_no_preco != null ? { custos_inclusos_no_preco: a.custos_inclusos_no_preco } : {}) };
+        const efeito = { lote: l.nome, cabecas: cab, receita_esperada: n2(receita), funrural: imp ? n2(imp.funrural) : null, liquido: imp ? n2(imp.liquido) : null,
+          ir_estimado: imp ? n2(imp.ir_estimado) : null, resultado_esperado: receita != null && l.custo_medio_cabeca != null ? n2(receita - l.custo_medio_cabeca * cab) : null,
+          estimativa: true, ...(imp && imp.motivo ? { motivo: imp.motivo } : {}), campos };
+        if (a.simular) return { simulado: true, ...efeito };
+        if (!Object.keys(campos).length) throw new ErroMcp("Nada para gravar: informe data_prevista, preco_esperado_cabeca, valor_estimado_cabeca…");
+        if (!FC.db.temTabela("agro_lotes")) throw new ErroMcp(MIGRATION("0004", "agro_lotes"));
+        let id = l.id;
+        if (id) await grava(() => FC.db.atualizar("agro_lotes", id, campos));
+        else {
+          // lote calculado (sem linha): cria a linha e liga a compra que o abriu
+          const novo = await grava(() => FC.db.inserir("agro_lotes", { nome: a.nome || l.nome, ...campos }));
+          id = novo.id;
+          const compra = String(l.chave).startsWith("compra:") ? l.chave.slice(7) : null;
+          if (compra) await grava(() => FC.db.atualizar("agro_movimentos", compra, { lote_id: id }));
+        }
+        await audita(ctx, "mcp_agro_lote", { lote_id: id, campos: Object.keys(campos) });
+        return { ok: true, lote_id: id, ...efeito };
       },
     },
     {

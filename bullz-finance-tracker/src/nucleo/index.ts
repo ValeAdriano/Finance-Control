@@ -56,6 +56,7 @@ export function carregaNucleo(): FCTipo {
   require("../../nucleo/graficos.js");
   require("../../nucleo/modelo/avaliador.js");
   require("../../nucleo/modelo/agro.js");
+  require("../../nucleo/modelo/lotes.js");
   require("../../nucleo/modelo/rentabilidade.js");
   require("../../nucleo/modelo/carteira.js");
   require("../../nucleo/modelo/base.js");

@@ -14,6 +14,7 @@ module.exports = [
   "graficos.js",
   "modelo/avaliador.js",
   "modelo/agro.js",
+  "modelo/lotes.js",
   "modelo/rentabilidade.js",
   "modelo/carteira.js",
   "modelo/base.js",

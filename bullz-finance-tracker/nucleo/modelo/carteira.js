@@ -236,6 +236,10 @@
     });
 
     const agro = FC.agro.analisa(base.agro, prefs.agro);
+    // ciclo por lote (Marco 4): compra → venda ou troca
+    try {
+      if (FC.lotes) agro.lotes = FC.lotes.monta(base.agro.movsBrutos || base.agro.movs, base.agro.custos, base.agroLotes || [], prefs.agro, agro);
+    } catch (e) { console.error(e); agro.lotes = null; }
     // proventos já pagos: entram na rentabilidade como dinheiro que voltou e,
     // com caixa de proventos ligado, alimentam o saldo dele
     let pagos = [];

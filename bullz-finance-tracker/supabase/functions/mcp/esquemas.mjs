@@ -15,12 +15,12 @@ export const INDEXADORES = ["cdi", "selic", "ipca", "prefixado"];
 export const CATEGORIAS_GANHO = ["salario", "extra", "bonus", "decimo_terceiro", "ferias", "aluguel", "pro_labore", "outros"];
 export const TIPOS_GANHO = ["recorrente", "avulso"];
 export const REGRAS_DIA = ["dia_fixo", "dia_util", "ultimo_dia_util"];
-export const TIPOS_MOV = ["compra", "venda", "nascimento", "morte", "entrada", "saida", "reclassificacao"];
+export const TIPOS_MOV = ["compra", "venda", "nascimento", "morte", "entrada", "saida", "reclassificacao", "troca"];
 export const CATEGORIAS_GADO = ["bezerro", "bezerra", "garrote", "novilha", "boi_magro", "boi_gordo", "vaca", "touro", "outro"];
 export const CATEGORIAS_CUSTO = ["nutricao", "sanidade", "mao_de_obra", "arrendamento", "frete", "maquinas", "impostos", "outros"];
 
 /** tabelas que `editar_registro` e `apagar_registro` alcançam (e mais nenhuma) */
-export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens"];
+export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes"];
 
 export function dataValida(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -76,10 +76,18 @@ export function camposPorTabela(z) {
       preco_arroba: naoNegativo.nullable(), preco_cabeca: naoNegativo.nullable(),
       valor_total: naoNegativo, despesas: naoNegativo, reinvestido: naoNegativo.nullable(),
       fazenda: texto(80).nullable(), lote: texto(80).nullable(), contraparte: texto(80).nullable(), observacao: texto(240),
+      lote_id: z.string().uuid().nullable(), lote_entrada_id: z.string().uuid().nullable(),
+      cabecas_saida: z.number().int().positive().nullable(), cabecas_entrada: z.number().int().positive().nullable(),
+      valor_referencia_saida: naoNegativo.nullable(), valor_referencia_entrada: naoNegativo.nullable(),
     },
     agro_custos: {
       data, categoria: z.enum(CATEGORIAS_CUSTO), descricao: texto(160), valor: positivo,
-      fazenda: texto(80).nullable(), lote: texto(80).nullable(),
+      fazenda: texto(80).nullable(), lote: texto(80).nullable(), lote_id: z.string().uuid().nullable(),
+    },
+    agro_lotes: {
+      nome: texto(80).min(1), valor_estimado_cabeca: naoNegativo.nullable(), data_estimativa: data.nullable(),
+      custos_inclusos_no_preco: z.boolean(), data_prevista: data.nullable(), cabecas_previstas: z.number().int().positive().nullable(),
+      preco_esperado_cabeca: naoNegativo.nullable(), destino_planejado: texto(80).nullable(), observacao: texto(160),
     },
     agro_pesagens: {
       data, categoria: gado, lote: texto(80).nullable(), fazenda: texto(80).nullable(),

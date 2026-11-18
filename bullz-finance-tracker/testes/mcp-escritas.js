@@ -8,3 +8,4 @@ module.exports.registrar_movimento_interno = { origem_tipo: "ativo", origem_id: 
 Object.defineProperty(module.exports, "LEITURAS", { enumerable: false, value: {
   simular_realocacao: { origem_tipo: "ativo", origem_id: "BTC", origem_quantidade: 0.001, destino_tipo: "titulo_rf", destino_id: "LCI Banco Demo" },
 } });
+module.exports.planejar_venda_agro = { lote: "L1", preco_esperado_cabeca: 6000 };

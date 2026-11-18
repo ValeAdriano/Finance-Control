@@ -48,3 +48,17 @@ Os lançamentos gerados por um movimento interno carregam `movimento_interno_id`
 
 ## D-014 · Preço padrão da origem (M3)
 Sem `origem_preco`, a baixa de um ativo usa o preço de agora. A baixa de um título realiza o rendimento proporcional ao valor que sai. Destino de ativo sem quantidade nem preço usa o preço de agora para calcular as cotas.
+
+## D-015 · Troca no rebanho (M4)
+A troca é uma linha `tipo = 'troca'` em `agro_movimentos`. Na leitura, `FC.lotes.expandeTrocas` a desdobra numa venda totalmente reinvestida (receita = `valor_referencia_saida`) e numa compra (custo = `valor_referencia_entrada`). Assim o rebanho, o caixa do agro e a rentabilidade, que não conhecem a troca, contam certo, e a troca não vira aporte nem saque. O ciclo por lote (`FC.lotes.monta`) lê a linha bruta. Na listagem do app, a troca aparece como as duas linhas expandidas (ids `<id>:saida` e `<id>:entrada`); editar uma delas pelo app não funciona: edite a troca pelo MCP (`editar_registro`, tabela `agro_movimentos`, id da troca).
+
+## D-016 · Lotes e suposições do backfill (M4)
+- Toda compra abre um lote, salvo quando informa `lote_id` ou um `lote` (texto) igual ao de outra compra, que entram no mesmo lote.
+- Venda, troca, morte e saída sem lote baixam dos lotes abertos mais antigos (PEPS), sem olhar a categoria. Cada baixa assim gera uma suposição listada (`FC.lotes.monta().suposicoes`).
+- Nascimento e outra entrada sem lote entram no lote aberto mais recente.
+- Custo sem lote fica em `custos_sem_lote` (não é rateado).
+- O custo das cabeças que saem é o custo médio do lote naquele momento.
+- O backfill (`scripts/backfill-lotes.js`) grava essas mesmas atribuições; sem `--grava`, só mostra.
+
+## D-017 · Venda do agro com destino (M4)
+Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o pote), a venda em `agro_movimentos` com `movimento_interno_id` (o saque dela sai do total da carteira), o depósito do líquido no pote e, com `reservar_ir`, uma transferência do IR estimado para o pote IR a pagar. O Funrural retido entra em `despesas` da venda. A alíquota de IR é `preferencias.agro.ir_aliquota` ou o parâmetro `ir_rural_aliquota_padrao`; o modo é `preferencias.agro.ir_modo` (`presuncao`, padrão, ou `livro_caixa`).

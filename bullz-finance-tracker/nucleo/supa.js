@@ -141,19 +141,22 @@
   function normAporte(a) { return { ...a, quantidade: num(a.quantidade), preco: num(a.preco), valor: num(a.valor), taxa: num(a.taxa), do_provento: num(a.do_provento) }; }
   function normMov(m) {
     return { ...m, cabecas: Number(m.cabecas), peso_medio_kg: num(m.peso_medio_kg), preco_arroba: num(m.preco_arroba),
-             preco_cabeca: num(m.preco_cabeca), valor_total: num(m.valor_total) || 0, despesas: num(m.despesas) || 0, reinvestido: num(m.reinvestido) };
+             preco_cabeca: num(m.preco_cabeca), valor_total: num(m.valor_total) || 0, despesas: num(m.despesas) || 0, reinvestido: num(m.reinvestido),
+             cabecas_saida: num(m.cabecas_saida), cabecas_entrada: num(m.cabecas_entrada),
+             valor_referencia_saida: num(m.valor_referencia_saida), valor_referencia_entrada: num(m.valor_referencia_entrada) };
   }
 
   // ------------------------------------------------------------------ dados
   FC.db = {
     async carregaTudo() {
-      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos] = await Promise.all([
+      const [ativos, rendaFixa, aportes, prefs, movs, custos, pesagens, historico, ganhos, potes, potesMovs, movsInternos, agroLotes, parametros] = await Promise.all([
         tudo("ativos", "id"), tudo("renda_fixa", "id"), tudo("aportes", "data"),
         sb.from("preferencias").select("*").maybeSingle().then(checa),
         tudo("agro_movimentos", "data"), tudo("agro_custos", "data"), tudo("agro_pesagens", "data"),
         tudo("patrimonio_historico", "data"), tudo("ganhos", "inicio"),
         // tabelas do plano de evolução: vazias se a migration ainda não foi aplicada
         opcional("potes", "criado_em"), opcional("potes_movimentos", "data"), opcional("movimentos_internos", "data"),
+        opcional("agro_lotes", "criado_em"), opcional("parametros_fiscais", "chave"),
       ]);
       return {
         ativos: ativos.map(normAtivo),
@@ -164,9 +167,14 @@
         potes: potes.map((p) => ({ ...p, meta_valor: num(p.meta_valor) })),
         potesMovs: potesMovs.map((m) => ({ ...m, valor: num(m.valor) })),
         movimentosInternos: movsInternos,
+        agroLotes: agroLotes.map((l) => ({ ...l, valor_estimado_cabeca: num(l.valor_estimado_cabeca), preco_esperado_cabeca: num(l.preco_esperado_cabeca),
+          cabecas_previstas: num(l.cabecas_previstas) })),
+        parametros: parametros.map((p) => ({ ...p, valor: num(p.valor) })),
         historico: historico.map((h) => ({ ...h, patrimonio: num(h.patrimonio), renda_variavel: num(h.renda_variavel) || 0,
           cripto: num(h.cripto) || 0, renda_fixa: num(h.renda_fixa) || 0, agro: num(h.agro) || 0, investido: num(h.investido) })),
-        agro: { movs: movs.map(normMov), custos: custos.map((c) => ({ ...c, valor: num(c.valor) })),
+        // troca vira venda + compra para o rebanho e o caixa; os brutos ficam
+        // em movsBrutos (o ciclo por lote e as listagens usam eles)
+        agro: { movs: FC.lotes.expandeTrocas(movs.map(normMov)), movsBrutos: movs.map(normMov), custos: custos.map((c) => ({ ...c, valor: num(c.valor) })),
                 pesagens: pesagens.map((p) => ({ ...p, peso_medio_kg: num(p.peso_medio_kg), cabecas: Number(p.cabecas) })) },
       };
     },

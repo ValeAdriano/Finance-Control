@@ -322,9 +322,12 @@
     // o que não é reinvestido volta (saque) — ver FC.agro.caixa
     const cxAgro = FC.agro.caixa(base.agro.movs, base.agro.custos);
     const fAgro = [];
+    // venda do agro que virou movimento interno (foi para um pote): o saque
+    // não volta ao bolso, fica no pote (que está no valor final)
+    const internas = new Set((base.agro.movs || []).filter((m) => m.movimento_interno_id).map((m) => m.id));
     for (const f of cxAgro.fluxos) {
       if (f.aporte > 0) fAgro.push({ data: f.data, valor: -f.aporte });
-      if (f.saque > 0) fAgro.push({ data: f.data, valor: f.saque });
+      if (f.saque > 0) fAgro.push({ data: f.data, valor: f.saque, ...(internas.has(f.id) ? { interno: true } : {}) });
     }
     const valorAgroHoje = (dados.agro.valorRebanho || 0) + cxAgro.saldo;
     const agro = fAgro.length ? resumoFluxos(fAgro, valorAgroHoje, hoje) : null;
