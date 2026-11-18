@@ -192,6 +192,56 @@
     },
   };
 
+  // ------------------------------------------------------------------ conexões com IA (MCP)
+  // Um assistente de IA (Claude, ChatGPT…) entra pela Edge Function "mcp" com
+  // um token OAuth desta conta. O que ele pode fazer é o que está em
+  // mcp_acessos: sem linha, nada; com linha, lê; com escrita, edita. A linha
+  // só nasce aqui, numa sessão do próprio app (ver o bloco do MCP no schema).
+  FC.mcp = {
+    url: FC.config.supabaseUrl + "/functions/v1/mcp",
+    // o pedido de autorização que trouxe a pessoa à tela de consentimento;
+    // se ela já autorizou esse cliente antes, vem só { redirect_url }
+    async pedido(id) { return checa(await sb.auth.oauth.getAuthorizationDetails(id)); },
+    // grava o alcance ANTES de aprovar: o token já nasce com a regra valendo
+    async aprova(id, cliente, escrita) {
+      const uid = FC.auth.usuario.id;
+      checa(await sb.from("mcp_acessos").upsert({ user_id: uid, client_id: cliente.id, nome: String(cliente.name || "").slice(0, 120), escrita: !!escrita }));
+      try {
+        return checa(await sb.auth.oauth.approveAuthorization(id, { skipBrowserRedirect: true })).redirect_url;
+      } catch (e) {
+        try { await sb.from("mcp_acessos").delete().eq("user_id", uid).eq("client_id", cliente.id); } catch (e2) { /* sem token, a linha não vale nada */ }
+        throw e;
+      }
+    },
+    async nega(id) { return checa(await sb.auth.oauth.denyAuthorization(id, { skipBrowserRedirect: true })).redirect_url; },
+    // o que o Auth diz que está autorizado, com o alcance que o banco aplica
+    async lista() {
+      const [grants, linhas] = await Promise.all([
+        sb.auth.oauth.listGrants().then(checa),
+        sb.from("mcp_acessos").select("*").then(checa),
+      ]);
+      const porId = Object.fromEntries((linhas || []).map((l) => [l.client_id, l]));
+      const saida = (grants || []).map((g) => {
+        const l = porId[g.client.id];
+        delete porId[g.client.id];
+        return { id: g.client.id, nome: g.client.name || (l && l.nome) || "Cliente sem nome", site: g.client.uri || "", desde: g.granted_at, com_dados: !!l, escrita: !!(l && l.escrita) };
+      });
+      // linha sem autorização no Auth: não entra mais, mas aparece para limpar
+      for (const l of Object.values(porId)) saida.push({ id: l.client_id, nome: l.nome || "Cliente sem nome", site: "", desde: l.criado_em, com_dados: true, escrita: !!l.escrita, orfa: true });
+      return saida;
+    },
+    async mudaEscrita(clienteId, escrita) {
+      return checa(await sb.from("mcp_acessos").update({ escrita: !!escrita }).eq("user_id", FC.auth.usuario.id).eq("client_id", clienteId).select().single());
+    },
+    // primeiro o banco (o token em uso para de ler na hora), depois o Auth
+    // (apaga os tokens de renovação desse cliente)
+    async revoga(clienteId) {
+      checa(await sb.from("mcp_acessos").delete().eq("user_id", FC.auth.usuario.id).eq("client_id", clienteId));
+      const { error } = await sb.auth.oauth.revokeGrant({ clientId: clienteId });
+      if (error && !/not found/i.test(error.message || "")) throw error;
+    },
+  };
+
   // ------------------------------------------------------------------ perfil do investidor
   // Tudo opcional: se as tabelas ainda não existem no banco (schema não
   // aplicado), carrega() devolve { indisponivel: true } e o app segue sem perfil.

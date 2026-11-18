@@ -36,12 +36,13 @@ export interface FC {
   layout: Ns;
 
   // modelos de cálculo (modelo/*)
-  avaliador: Ns; agro: Ns; rentab: Ns; carteira: Ns; perfil: Ns; recomendacao: Ns;
+  avaliador: Ns; agro: Ns; rentab: Ns; carteira: Ns; base: Ns; perfil: Ns; recomendacao: Ns;
   renda: Ns; projecao: Ns; importador: Ns; dividendos: Ns; caixaProventos: Ns; desempenho: Ns; impostos: Ns;
   alertas: Ns; salario: Ns; recap: Ns; graham: Fn;
 
   // supabase/config (config.js, supa.js) — superfície livre
   config: { supabaseUrl: string; supabaseChave: string };
+  mcp: Ns;
 
   [extra: string]: Qualquer;
 }

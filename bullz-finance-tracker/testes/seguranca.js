@@ -8,6 +8,12 @@
  * Com TESTE_2FA_EMAIL/SENHA (conta com 2FA ligado), confere também que uma
  * sessão só com senha (aal1) não lê nada.
  *
+ * Com TESTE_MCP_TOKEN (o access token de um assistente de IA conectado à
+ * conta A em "só consulta"; ver "Conexão com IA" no nucleo/README.md),
+ * confere também que o token de cliente não grava, não enxerga perfil nem
+ * autorizações, não é admin e não apaga a conta. A regra completa, caso a
+ * caso, é testada sem rede em testes/mcp-sql.test.js.
+ *
  * Credenciais em .env.teste (fora do git):
  *   TESTE_EMAIL, TESTE_SENHA        conta A
  *   TESTE_B_EMAIL, TESTE_B_SENHA    conta B
@@ -38,7 +44,7 @@ const v = (k) => process.env[k] || env[k];
 // e uso_eventos são públicas/anônimas e ficam de fora
 const TABELAS = ["ativos", "renda_fixa", "aportes", "preferencias", "agro_movimentos", "agro_custos", "agro_pesagens",
   "patrimonio_historico", "log_sistema", "ganhos", "perfil_rascunho", "perfil_investidor", "plano_investimento",
-  "onboarding_eventos", "admins", "contas_modo_completo"];
+  "onboarding_eventos", "admins", "contas_modo_completo", "mcp_acessos"];
 
 const novo = () => createClient(URL_SB, CHAVE, { auth: { persistSession: false, autoRefreshToken: false } });
 let falhas = 0, oks = 0;
@@ -114,6 +120,35 @@ async function naoLe(c, tabela, filtro) {
     await C.c.auth.signOut();
   } else {
     console.log("(sem TESTE_2FA_EMAIL: teste de sessão aal1 pulado)");
+  }
+
+  const tokenMcp = v("TESTE_MCP_TOKEN");
+  if (tokenMcp) {
+    console.log("token de assistente de IA (só consulta) da conta A");
+    const ia = createClient(URL_SB, CHAVE, { global: { headers: { Authorization: "Bearer " + tokenMcp } }, auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: ac, error: eAc } = await ia.rpc("mcp_acesso");
+    ok(!eAc && ac && ac.cliente, "o token não é de um cliente OAuth (sem client_id): " + (eAc && eAc.message));
+    ok(ac && ac.autorizado === true && ac.escrita === false, "o token deveria estar autorizado só para consulta");
+    for (const t of ["ativos", "aportes", "ganhos", "agro_custos"]) {
+      const i = await ia.from(t).insert({ user_id: A.uid }).select();
+      ok(!!i.error, `token só de consulta gravou em ${t}`);
+      const d = await ia.from(t).delete().eq("user_id", A.uid).select();
+      ok(!!d.error || (d.data || []).length === 0, `token só de consulta apagou de ${t}`);
+    }
+    for (const t of ["perfil_rascunho", "perfil_investidor", "plano_investimento", "onboarding_eventos", "mcp_acessos"]) ok(await naoLe(ia, t), `token de assistente leu ${t}`);
+    {
+      const u = await ia.from("mcp_acessos").update({ escrita: true }).eq("user_id", A.uid).select();
+      ok(!!u.error || (u.data || []).length === 0, "o assistente se promoveu a escrita");
+      const adm = await ia.rpc("eh_admin");
+      ok(adm.data !== true, "token de assistente virou admin");
+      const r = await fetch(URL_SB + "/functions/v1/mercado", { method: "POST", headers: { apikey: CHAVE, Authorization: "Bearer " + tokenMcp, "Content-Type": "application/json" },
+        body: JSON.stringify({ acao: "apagar_conta", confirmacao: "errada-de-proposito" }) });
+      // a confirmação vai errada de propósito: nem um erro neste teste apagaria a conta.
+      // O 403 (e não o 400 da confirmação) prova que o token de cliente é barrado antes de tudo.
+      ok(r.status === 403, "apagar_conta não barrou o token de assistente: HTTP " + r.status);
+    }
+  } else {
+    console.log("(sem TESTE_MCP_TOKEN: teste do token de assistente pulado)");
   }
 
   await A.c.auth.signOut();

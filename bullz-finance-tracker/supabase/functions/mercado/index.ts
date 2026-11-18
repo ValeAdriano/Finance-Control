@@ -1080,9 +1080,14 @@ Deno.serve(async (req) => {
     // Com 2FA ligado, só uma sessão que passou pelo código pode apagar.
     // As tabelas têm "on delete cascade": apagar o usuário leva tudo junto.
     if (corpo.acao === "apagar_conta") {
+      // Só o próprio app apaga a conta. Token de cliente OAuth (um assistente
+      // de IA pelo MCP) é barrado antes de qualquer outra conferência, e um
+      // token que não dá para ler também: na dúvida, não apaga.
+      let claims: any = null;
+      try { claims = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch { /* fica null */ }
+      if (!claims || claims.client_id) return resposta({ erro: "só o app apaga a conta" }, 403);
       if (corpo.confirmacao !== "APAGAR") return resposta({ erro: "confirmação ausente" }, 400);
-      let aal = "aal1";
-      try { aal = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).aal || "aal1"; } catch { /* segue aal1 */ }
+      const aal = claims.aal || "aal1";
       const temFator = (quem.user.factors ?? []).some((f: any) => f.status === "verified");
       if (temFator && aal !== "aal2") return resposta({ erro: "confirme o código do autenticador antes" }, 403);
       const { error } = await admin.auth.admin.deleteUser(quem.user.id);

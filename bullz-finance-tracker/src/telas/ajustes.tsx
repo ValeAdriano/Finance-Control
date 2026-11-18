@@ -16,6 +16,7 @@ import FC from "../nucleo";
 import { ligaVibracao, podeVibrar, vibra, vibracaoLigada } from "../plataforma/vibra";
 import EditorLayout from "./layout-editor";
 import { ligaMfa } from "./comum/autenticador";
+import { ConexoesIA } from "./comum/conexoes-ia";
 import { BLOQUEIO_DISPONIVEL, TEMPOS, autentica, gravaBloqueio, recursoDoAparelho, useBloqueio } from "../plataforma/bloqueio";
 
 const ABAS = ["geral", "modulos", "layout", "criterios", "dados"];
@@ -190,7 +191,19 @@ function HistoricoMensal() {
 const EVENTOS: Record<string, [string, string]> = {
   registro_diario: ["Registro diário", "azul"], precos: ["Cotações atualizadas", "verde"], aporte: ["Aporte", "terra"],
   importacao: ["Histórico importado", "azul"], seguranca: ["Segurança", "amarelo"], erro: ["Erro", "vermelho"],
+  // o que um assistente de IA gravou pelo MCP (origem "mcp")
+  mcp_lancamento: ["Lançamento por IA", "terra"], mcp_cadastro: ["Cadastro por IA", "terra"], mcp_edicao: ["Correção por IA", "amarelo"],
+  mcp_exclusao: ["Exclusão por IA", "vermelho"], mcp_metas: ["Metas mudadas por IA", "amarelo"],
 };
+const TABELA_NOME: Record<string, string> = { aportes: "lançamento", ativos: "ativo", renda_fixa: "título", ganhos: "ganho",
+  agro_movimentos: "movimento do gado", agro_custos: "custo do agro", agro_pesagens: "pesagem" };
+// "Claude: compra ITSA4 · R$ 105,00"
+function textoMcp(evento: string, det: any) {
+  const oQue = evento === "mcp_metas" ? "metas de alocação"
+    : [String(det.operacao || det.especie || TABELA_NOME[det.tabela] || det.tabela || "").replace(/_/g, " "), det.ticker || det.titulo || det.nome || "",
+       det.campos && det.campos.length ? "(" + det.campos.join(", ") + ")" : ""].filter(Boolean).join(" ");
+  return [`${det.cliente || "assistente"}: ${oQue}`, typeof det.valor === "number" ? FC.fmt.brlTexto(Math.abs(det.valor)) : ""].filter(Boolean).join(" · ");
+}
 function Log() {
   const t = useTema();
   const [logs, setLogs] = useState<any[] | null>(null);
@@ -207,12 +220,13 @@ function Log() {
         const texto = l.evento === "erro" ? `${det.etapa || ""}: ${det.erro || ""}`
           : l.evento === "aporte" ? `${det.destino || ""} · ${FC.fmt.brlTexto(det.valor)}`
           : l.evento === "importacao" ? `${det.meses} mês(es) · ${det.fonte || ""}`
-          : l.evento === "seguranca" ? det.acao || ""
+          : l.evento === "seguranca" ? [det.acao || "", det.cliente || ""].filter(Boolean).join(" · ")
+          : l.origem === "mcp" ? textoMcp(l.evento, det)
           : [det.patrimonio != null ? "patrimônio " + FC.fmt.brlTexto(det.patrimonio) : "", det.ativos != null ? det.ativos + " ativo(s)" : "",
              det.sem_preco && det.sem_preco.length ? "sem preço: " + det.sem_preco.join(", ") : ""].filter(Boolean).join(" · ");
         return (
           <Item key={l.id}
-            titulo={<View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}><T style={{ fontWeight: "600", fontSize: 15 }}>{nome}</T><Pilula cor={cor}>{l.origem === "automatico" ? "automático" : "app"}</Pilula></View>}
+            titulo={<View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}><T style={{ fontWeight: "600", fontSize: 15 }}>{nome}</T><Pilula cor={cor}>{l.origem === "automatico" ? "automático" : l.origem === "mcp" ? "IA" : "app"}</Pilula></View>}
             detalhe={<Rs style={{ fontSize: 13, color: t.cores.ink2 }} numberOfLines={1}>{texto || " "}</Rs>}
             valores={<T style={{ fontSize: 12.5, color: t.cores.ink2 }}>{new Date(l.quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</T>} />
         );
@@ -507,6 +521,8 @@ export default function Ajustes() {
               </View>
             </Detalhes>
           </Secao>
+
+          <ConexoesIA />
 
           <Secao titulo="Aparência">
             <Lista>

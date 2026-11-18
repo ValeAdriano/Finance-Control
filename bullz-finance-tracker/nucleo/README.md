@@ -29,6 +29,7 @@ supabase/
   schema.sql               tabelas e RLS por usuário
   functions/mercado/       Fundamentus + Yahoo + Banco Central, com cache
   functions/acesso/        login e código por e-mail com limite de tentativas
+  functions/mcp/           o Bullz para assistentes de IA (MCP), ver abaixo
 scripts/recupera-2fa.js    recuperação assistida do 2FA (admin, service_role)
 scripts/gera-perfil-sql.js função do banco que recalcula o perfil
 ```
@@ -54,6 +55,7 @@ e 1 h no navegador) → scores e gráficos são recalculados no navegador.
 | `perfil_investidor` | cada avaliação de perfil (só INSERT/SELECT: histórico imutável) |
 | `plano_investimento` | o plano gerado e a decisão (aplicado, recusado, pendente) |
 | `onboarding_eventos` | funil do onboarding: só nome do passo e tempo |
+| `mcp_acessos` | quais assistentes de IA o dono autorizou, e se podem editar |
 | `mercado_cache` | cotações públicas; só a Edge Function acessa |
 
 Todas as tabelas do usuário têm `user_id default auth.uid()` e a política
@@ -202,6 +204,115 @@ semanas), com faixas mais largas que as de ETF.
 - **Investido** = compras + despesas da operação + entradas com valor + custos.
 - **Resultado** = vendas líquidas + valor do rebanho hoje − investido.
 - **GMD** = ganho de peso entre a primeira e a última pesagem do lote.
+
+## Conexão com IA (MCP)
+
+A Edge Function `mcp` é um servidor [MCP](https://modelcontextprotocol.io)
+remoto: Claude, ChatGPT ou qualquer assistente compatível se conecta nela e
+passa a consultar e editar os dados de quem autorizou.
+
+```
+https://ahbftafpbailgmjughsq.supabase.co/functions/v1/mcp
+```
+
+É esse endereço que se cola no assistente, como conector customizado. O app
+o mostra em Ajustes → Segurança → Conexões com IA.
+
+**Como entra.** O login é o OAuth 2.1 do próprio Supabase Auth: o assistente
+se registra sozinho, o Auth manda a pessoa para `/oauth/consent` no app
+(login e 2FA como sempre), ela escolhe **só consultar** ou **consultar e
+editar** e aprova. O token emitido é um JWT comum da conta, com a claim
+`client_id`.
+
+**O que protege os dados.** Esse token vale na API inteira, não só na função,
+então a trava está no banco (bloco "CONEXÃO COM IA" do `schema.sql`):
+
+| situação do cliente | o que consegue |
+|---|---|
+| sem linha em `mcp_acessos` | nada: nem lê, nem grava |
+| com linha, `escrita = false` | lê as tabelas de dados; nenhuma gravação passa |
+| com linha, `escrita = true` | lê e grava nas tabelas de dados |
+| em qualquer caso | não alcança perfil, plano, telemetria nem admin; não autoriza a si mesmo; não apaga a conta |
+
+A linha só é criada por uma sessão do próprio app que já passou pelo 2FA, e
+é por isso que `privado.mfa_ok()` aceita o token do cliente autorizado. A
+função não usa a chave de serviço: toda consulta vai com o token do usuário e
+quem separa as contas é a RLS de sempre. Cada requisição monta um núcleo de
+cálculo novo, então nada de uma conta fica na memória para a seguinte.
+
+**Ferramentas** (`functions/mcp/ferramentas.mjs`). Leitura: `resumo_patrimonio`,
+`listar_posicoes`, `detalhar_ativo`, `listar_lancamentos`, `listar_renda_fixa`,
+`rentabilidade`, `dividendos`, `agro_resumo`, `agro_lancamentos`,
+`salario_e_plano`, `historico_patrimonio`, `preferencias`. Escrita:
+`registrar_lancamento`, `salvar_ativo`, `salvar_titulo`, `salvar_ganho`,
+`registrar_agro`, `atualizar_metas`, `editar_registro`, `apagar_registro`
+(um registro por chamada). Os números saem do mesmo núcleo do app
+(`FC.base.carrega`, em `modelo/base.js`), e toda gravação vira uma linha no
+Log do sistema com o nome do assistente.
+
+| arquivo | papel |
+|---|---|
+| `functions/mcp/index.ts` | HTTP, descoberta do OAuth, token, protocolo |
+| `functions/mcp/ferramentas.mjs` | as 20 ferramentas |
+| `functions/mcp/esquemas.mjs` | o que cada tabela aceita (espelho dos `check` do schema) |
+| `functions/mcp/nucleo.gen.mjs` | o núcleo empacotado. **Gerado**: `npm run gera:mcp` |
+| `modelo/base.js` | do banco ao retrato da carteira; o app usa o mesmo |
+| `../src/telas/consentimento.tsx` | a tela `/oauth/consent` |
+| `../src/telas/comum/conexoes-ia.tsx` | a lista em Ajustes |
+
+Mexeu em `nucleo/`? Rode `npm run gera:mcp` e publique a função de novo (o
+`npm test` acusa o gerado velho).
+
+**Testes.**
+
+```bash
+npm test                                   # ferramentas contra uma conta em memória (testes/mcp.test.js)
+MCP_PG="-h 127.0.0.1 -p 54399 -U postgres" node testes/mcp-sql.test.js   # as travas, num Postgres descartável
+MCP_DENO=$(which deno) node testes/mcp-http.test.js                      # a função inteira, pelo protocolo
+```
+
+**Pôr no ar** (uma vez, nesta ordem):
+
+1. Painel do Supabase → *Authentication → OAuth Server*: ligar, ligar o
+   registro dinâmico de clientes e pôr `/oauth/consent` em *Authorization
+   Path*. Em *URL Configuration*, o *Site URL* tem de ser o domínio de
+   produção do app (é nele que a tela de consentimento abre).
+2. Reaplicar o `schema.sql` (cria `mcp_acessos` e as políticas).
+3. Publicar as funções `mercado` (mudou: não apaga conta com token de
+   cliente) e `mcp`:
+
+   ```bash
+   npm run gera:mcp
+   SUPABASE_ACCESS_TOKEN=... npx supabase functions deploy mcp \
+     --project-ref ahbftafpbailgmjughsq --use-api --no-verify-jwt
+   ```
+
+   (`--no-verify-jwt` porque a função confere o token por conta própria e
+   precisa responder 401 com o cabeçalho que leva o assistente ao login.)
+4. Publicar o app (a tela de consentimento e a lista em Ajustes).
+5. Conectar um assistente e conferir os pontos abaixo.
+
+**A conferir na primeira conexão real** (dependem do comportamento do
+Supabase e de cada assistente, não do código):
+
+- o assistente acha o login só pelo cabeçalho `WWW-Authenticate`? Se algum
+  exigir `/.well-known/oauth-protected-resource` na raiz do domínio, o
+  caminho é um rewrite no `../vercel.json` (`/mcp` e o `.well-known`
+  apontando para a função) e a variável `MCP_URL_PUBLICA` na função com o
+  endereço novo;
+- o token de cliente consegue trocar senha ou e-mail em `/auth/v1/user`? O
+  banco não alcança esse endpoint. Se conseguir, ligue *Secure password
+  change* no painel;
+- `npm run teste:seguranca` com `TESTE_MCP_TOKEN` (o access token de um
+  assistente conectado em "só consulta").
+
+**Limites.** O que o assistente lê sai do Bullz e segue a política de
+privacidade dele. Aprovar um cliente com "editar" é dar a ele a edição:
+as travas limitam o estrago ao que as ferramentas fazem, mas não desfazem um
+lançamento errado. O token do Supabase não é amarrado a este servidor (`aud`
+é sempre `authenticated`). O OAuth Server do Supabase está em beta. E o MCP
+remoto lê os dados em claro no servidor: **não convive com a criptografia de
+ponta a ponta** da fase S4 do `../PLANO-SEGURANCA.md` como ela está desenhada.
 
 ## Manutenção
 
