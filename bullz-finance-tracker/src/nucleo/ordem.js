@@ -33,6 +33,7 @@ module.exports = [
   "modelo/salario.js",
   "modelo/renda-mes.js",
   "modelo/hierarquia.js",
+  "modelo/projecao-mensal.js",
   "modelo/auditoria.js",
   "modelo/retrospectiva.js",
 ];

@@ -22,7 +22,7 @@ export const CATEGORIAS_GADO = ["bezerro", "bezerra", "garrote", "novilha", "boi
 export const CATEGORIAS_CUSTO = ["nutricao", "sanidade", "mao_de_obra", "arrendamento", "frete", "maquinas", "impostos", "outros"];
 
 /** tabelas que `editar_registro` e `apagar_registro` alcançam (e mais nenhuma) */
-export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes", "despesas", "parcelamentos"];
+export const TABELAS = ["aportes", "ativos", "renda_fixa", "ganhos", "agro_movimentos", "agro_custos", "agro_pesagens", "agro_lotes", "despesas", "parcelamentos", "eventos_futuros"];
 
 export function dataValida(s) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
@@ -94,6 +94,9 @@ export function camposPorTabela(z) {
     parcelamentos: {
       descricao: texto(160), valor_total: positivo, n_parcelas: z.number().int().min(1).max(120), inicio: data,
       destino_tipo: z.enum(["ativo", "titulo_rf", "pote"]), destino_id: texto(80).min(1), pote_id: z.string().uuid().nullable(),
+    },
+    eventos_futuros: {
+      data, tipo: z.enum(["venda_agro", "mudanca_renda", "aporte_extra", "resgate"]), parametros: z.record(z.string(), z.unknown()), descricao: texto(160),
     },
     agro_lotes: {
       nome: texto(80).min(1), valor_estimado_cabeca: naoNegativo.nullable(), data_estimativa: data.nullable(),

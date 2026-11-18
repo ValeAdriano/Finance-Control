@@ -12,6 +12,7 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 6. backfill opcional: `node scripts/backfill-lotes.js` (simula) e `--grava`
 7. `supabase/migrations/0005_renda_pj.sql` (ganhos PJ, despesas, parcelamentos, parâmetros de DAS e Simples)
 8. `supabase/migrations/0006_hierarquia.sql` (preferencias.hierarquia)
+9. `supabase/migrations/0007_eventos_futuros.sql`
 
 ## Edge Functions a publicar
 
@@ -114,3 +115,16 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 **Migrations**: `0006_hierarquia.sql`.
 
 **Pendências**: a escolha do modo no app entra no onboarding (M14, passo "Como dividir").
+
+## M7 · Projeções (2026-11-18)
+
+**Feito**
+- `nucleo/modelo/projecao-mensal.js`: indicadores (CDI/IPCA de `indices_diarios`), taxa histórica por ativo com proventos reinvestidos, motor mensal por ativo e categoria com aporte do plano, divisão do plano ou da hierarquia, eventos (venda do agro, mudança de renda, aporte extra, resgate) e cenários `historico`, `so_proventos` e `estresse`; resumo anual (D-020).
+- Vendas planejadas do agro viram eventos automaticamente.
+- MCP: `projetar` (1–24 meses ou 1–50 anos, cenário, eventos na chamada), `listar_eventos`, `registrar_evento` (com `simular`).
+- `testes/conta-adriano.js`: fixture com os números da conta citados no plano (só para teste; o seed demo do M11 é outro).
+- Testes: `testes/projecoes-m7.test.js` (5). Critérios de aceite: R$ 32.706,70 sem a venda do gado (alvo 33 mil, −0,9%) e R$ 69.908,46 com a venda (alvo 70 mil, −0,1%), com ações a 12% a.a. e cripto a 15% a.a. fixos no teste.
+
+**Migrations**: `0007_eventos_futuros.sql`.
+
+**Pendências**: a tela de Projeções ainda mostra só a projeção longa; a visão mensal com cenários entra no M11, junto das capturas.

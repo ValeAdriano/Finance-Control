@@ -78,3 +78,10 @@ Venda com `destino` grava: o movimento interno (origem `agro_lote`, destino o po
 - "Meses para corrigir" simula o aporte mensal do plano (ou a premissa) dividido pelo plano, se ele for válido, ou pela sugerida, com preços parados. Sem aporte, `null`.
 - Reserva dinâmica: com ganho PJ ativo e `sem_13_ferias_fgts` diferente de `false`, sugere `meses_reserva_pj` (padrão 12) como alerta. A meta salva não muda.
 - Os alertas da hierarquia só aparecem no modo `hierarquia`. O MCP sempre devolve a avaliação, com `modo_alocacao`.
+
+## D-020 · Indicadores e taxas (M7)
+- CDI e IPCA: o plano pedia uma tabela `indicadores` com job diário. Ela já existe como `indices_diarios`, preenchida pela Edge Function `mercado` a partir do SGS do Banco Central e completada todo dia pelo agendamento `fc-registro-diario`. O motor mensal lê dali (CDI e IPCA dos últimos 12 meses); sem a série, usa o macro do dia. Não criei tabela duplicada.
+- `macro_longo_prazo` não foi sobrescrito: a projeção longa existente continua convergindo para o longo prazo dela. O motor mensal usa os indicadores de hoje.
+- Taxas por ativo: retorno anualizado com proventos reinvestidos e DY médio, calculados do histórico de preço que o app já baixa (Yahoo pela Edge Function `mercado`; o plano cita brapi). Janela padrão de 5 anos; com menos de 0,9 ano de histórico, o ativo rende o CDI e a resposta diz isso. O cálculo é local e barato, então não criei o cache `taxas_historicas`: as taxas saem em cada projeção, com a fonte.
+- Agro na projeção: fica parado no valor de hoje até um evento de venda; a venda entra líquida de Funrural (quando há parâmetro) no caixa.
+- Aporte de cada mês: `FC.salario.metaDoMes` do mês futuro (no fixo + sobra, com o custo de vida previsto). Divisão: a do plano do Salário; no modo hierarquia ou sem destinos, a divisão sugerida (M6).

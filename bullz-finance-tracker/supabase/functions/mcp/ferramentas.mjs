@@ -119,6 +119,17 @@ function hierarquiaResumo(FC, e) {
   } catch (x) { console.error(x); return {}; }
 }
 
+// ---------------------------------------------------------------- projeção mensal
+const TIPOS_EVENTO = ["venda_agro", "mudanca_renda", "aporte_extra", "resgate"];
+function entradaEvento(z, { data, naoNegativo, texto }) {
+  return { data, tipo: z.enum(TIPOS_EVENTO),
+    valor: naoNegativo.optional().describe("venda_agro, aporte_extra, resgate: o valor"), destino: texto(80).optional().describe("ticker, rf:<título> ou caixa (padrão: a divisão do plano)"),
+    cabecas: z.number().int().positive().optional().describe("venda_agro: cabeças vendidas"), aporte_mensal: naoNegativo.optional().describe("mudanca_renda: o aporte mensal a partir da data"),
+    descricao: texto(160).optional() };
+}
+const eventoDe = (a) => ({ data: a.data, tipo: a.tipo, descricao: a.descricao || "",
+  parametros: Object.fromEntries(["valor", "destino", "cabecas", "aporte_mensal"].filter((k) => a[k] != null).map((k) => [k, a[k]])) });
+
 // cria os potes padrão de quem ainda não tem nenhum (conta nova)
 async function garantePotes(ctx, e) {
   const { FC } = ctx;
@@ -451,6 +462,46 @@ export function ferramentas(z) {
         const e = await carrega(ctx, { comMercado: true, comProventos: true });
         const p = planejaMov(ctx.FC, e, a);
         return { simulado: true, ...efeitoMov(p.efeito), ...avisoMercado(e) };
+      },
+    },
+    {
+      nome: "projetar",
+      titulo: "Projeção mês a mês",
+      descricao: "Projeta a carteira mês a mês por ativo e por categoria (renda fixa, ações, cripto, agro), com o aporte de cada mês pelo plano do Salário, a divisão do plano ou da hierarquia, os eventos futuros (vendas planejadas do agro entram sozinhas) e um cenário: `historico` (taxa histórica de cada ativo com proventos reinvestidos), `so_proventos` (preço parado, só DY e CDI) ou `estresse` (histórico com choque na cripto, padrão −30%). Horizonte de 1 a 24 meses (`meses`) ou de 1 a 50 anos (`anos`, resumido por ano). `eventos` acrescenta eventos só nesta chamada. É estimativa, não promessa.",
+      entrada: () => ({ meses: z.number().int().min(1).max(24).optional(), anos: z.number().int().min(1).max(50).optional(),
+        cenario: z.enum(["historico", "so_proventos", "estresse"]).default("historico"), choque_cripto: z.number().min(-100).max(0).optional(),
+        janela_anos: z.number().int().min(1).max(10).optional().describe("janela da taxa histórica (padrão 5)"),
+        incluir_vendas_planejadas: z.boolean().default(true),
+        eventos: z.array(z.object(entradaEvento(z, { data, naoNegativo, texto })).strict()).max(20).optional() }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (a.meses && a.anos) throw new ErroMcp("Use `meses` ou `anos`, não os dois.");
+        const e = await carrega(ctx, { comMercado: true, comProventos: true });
+        const meses = a.anos ? a.anos * 12 : a.meses || 12;
+        const r = FC.projecaoMensal.projeta(e, { meses, cenario: a.cenario, choque_cripto: a.choque_cripto, janela_anos: a.janela_anos,
+          incluir_vendas_planejadas: a.incluir_vendas_planejadas, eventos: (a.eventos || []).map(eventoDe) });
+        const ponto = (p) => ({ mes: p.mes, total: n2(p.total), total_sem_agro: n2(p.total_sem_agro), aporte: n2(p.aporte), por_categoria: enxuga(p.por_categoria),
+          ...(p.eventos.length ? { eventos: enxuga(p.eventos) } : {}) });
+        return {
+          cenario: r.cenario, horizonte: a.anos ? `${a.anos} anos` : `${meses} meses`, de: r.inicio, indicadores: enxuga(r.indicadores), divisao_do_aporte: r.divisao,
+          final: { mes: r.final.mes, total: n2(r.final.total), total_sem_agro: n2(r.final.total_sem_agro), por_ativo: enxuga(r.final.por_ativo), por_categoria: enxuga(r.final.por_categoria) },
+          serie: a.anos ? FC.projecaoMensal.porAno(r.serie).map((p) => ({ ano: p.ano, total: n2(p.total), total_sem_agro: n2(p.total_sem_agro), por_categoria: enxuga(p.por_categoria) })) : r.serie.map(ponto),
+          taxas: enxuga(r.taxas), eventos: enxuga(r.eventos), estimativa: true,
+          como_ler: "Estimativa com preços e taxas constantes por cenário. O aporte de cada mês vem do plano do Salário (fixo + sobra usa o custo de vida previsto). Não é recomendação.",
+          ...avisoMercado(e),
+        };
+      },
+    },
+    {
+      nome: "listar_eventos",
+      titulo: "Eventos futuros das projeções",
+      descricao: "Os eventos que entram nas projeções: vendas planejadas do agro, mudanças de renda, aportes extras e resgates, salvos ou vindos dos lotes. Cada evento salvo traz o `id`.",
+      entrada: () => ({ de: dataOpc, ate: dataOpc }),
+      async executa(ctx, f) {
+        const { FC } = ctx;
+        const e = await carrega(ctx, { comMercado: false });
+        const ev = FC.projecaoMensal.eventosDoPeriodo(e, [], true).filter((x) => entre(String(x.data), f.de, f.ate)).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+        return { total: ev.length, eventos: ev.map((x) => ({ id: x.id || null, data: x.data, tipo: x.tipo, descricao: x.descricao || null, origem: x.origem, parametros: enxuga(x.parametros || {}) })) };
       },
     },
     {
@@ -910,6 +961,28 @@ export function ferramentas(z) {
         await grava(() => FC.db.gravaPrefs({ hierarquia: nova }));
         await audita(ctx, "mcp_metas", { hierarquia: nova });
         return { ok: true, hierarquia: nova, ...avaliacao };
+      },
+    },
+    {
+      nome: "registrar_evento",
+      titulo: "Registrar um evento futuro",
+      descricao: "Guarda um evento que muda as projeções: venda_agro (valor, cabecas), mudanca_renda (aporte_mensal a partir da data), aporte_extra (valor, destino) ou resgate (valor). `simular: true` devolve o total projetado no mês do evento com e sem ele, sem gravar.",
+      entrada: () => ({ ...entradaEvento(z, { data, naoNegativo, texto }), simular: z.boolean().default(false) }),
+      async executa(ctx, a) {
+        const { FC } = ctx;
+        if (!a.simular) exigeEscrita(ctx);
+        const ev = eventoDe(a);
+        const e = await carrega(ctx, { comMercado: true });
+        const atual = FC.datas.hoje().slice(0, 7);
+        const [ay, am] = atual.split("-").map(Number), [ey, em] = a.data.slice(0, 7).split("-").map(Number);
+        const meses = Math.max(1, Math.min(600, (ey - ay) * 12 + (em - am)));
+        const semEv = FC.projecaoMensal.projeta(e, { meses }).final, comEv = FC.projecaoMensal.projeta(e, { meses, eventos: [ev] }).final;
+        const efeito = { no_mes: comEv.mes, total_sem_o_evento: n2(semEv.total), total_com_o_evento: n2(comEv.total), diferenca: n2(comEv.total - semEv.total), estimativa: true };
+        if (a.simular) return { simulado: true, evento: ev, ...efeito };
+        if (!FC.db.temTabela("eventos_futuros")) throw new ErroMcp(MIGRATION("0007", "eventos_futuros"));
+        const salvo = await grava(() => FC.db.inserir("eventos_futuros", ev));
+        await audita(ctx, "mcp_cadastro", { tabela: "eventos_futuros", id: salvo.id, tipo: a.tipo });
+        return { ok: true, tabela: "eventos_futuros", registro: enxuga(sem(salvo)), ...efeito };
       },
     },
     {

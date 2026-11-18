@@ -12,3 +12,5 @@ module.exports.planejar_venda_agro = { lote: "L1", preco_esperado_cabeca: 6000 }
 module.exports.registrar_despesa = { categoria: "moradia", valor: 100 };
 module.exports.registrar_parcelamento = { valor_total: 600, n_parcelas: 3, inicio: "2026-12-01", destino_tipo: "titulo_rf", destino_id: "LCI Banco Demo", pote: "livre" };
 module.exports.configurar_alocacao = { modo_alocacao: "hierarquia" };
+module.exports.registrar_evento = { data: "2027-02-15", tipo: "aporte_extra", valor: 1000 };
+module.exports.LEITURAS.projetar = { meses: 3 };
