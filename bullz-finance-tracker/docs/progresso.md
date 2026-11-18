@@ -2,6 +2,26 @@
 
 Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `main`.
 
+## Resumo final (M15, 2026-11-18)
+
+Os 16 marcos (M0 a M15) foram feitos, um commit por marco na `main`. Verificação final: lint e tsc limpos, **170 testes** (`npm test`), build com a home, **8 de 8 e2e** (`npm run e2e`), **103 casos de SQL** com o `schema.sql` inteiro aplicado duas vezes num Postgres 16 (`npm run teste:banco`), Lighthouse celular 100/100/100/100.
+
+**O que ainda depende do Adriano**
+1. Aplicar as migrations abaixo, nesta ordem, no SQL Editor do Supabase (ou colar o `schema.sql` inteiro, que é idempotente e já contém todas). O app em produção funciona sem elas (D-003), mas as funcionalidades novas só aparecem depois.
+2. Publicar a Edge Function `mcp` (`npm run gera:mcp` já está em dia; falta o deploy): as 24 ferramentas novas só existem no assistente depois disso.
+3. Conferir na Vercel que `/` mostra a home e que `/inicio` e as outras rotas abrem o app (o `vercel.json` mudou no M13; testado só com um servidor local que imita a Vercel).
+4. Rodar os backfills opcionais (preço dos lançamentos, lotes do agro, planos de out e nov/2026), sempre com a simulação antes.
+
+**`auditar_dados` na base de dev**: não há base de dev conectada a este ambiente, e a ferramenta não está publicada. Rodei contra a conta demo (o mesmo núcleo, banco em memória): **nenhuma inconsistência** (`testes/demo-m11.test.js`). Contra a fixture com os sintomas da conta real, ela acusa cada um (`testes/dados-m1.test.js`). Depois do deploy do `mcp`, rode `auditar_dados` na conta real: devem sobrar só os itens de preferência (premissa duplicada e proventos ambíguos) até o plano ser salvo de novo.
+
+**Decisões em aberto** (escolhi o mais simples e reversível; confira em `docs/decisoes.md`)
+- D-005: `bolsa_e_cripto.valor` no MCP passou a ser o valor das posições com custo (o total foi para `valor_total`).
+- D-020: não criei as tabelas `indicadores` e `taxas_historicas`; uso `indices_diarios` e calculo as taxas na hora.
+- D-023: antes da migration 0004, o IR usa os valores que o app já trazia, marcados como embutidos.
+- D-025: o vídeo é gravado das telas reais, não pela ferramenta antiga do palco (que desenha um mockup à mão).
+- D-026 e D-027: a home e o onboarding não prometem conexão por chave com a Binance nem exportação em CSV, porque elas não existem. Se quiser, são as próximas funcionalidades.
+- Telas que ficaram só no MCP: troca de ativo, reatribuir aporte a outro destino do plano, criar alerta no detalhe do ativo, campos de PJ e proporcional no formulário de ganho.
+
 ## Migrations pendentes de produção (aplicar nesta ordem)
 
 1. `supabase/migrations/0001_dados_m1.sql` (colunas de ganhos e `privado.politicas_padrao`)
@@ -21,7 +41,8 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 
 ## Edge Functions a publicar
 
-- `mcp` (o núcleo e as ferramentas mudam a cada marco; publicar no fim com `npm run gera:mcp` + deploy)
+- `mcp`: publicar uma vez agora (`npm run gera:mcp` já roda no teste; falta o `npx supabase functions deploy mcp --no-verify-jwt`, ver `nucleo/README.md`).
+- `mercado` e `acesso`: sem mudanças no plano de evolução.
 
 ---
 
@@ -214,3 +235,12 @@ Plano: `PLANO-BULLZ-EVOLUCAO.md` (M0 a M15). Um commit por marco, direto na `mai
 - `testes/migrations-sql.test.js` cobre as 13 tabelas novas (103 casos).
 
 **Migrations**: `0011_onboarding_estado.sql`.
+
+## M15 · Documentação e encerramento (2026-11-18)
+
+**Feito**
+- README com as funcionalidades novas, os documentos e a verificação.
+- `docs/mcp.md` gerado por `node scripts/gera-doc-mcp.mjs`: 44 ferramentas, 24 novas marcadas, parâmetros e exemplos.
+- `CHANGELOG.md` com os marcos 0 a 15.
+- `docs/conteudo.md`: capturas, vídeo, copy da home e seed demo.
+- Resumo final no topo deste arquivo, com as migrations em ordem, o que publicar e as decisões em aberto.

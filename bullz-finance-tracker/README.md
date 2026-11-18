@@ -16,6 +16,18 @@ migração do site original em HTML/CSS/JS puros, que foi desativado e removido 
 `PLANO.md`, `PARIDADE.md` e `ROTEIROS.md` são o registro da migração e citam o site original como
 referência; ele não existe mais.
 
+### Plano de evolução (M0 a M15, nov/2026)
+
+| arquivo | para quê |
+|---|---|
+| [`docs/progresso.md`](docs/progresso.md) | o que cada marco fez, **as migrations pendentes de produção, em ordem**, e as pendências |
+| [`docs/decisoes.md`](docs/decisoes.md) | as escolhas de regra de negócio e de arquitetura (D-001 a D-027) |
+| [`docs/arquitetura-atual.md`](docs/arquitetura-atual.md) | o mapa do repositório: tabelas, cálculos e onde mora cada um |
+| [`docs/mcp.md`](docs/mcp.md) | as 44 ferramentas MCP, com parâmetros e exemplos (gerado) |
+| [`docs/parametros-fiscais.md`](docs/parametros-fiscais.md) | as alíquotas e isenções em `parametros_fiscais`, com a fonte de cada uma |
+| [`docs/conteudo.md`](docs/conteudo.md) | como regravar o vídeo, atualizar as capturas e editar a copy da home |
+| [`CHANGELOG.md`](CHANGELOG.md) | o que mudou em cada marco |
+
 ## Ideia central
 
 - **Os cálculos vieram do site sem reescrever.** O app carrega os arquivos de `nucleo/`
@@ -33,6 +45,21 @@ divulgação, Administração e instalação como PWA. Validadas no **web**; fal
 comparação (diff visual, roteiros) e rodar no aparelho. A **F8** (lojas, corte da Vercel) depende
 do seu aceite. Detalhes em [`PLANO.md`](PLANO.md#situação-em-2026-10-14).
 
+## O que o Bullz faz (desde o plano de evolução)
+
+- **Dados certos**: custo dos lançamentos como fonte única, retorno que não vira percentual absurdo, cotação quebrada fora das notas, e a ferramenta `auditar_dados` que aponta o que não fecha.
+- **Potes**: a renda fixa separada por finalidade (reserva de emergência, oportunidade, oportunidade do agro, IR a pagar, livre). Tela `/potes`.
+- **Movimento interno**: trocar um ativo por outro (ou mandar para um pote) sem virar aporte nem distorcer a TIR.
+- **Agro por lote**: compra abre lote; venda e troca fecham o ciclo com resultado; venda planejada; Funrural e IR estimado da venda.
+- **Renda PJ e fixo + sobra**: DAS/Simples pelos parâmetros fiscais, pagamento proporcional, despesas, custo de vida pela média de 3 meses, aporte parcelado.
+- **Hierarquia RF › Ações › Cripto**: faixas, validação do plano, divisão sugerida do aporte e meses para corrigir.
+- **Projeção mês a mês**: por ativo, com eventos (venda do gado, aporte extra) e cenários (histórico, só proventos, estresse).
+- **Plano mensal**: cada mês com o plano congelado, a execução por destino e o histórico; gera o plano do mês seguinte.
+- **Alertas**: preço, empate com o preço médio e revisões programadas. Tela `/alertas`.
+- **IR estimado**: renda variável mês a mês com DARF, IR rural do ano e relatório anual, tudo por `parametros_fiscais`.
+- **Conta demo, capturas e vídeo**: `seed/demo`, `npm run capturas`, `npm run video:render`.
+- **Home pública** em `/` (HTML estático gerado no build) e **onboarding** em `/configurar`, retomável, com o checklist "Complete a configuração" no Início.
+
 ## Como rodar
 
 ```
@@ -44,6 +71,15 @@ npm run ios          # ou: npm run android
 **Modo fixture** (só em desenvolvimento): dados de demonstração em memória, sem rede nem login.
 Acrescente à URL `?fixture=1` (conta com dados), `?fixture=admin` (com a Administração e uso
 sintético) ou `?fixture=vazia` (conta nova). No nativo: `EXPO_PUBLIC_FIXTURE=1 npm run ios`.
+`?fixture=demo` abre a conta demo do plano de evolução (potes, lotes, planos mensais, alertas).
+
+**Verificação** (antes de cada commit):
+
+```
+npm run verifica     # lint + typecheck + testes + build (com a home pública)
+npm run e2e          # home e onboarding no navegador (precisa do build e do Playwright)
+npm run teste:banco  # schema.sql e migrations num Postgres descartável (MIGRATIONS_PG)
+```
 
 ## Estrutura
 
@@ -51,7 +87,10 @@ sintético) ou `?fixture=vazia` (conta nova). No nativo: `EXPO_PUBLIC_FIXTURE=1 
 |---|---|
 | `app/` | rotas do expo-router, com os mesmos nomes das rotas do site |
 | `nucleo/` | o núcleo de cálculo (JS de navegador vindo do site original) |
-| `supabase/` | `schema.sql` e as Edge Functions `mercado` e `acesso` |
+| `supabase/` | `schema.sql`, `migrations/` (aditivas, do plano de evolução), `backfills/` e as Edge Functions `mercado`, `acesso` e `mcp` |
+| `content/` | a copy da home (`home.pt-BR.ts`) e os capítulos do tour (`tour.ts`) |
+| `seed/demo/` | a conta demo fictícia (seed, capturas e vídeo) |
+| `docs/` | progresso, decisões, arquitetura, MCP, parâmetros fiscais, conteúdo, Lighthouse |
 | `src/nucleo/` | adaptador que carrega `nucleo/` (shim de navegador + ordem de `ordem.js`) |
 | `src/estado/` | `FC.estado` + zustand (rerender), login, cotações, telemetria |
 | `src/casca/` | topo, barra de abas, "Mais", página |
