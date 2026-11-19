@@ -140,7 +140,7 @@ function resumoPlanoMensal(FC, e, p, detalhe = false) {
   const i = FC.planoMensal.indicadores(p, e);
   const r = { id: p.id || null, mes: p.mes, status: p.status, origem: p.origem, meta: n2(i.meta), aportado: n2(i.aportado), pct_executado: n2(i.pct_executado),
     renda_prevista: n2(i.renda_prevista), renda_real: n2(i.renda_real), sobra_prevista: n2(i.sobra_prevista), sobra_real: n2(i.sobra_real),
-    fora_do_plano: n2(i.fora_do_plano), hierarquia_respeitada: i.hierarquia_respeitada,
+    fora_do_plano: n2(i.fora_do_plano), investido: n2(i.investido), hierarquia_respeitada: i.hierarquia_respeitada, hierarquia_violacoes: i.hierarquia_violacoes,
     selos: [i.cem_por_cento ? "100% executado" : null, i.fora_do_plano > 0.5 ? `R$ ${n2(i.fora_do_plano)} fora do plano` : null,
       i.hierarquia_respeitada === true ? "hierarquia respeitada" : i.hierarquia_respeitada === false ? "hierarquia violada" : null].filter(Boolean) };
   if (!detalhe) return r;

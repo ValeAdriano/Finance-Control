@@ -231,18 +231,24 @@
     const novo = exec.filter((e) => e.tipo !== "parcela");
     const aportado = aberto ? ex.aportado_total : Number(plano.aportado_total) || 0;
     const meta = Number(plano.meta_total) || 0;
-    let hier = aberto ? ex.hierarquia_respeitada : null;
-    if (!aberto) {
-      const g = { rf: 0, acoes: 0, cripto: 0 };
-      for (const e of novo) for (const x of e.aportes || []) if (x.grupo in g) g[x.grupo] += x.valor;
-      for (const x of fora) if (x.grupo in g) g[x.grupo] += x.valor;
-      const t = g.rf + g.acoes + g.cripto;
-      const faixas = (plano.regras_snapshot && plano.regras_snapshot.faixas) || null;
-      hier = t > 0 && FC.hierarquia ? FC.hierarquia.valida({ rf: (g.rf / t) * 100, acoes: (g.acoes / t) * 100, cripto: (g.cripto / t) * 100 }, faixas || undefined).ok : null;
-    }
-    return { mes: plano.mes, status: plano.status, meta, aportado, pct_executado: meta > 0 ? r2((aportado / meta) * 100) : null,
+    // tudo o que entrou no mês (o que passou do previsto e o fora do plano inclusos)
+    const investido = r2(FC.soma(novo, (e) => Number(e.aportado) || 0) + FC.soma(fora, (x) => x.valor));
+    // a divisão executada por grupo e o veredito da hierarquia (com o porquê)
+    const g = { rf: 0, acoes: 0, cripto: 0 };
+    for (const e of novo) for (const x of e.aportes || []) if (x.grupo in g) g[x.grupo] += x.valor;
+    for (const x of fora) if (x.grupo in g) g[x.grupo] += x.valor;
+    const t = g.rf + g.acoes + g.cripto;
+    const divisao = t > 0 ? { rf: (g.rf / t) * 100, acoes: (g.acoes / t) * 100, cripto: (g.cripto / t) * 100 } : null;
+    const snap = plano.regras_snapshot || {};
+    const prefsH = (estado.prefs && estado.prefs.hierarquia) || null;
+    const faixas = snap.faixas || (aberto && prefsH ? prefsH.faixas : null);
+    const v = divisao && FC.hierarquia ? FC.hierarquia.valida(divisao, faixas || undefined) : null;
+    const modo = snap.modo_alocacao || (prefsH && prefsH.modo_alocacao) || null;
+    return { mes: plano.mes, status: plano.status, meta, aportado, investido, pct_executado: meta > 0 ? r2((aportado / meta) * 100) : null,
       fora_do_plano: r2(FC.soma(fora, (x) => x.valor)), sobra_real: plano.sobra_real ?? null, sobra_prevista: plano.sobra_prevista ?? null,
-      renda_real: plano.renda_real ?? null, renda_prevista: FC.soma(plano.renda_prevista || [], (x) => x.valor), hierarquia_respeitada: hier,
+      renda_real: plano.renda_real ?? null, renda_prevista: FC.soma(plano.renda_prevista || [], (x) => x.valor),
+      hierarquia_respeitada: v ? v.ok : null, hierarquia_violacoes: v ? v.violacoes.map((x) => x.texto) : [],
+      hierarquia_aplica: modo === "hierarquia", violacao_aceita: !!snap.aceitar_violacao, divisao_executada: divisao,
       execucao: exec, fora: fora, cem_por_cento: meta > 0 && aportado >= meta - 0.5 };
   }
 

@@ -42,6 +42,10 @@ test("M8 · backfill de nov/2026: meta R$ 1.290, aportado R$ 1.290 (100%) e os 5
   const exec = Object.fromEntries(p.destinos.map((d) => [d.alvo, d.aportado]));
   assert.deepEqual(exec, { "CDB Liquidez": 322.5, MXRF11: 484.61, ITUB4: 360.45, BTC: 129, ETH: 64.5 });
   assert.ok(p.selos.includes("100% executado"));
+  // o que passou do previsto aparece no investido, e a hierarquia violada diz o porquê
+  perto(p.investido, 1361.06);
+  assert.equal(p.hierarquia_respeitada, false);
+  assert.match(p.hierarquia_violacoes[0], /^Ações \(62\.1%\) acima da renda fixa \(23\.7%\)$/);
   // rodar de novo não duplica
   const de2 = await chama("reconstruir_planos_mensais", { meses: ["2026-11"] });
   assert.equal(de2.planos[0].pulado, "já tem plano");
